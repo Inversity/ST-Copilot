@@ -201,7 +201,56 @@ export function hasSessionOverrides() {
 
 let _inMemoryBucket = { activeSessionId: null, sessions: [] };
 let _currentSessionFileId = null;
+let _fileOnDisk = false;
 const _saveQueue = new Map();
+
+export const SESSION_FILE_RE = /^copilot_sess_.+\.json$/;
+
+export function getCurrentSessionFileId() {
+    return _currentSessionFileId;
+}
+
+function _newSessionFileId() {
+    return `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
+}
+
+// A lone auto-created "Session 1" with nothing in it is not worth a file.
+function _bucketHasContent(bucket) {
+    const sessions = bucket?.sessions || [];
+    return sessions.length > 1 || sessions.some(s => s.messages?.length > 0 || (s.overrides && Object.keys(s.overrides).length > 0));
+}
+
+function _flushSaveQueue() {
+    for (const [fileId, item] of _saveQueue.entries()) {
+        clearTimeout(item.timer);
+        _saveQueue.delete(fileId);
+        saveSessionFile(fileId, item.payload);
+    }
+}
+
+function _cancelPendingSave(fileId) {
+    const item = _saveQueue.get(fileId);
+    if (!item) return;
+    clearTimeout(item.timer);
+    _saveQueue.delete(fileId);
+}
+
+export async function deleteSessionFile(file_id) {
+    const ctx = SillyTavern.getContext();
+    try {
+        const res = await fetch('/api/files/delete', {
+            method: 'POST',
+            headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: `user/files/${file_id}` }),
+        });
+        if (res.ok || res.status === 404) return true;
+        _dbgAdd('STORAGE_DELETE_FAILED', { file_id, status: res.status });
+        return false;
+    } catch (e) {
+        _dbgAdd('STORAGE_DELETE_FAILED', { file_id, error: e.message });
+        return false;
+    }
+}
 
 export async function saveSessionFile(file_id, payload, useKeepalive = false) {
     const ctx = SillyTavern.getContext();
@@ -271,46 +320,60 @@ export async function initChatBucket({ forceReset = false } = {}) {
     if (!ctx.chatMetadata) ctx.chatMetadata = {};
     const { charId, chatId } = getBindingKey();
 
-    if (forceReset) {
-        const prevMeta = ctx.chatMetadata.st_copilot || null;
-        const freshId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
-        ctx.chatMetadata.st_copilot = { format: 'v4', file_id: freshId, chat_id: chatId };
-        if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
-        _currentSessionFileId = freshId;
+    // A reset deletes the current file, so its pending write must not be flushed back onto disk.
+    if (forceReset && _currentSessionFileId) _cancelPendingSave(_currentSessionFileId);
+    _flushSaveQueue();
+
+    // No chat open: nothing to bind a file to, keep sessions in memory only.
+    if (chatId === 'default') {
+        _currentSessionFileId = null;
+        _fileOnDisk = false;
         _inMemoryBucket = { activeSessionId: null, sessions: [] };
-        await commitBucketChanges(true);
-        _dbgAdd('SESSION_FORCE_RESET', { charId, chatId, prevFileId: prevMeta?.file_id || null, newFileId: freshId });
+        _dbgAdd('STORAGE_NO_CHAT', { charId });
         return;
     }
 
-    for (const [fileId, item] of _saveQueue.entries()) {
-        clearTimeout(item.timer);
-        _saveQueue.delete(fileId);
-        saveSessionFile(fileId, item.payload);
+    if (forceReset) {
+        const prevMeta = ctx.chatMetadata.st_copilot || null;
+        let prevDeleted = false;
+        if (prevMeta?.file_id && prevMeta.chat_id === chatId) {
+            prevDeleted = await deleteSessionFile(prevMeta.file_id);
+        }
+        const freshId = _newSessionFileId();
+        ctx.chatMetadata.st_copilot = { format: 'v4', file_id: freshId, chat_id: chatId };
+        if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
+        _currentSessionFileId = freshId;
+        _fileOnDisk = false;
+        _inMemoryBucket = { activeSessionId: null, sessions: [] };
+        _dbgAdd('SESSION_FORCE_RESET', { charId, chatId, prevFileId: prevMeta?.file_id || null, prevDeleted, newFileId: freshId });
+        return;
     }
 
     let meta = ctx.chatMetadata.st_copilot;
     let targetFileId = null;
     let payload = null;
+    let onDisk = false;
 
     if (meta && meta.file_id && meta.format === 'v4') {
         if (meta.chat_id === chatId) {
             targetFileId = meta.file_id;
             payload = await loadSessionFile(targetFileId);
+            onDisk = !!payload;
         } else {
             _dbgAdd('STORAGE_CHAT_BRANCH_DETECTED', { oldChatId: meta.chat_id, newChatId: chatId });
             payload = await loadSessionFile(meta.file_id);
-            targetFileId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
-            
-            if (payload && payload !== false) {
-                await saveSessionFile(targetFileId, payload);
+            targetFileId = _newSessionFileId();
+
+            if (payload && _bucketHasContent(payload.bucket)) {
+                payload = { ...payload, chat_id_reference: chatId };
+                onDisk = await saveSessionFile(targetFileId, payload);
             }
-            
+
             ctx.chatMetadata.st_copilot = { format: 'v4', file_id: targetFileId, chat_id: chatId };
             if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
         }
     } else {
-        targetFileId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
+        targetFileId = _newSessionFileId();
         _dbgAdd('STORAGE_MIGRATION_V4_INIT', { targetFileId });
         
         const safeChatId = chatId.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -338,17 +401,18 @@ export async function initChatBucket({ forceReset = false } = {}) {
     }
 
     _currentSessionFileId = targetFileId;
+    _fileOnDisk = onDisk;
 
     if (payload === false) {
         _dbgAdd('STORAGE_LOAD_CORRUPTED_RECOVERY', { brokenFileId: targetFileId, charId, chatId });
-        const recoveryFileId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
+        const recoveryFileId = _newSessionFileId();
         ctx.chatMetadata.st_copilot = { format: 'v4', file_id: recoveryFileId, chat_id: chatId, recoveredFrom: targetFileId };
         if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
 
         targetFileId = recoveryFileId;
         _inMemoryBucket = { activeSessionId: null, sessions: [] };
         _currentSessionFileId = targetFileId;
-        await commitBucketChanges(true);
+        _fileOnDisk = false;
 
         toastr.error('Copilot session file was corrupted and could not be recovered. Started a fresh session storage for this chat; the broken file was kept on disk for manual recovery.', EXT_DISPLAY, { timeOut: 15000 });
         return;
@@ -373,7 +437,11 @@ export async function commitBucketChanges(force = false) {
 
     const { chatId } = getBindingKey();
     const snapshot = JSON.parse(JSON.stringify(_inMemoryBucket));
-    
+
+    // Create the file lazily; once it exists, keep writing so deletions are persisted too.
+    if (!_fileOnDisk && !_bucketHasContent(snapshot)) return;
+    _fileOnDisk = true;
+
     const payloadToSave = {
         _version: 4,
         chat_id_reference: chatId,

@@ -969,8 +969,9 @@ export function setupSettingsHandlers() {
     document.getElementById('scp-download-debug')?.addEventListener('click', () => import('../utils/util-debug.js').then(m => m.dbgDownload()));
     document.getElementById('scp-open-memory-settings')?.addEventListener('click', () => { openSettingsPanel(); setTimeout(() => document.querySelector('[data-sptab="memory"]')?.click(), 80); });
     document.getElementById('scp-open-tools-settings')?.addEventListener('click', () => { openSettingsPanel(); setTimeout(() => document.querySelector('[data-sptab="tools"]')?.click(), 80); });
+    document.getElementById('scp-cleanup-files')?.addEventListener('click', () => import('../features/feature-storage-cleanup.js').then(m => m.runOrphanCleanup()));
     document.getElementById('scp-clear-sessions')?.addEventListener('click', async () => {
-        const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete ALL Copilot sessions? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
+        const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete all Copilot sessions in this chat? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
         const { charId, chatId } = getBindingKey();
         _dbgAdd('SESSION_CLEAR_REQUESTED', { source: 'st-drawer', charId, chatId });
         getSettings().sessions = {}; saveSettings();
@@ -1128,8 +1129,9 @@ export function setupSettingsPanelListeners() {
     // ── Misc SP ──
     document.getElementById('scp-sp-open-changelog')?.addEventListener('click', () => { closeSettingsPanel(); import('./ui-widgets.js').then(m => m.openChangelog()); });
     document.getElementById('scp-sp-download-debug')?.addEventListener('click', () => import('../utils/util-debug.js').then(m => m.dbgDownload()));
+    document.getElementById('scp-sp-cleanup-files')?.addEventListener('click', () => import('../features/feature-storage-cleanup.js').then(m => m.runOrphanCleanup()));
     document.getElementById('scp-sp-clear-sessions')?.addEventListener('click', async () => {
-        const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete ALL Copilot sessions? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
+        const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete all Copilot sessions in this chat? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
         const { charId, chatId } = getBindingKey();
         _dbgAdd('SESSION_CLEAR_REQUESTED', { source: 'settings-overlay', charId, chatId });
         getSettings().sessions = {}; saveSettings();

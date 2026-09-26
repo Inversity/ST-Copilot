@@ -1610,7 +1610,56 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
 
   let _inMemoryBucket = { activeSessionId: null, sessions: [] };
   let _currentSessionFileId = null;
+  let _fileOnDisk = false;
   const _saveQueue = new Map();
+
+  const SESSION_FILE_RE = /^copilot_sess_.+\.json$/;
+
+  function getCurrentSessionFileId() {
+      return _currentSessionFileId;
+  }
+
+  function _newSessionFileId() {
+      return `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
+  }
+
+  // A lone auto-created "Session 1" with nothing in it is not worth a file.
+  function _bucketHasContent(bucket) {
+      const sessions = bucket?.sessions || [];
+      return sessions.length > 1 || sessions.some(s => s.messages?.length > 0 || (s.overrides && Object.keys(s.overrides).length > 0));
+  }
+
+  function _flushSaveQueue() {
+      for (const [fileId, item] of _saveQueue.entries()) {
+          clearTimeout(item.timer);
+          _saveQueue.delete(fileId);
+          saveSessionFile(fileId, item.payload);
+      }
+  }
+
+  function _cancelPendingSave(fileId) {
+      const item = _saveQueue.get(fileId);
+      if (!item) return;
+      clearTimeout(item.timer);
+      _saveQueue.delete(fileId);
+  }
+
+  async function deleteSessionFile(file_id) {
+      const ctx = SillyTavern.getContext();
+      try {
+          const res = await fetch('/api/files/delete', {
+              method: 'POST',
+              headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ path: `user/files/${file_id}` }),
+          });
+          if (res.ok || res.status === 404) return true;
+          _dbgAdd('STORAGE_DELETE_FAILED', { file_id, status: res.status });
+          return false;
+      } catch (e) {
+          _dbgAdd('STORAGE_DELETE_FAILED', { file_id, error: e.message });
+          return false;
+      }
+  }
 
   async function saveSessionFile(file_id, payload, useKeepalive = false) {
       const ctx = SillyTavern.getContext();
@@ -1680,46 +1729,60 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       if (!ctx.chatMetadata) ctx.chatMetadata = {};
       const { charId, chatId } = getBindingKey();
 
-      if (forceReset) {
-          const prevMeta = ctx.chatMetadata.st_copilot || null;
-          const freshId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
-          ctx.chatMetadata.st_copilot = { format: 'v4', file_id: freshId, chat_id: chatId };
-          if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
-          _currentSessionFileId = freshId;
+      // A reset deletes the current file, so its pending write must not be flushed back onto disk.
+      if (forceReset && _currentSessionFileId) _cancelPendingSave(_currentSessionFileId);
+      _flushSaveQueue();
+
+      // No chat open: nothing to bind a file to, keep sessions in memory only.
+      if (chatId === 'default') {
+          _currentSessionFileId = null;
+          _fileOnDisk = false;
           _inMemoryBucket = { activeSessionId: null, sessions: [] };
-          await commitBucketChanges(true);
-          _dbgAdd('SESSION_FORCE_RESET', { charId, chatId, prevFileId: prevMeta?.file_id || null, newFileId: freshId });
+          _dbgAdd('STORAGE_NO_CHAT', { charId });
           return;
       }
 
-      for (const [fileId, item] of _saveQueue.entries()) {
-          clearTimeout(item.timer);
-          _saveQueue.delete(fileId);
-          saveSessionFile(fileId, item.payload);
+      if (forceReset) {
+          const prevMeta = ctx.chatMetadata.st_copilot || null;
+          let prevDeleted = false;
+          if (prevMeta?.file_id && prevMeta.chat_id === chatId) {
+              prevDeleted = await deleteSessionFile(prevMeta.file_id);
+          }
+          const freshId = _newSessionFileId();
+          ctx.chatMetadata.st_copilot = { format: 'v4', file_id: freshId, chat_id: chatId };
+          if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
+          _currentSessionFileId = freshId;
+          _fileOnDisk = false;
+          _inMemoryBucket = { activeSessionId: null, sessions: [] };
+          _dbgAdd('SESSION_FORCE_RESET', { charId, chatId, prevFileId: prevMeta?.file_id || null, prevDeleted, newFileId: freshId });
+          return;
       }
 
       let meta = ctx.chatMetadata.st_copilot;
       let targetFileId = null;
       let payload = null;
+      let onDisk = false;
 
       if (meta && meta.file_id && meta.format === 'v4') {
           if (meta.chat_id === chatId) {
               targetFileId = meta.file_id;
               payload = await loadSessionFile(targetFileId);
+              onDisk = !!payload;
           } else {
               _dbgAdd('STORAGE_CHAT_BRANCH_DETECTED', { oldChatId: meta.chat_id, newChatId: chatId });
               payload = await loadSessionFile(meta.file_id);
-              targetFileId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
-              
-              if (payload && payload !== false) {
-                  await saveSessionFile(targetFileId, payload);
+              targetFileId = _newSessionFileId();
+
+              if (payload && _bucketHasContent(payload.bucket)) {
+                  payload = { ...payload, chat_id_reference: chatId };
+                  onDisk = await saveSessionFile(targetFileId, payload);
               }
-              
+
               ctx.chatMetadata.st_copilot = { format: 'v4', file_id: targetFileId, chat_id: chatId };
               if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
           }
       } else {
-          targetFileId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
+          targetFileId = _newSessionFileId();
           _dbgAdd('STORAGE_MIGRATION_V4_INIT', { targetFileId });
           
           const safeChatId = chatId.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -1747,17 +1810,18 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       }
 
       _currentSessionFileId = targetFileId;
+      _fileOnDisk = onDisk;
 
       if (payload === false) {
           _dbgAdd('STORAGE_LOAD_CORRUPTED_RECOVERY', { brokenFileId: targetFileId, charId, chatId });
-          const recoveryFileId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
+          const recoveryFileId = _newSessionFileId();
           ctx.chatMetadata.st_copilot = { format: 'v4', file_id: recoveryFileId, chat_id: chatId, recoveredFrom: targetFileId };
           if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
 
           targetFileId = recoveryFileId;
           _inMemoryBucket = { activeSessionId: null, sessions: [] };
           _currentSessionFileId = targetFileId;
-          await commitBucketChanges(true);
+          _fileOnDisk = false;
 
           toastr.error('Copilot session file was corrupted and could not be recovered. Started a fresh session storage for this chat; the broken file was kept on disk for manual recovery.', EXT_DISPLAY, { timeOut: 15000 });
           return;
@@ -1782,7 +1846,11 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
 
       const { chatId } = getBindingKey();
       const snapshot = JSON.parse(JSON.stringify(_inMemoryBucket));
-      
+
+      // Create the file lazily; once it exists, keep writing so deletions are persisted too.
+      if (!_fileOnDisk && !_bucketHasContent(snapshot)) return;
+      _fileOnDisk = true;
+
       const payloadToSave = {
           _version: 4,
           chat_id_reference: chatId,
@@ -2107,12 +2175,14 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
 
   var session = /*#__PURE__*/Object.freeze({
     __proto__: null,
+    SESSION_FILE_RE: SESSION_FILE_RE,
     addMessage: addMessage,
     clearAllSessionOverrides: clearAllSessionOverrides,
     commitBucketChanges: commitBucketChanges,
     createSession: createSession,
     deleteCurrentSession: deleteCurrentSession,
     deleteMsg: deleteMsg,
+    deleteSessionFile: deleteSessionFile,
     expandMacros: expandMacros,
     exportCurrentSession: exportCurrentSession,
     genId: genId,
@@ -2120,6 +2190,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
     getBindingKey: getBindingKey,
     getChatBucket: getChatBucket,
     getCurrentSession: getCurrentSession,
+    getCurrentSessionFileId: getCurrentSessionFileId,
     getEffectiveSettings: getEffectiveSettings,
     getSessionFavKey: getSessionFavKey,
     getSessionOverrides: getSessionOverrides,
@@ -9652,8 +9723,9 @@ ${scopeHtml}
       document.getElementById('scp-download-debug')?.addEventListener('click', () => Promise.resolve().then(function () { return utilDebug; }).then(m => m.dbgDownload()));
       document.getElementById('scp-open-memory-settings')?.addEventListener('click', () => { openSettingsPanel(); setTimeout(() => document.querySelector('[data-sptab="memory"]')?.click(), 80); });
       document.getElementById('scp-open-tools-settings')?.addEventListener('click', () => { openSettingsPanel(); setTimeout(() => document.querySelector('[data-sptab="tools"]')?.click(), 80); });
+      document.getElementById('scp-cleanup-files')?.addEventListener('click', () => Promise.resolve().then(function () { return featureStorageCleanup; }).then(m => m.runOrphanCleanup()));
       document.getElementById('scp-clear-sessions')?.addEventListener('click', async () => {
-          const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete ALL Copilot sessions? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
+          const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete all Copilot sessions in this chat? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
           const { charId, chatId } = getBindingKey();
           _dbgAdd('SESSION_CLEAR_REQUESTED', { source: 'st-drawer', charId, chatId });
           getSettings().sessions = {}; saveSettings$1();
@@ -9811,8 +9883,9 @@ ${scopeHtml}
       // ── Misc SP ──
       document.getElementById('scp-sp-open-changelog')?.addEventListener('click', () => { closeSettingsPanel(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.openChangelog()); });
       document.getElementById('scp-sp-download-debug')?.addEventListener('click', () => Promise.resolve().then(function () { return utilDebug; }).then(m => m.dbgDownload()));
+      document.getElementById('scp-sp-cleanup-files')?.addEventListener('click', () => Promise.resolve().then(function () { return featureStorageCleanup; }).then(m => m.runOrphanCleanup()));
       document.getElementById('scp-sp-clear-sessions')?.addEventListener('click', async () => {
-          const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete ALL Copilot sessions? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
+          const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete all Copilot sessions in this chat? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
           const { charId, chatId } = getBindingKey();
           _dbgAdd('SESSION_CLEAR_REQUESTED', { source: 'settings-overlay', charId, chatId });
           getSettings().sessions = {}; saveSettings$1();
@@ -16953,6 +17026,141 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
     get __extPath () { return exports.__extPath; },
     get extVersion () { return exports.extVersion; },
     refreshSessionDropdown: refreshSessionDropdown
+  });
+
+  // Resolve against ST's locale at call time; the source English text is the key.
+  function t(strings, ...values) {
+      const ctx = SillyTavern.getContext();
+      if (typeof ctx.t === 'function') return ctx.t(strings, ...values);
+      return strings.reduce((out, s, i) => out + s + (i < values.length ? values[i] : ''), '');
+  }
+
+  const LIST_LIMIT = 30;
+
+  async function _postJson(url, body) {
+      const ctx = SillyTavern.getContext();
+      const res = await fetch(url, {
+          method: 'POST',
+          headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(body || {}),
+      });
+      if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
+      return res.json();
+  }
+
+  async function _listSessionFiles() {
+      const { report, token } = await _postJson('/api/data-maid/report');
+      _postJson('/api/data-maid/finalize', { token }).catch(() => {});
+      return (report?.files || []).map(f => f.name).filter(n => SESSION_FILE_RE.test(n));
+  }
+
+  async function _collectReferencedFiles() {
+      const chats = await _postJson('/api/chats/recent', { metadata: true });
+      if (!Array.isArray(chats)) throw new Error('Unexpected chat list response');
+
+      const ctx = SillyTavern.getContext();
+      const refs = new Set();
+      const add = meta => { if (meta?.st_copilot?.file_id) refs.add(meta.st_copilot.file_id); };
+      chats.forEach(c => {
+          add(c.chat_metadata);
+          // Pre-v4 file named after the chat; initChatBucket still migrates from it.
+          if (c.file_id) refs.add(`copilot_sess_${String(c.file_id).replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
+      });
+      (ctx.groups || []).forEach(g => add(g.chat_metadata));
+      add(ctx.chatMetadata);
+      const current = getCurrentSessionFileId();
+      if (current) refs.add(current);
+      return refs;
+  }
+
+  async function _mapLimit(items, limit, fn) {
+      const out = new Array(items.length);
+      let next = 0;
+      const worker = async () => { while (next < items.length) { const i = next++; out[i] = await fn(items[i]); } };
+      await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+      return out;
+  }
+
+  async function scanOrphanSessionFiles() {
+      const [files, refs] = await Promise.all([_listSessionFiles(), _collectReferencedFiles()]);
+      const orphans = files.filter(n => !refs.has(n));
+
+      const inspected = await _mapLimit(orphans, 6, async name => {
+          const payload = await loadSessionFile(name);
+          if (payload === null) return { name, messages: 0 };
+          if (payload === false) return { name, messages: -1, chat: '' };
+          const messages = (payload.bucket?.sessions || []).reduce((n, s) => n + (s.messages?.length || 0), 0);
+          return { name, messages, chat: payload.chat_id_reference || '' };
+      });
+
+      return {
+          total: files.length,
+          referenced: files.length - orphans.length,
+          empty: inspected.filter(f => f.messages === 0).map(f => f.name),
+          withContent: inspected.filter(f => f.messages !== 0),
+      };
+  }
+
+  async function _deleteAll(names) {
+      const results = await _mapLimit(names, 6, deleteSessionFile);
+      return results.filter(Boolean).length;
+  }
+
+  function _contentListHtml(items) {
+      const rows = items.slice(0, LIST_LIMIT).map(f => {
+          const count = f.messages < 0 ? t`unreadable` : t`${f.messages} msgs`;
+          return `<div style="display:flex;justify-content:space-between;gap:8px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(f.chat || f.name)}</span><span style="flex-shrink:0;opacity:.7">${escHtml(count)}</span></div>`;
+      }).join('');
+      const more = items.length > LIST_LIMIT ? `<div style="opacity:.7">${escHtml(t`…and ${items.length - LIST_LIMIT} more`)}</div>` : '';
+      return `<div style="max-height:40vh;overflow:auto;margin-top:8px;font-size:12px">${rows}${more}</div>`;
+  }
+
+  async function runOrphanCleanup() {
+      toastr.info(t`Scanning Copilot session files…`, EXT_DISPLAY);
+      let scan;
+      try {
+          scan = await scanOrphanSessionFiles();
+      } catch (e) {
+          _dbgAdd('STORAGE_CLEANUP_SCAN_FAILED', { error: e?.message || String(e) });
+          toastr.error(t`Scan failed: ${e.message}`, EXT_DISPLAY);
+          return;
+      }
+      _dbgAdd('STORAGE_CLEANUP_SCAN', { total: scan.total, referenced: scan.referenced, empty: scan.empty.length, withContent: scan.withContent.length });
+
+      if (!scan.empty.length && !scan.withContent.length) {
+          toastr.success(t`No orphaned session files. (${scan.total} files, all in use)`, EXT_DISPLAY);
+          return;
+      }
+
+      let deleted = 0;
+
+      if (scan.empty.length) {
+          const ok = await showCustomDialog({
+              type: 'confirm',
+              title: t`Clean Up Session Files`,
+              message: t`Found ${scan.empty.length} empty session files that no chat uses. Delete them?`,
+          });
+          if (ok) deleted += await _deleteAll(scan.empty);
+      }
+
+      if (scan.withContent.length) {
+          const ok = await showCustomDialog({
+              type: 'confirm',
+              title: t`Orphaned Sessions With Messages`,
+              htmlMessage: escHtml(t`${scan.withContent.length} session files still contain messages, but no chat points to them anymore (deleted chats or old branches). Delete them too? This cannot be undone.`) + _contentListHtml(scan.withContent),
+              delayConfirm: 3,
+          });
+          if (ok) deleted += await _deleteAll(scan.withContent.map(f => f.name));
+      }
+
+      _dbgAdd('STORAGE_CLEANUP_DONE', { deleted });
+      if (deleted) toastr.success(t`Deleted ${deleted} session files.`, EXT_DISPLAY);
+  }
+
+  var featureStorageCleanup = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    runOrphanCleanup: runOrphanCleanup,
+    scanOrphanSessionFiles: scanOrphanSessionFiles
   });
 
   exports.refreshSessionDropdown = refreshSessionDropdown;
