@@ -3,6 +3,7 @@ import { getSettings, getCurrentSession, saveSettings, expandMacros } from '../s
 import { _dbgAdd } from '../utils/util-debug.js';
 import { ST_WorldInfo, ST_Utils } from '../index.js';
 import { _repairJSON } from '../utils/util-text.js';
+import { t, translate } from '../utils/util-i18n.js';
 
 export const wiCache = {};
 export const wiPromises = {}; 
@@ -126,7 +127,7 @@ export function getEmbeddedCharBook() {
 }
 
 export async function saveWorldInfoBook(name, data) {
-    if (data._embedded) { toastr.warning('Cannot save embedded character books directly.', EXT_DISPLAY); return; }
+    if (data._embedded) { toastr.warning(translate('Cannot save embedded character books directly.'), EXT_DISPLAY); return; }
     const ctx = SillyTavern.getContext();
     const payload = { ...data };
     delete payload._ts;
@@ -540,7 +541,7 @@ export async function bindNewLorebookToCharacter(bookName) {
                 if (typeof ctx.updateWorldInfoList === 'function') await ctx.updateWorldInfoList();
                 else if (typeof window.loadWorldInfoList === 'function') await window.loadWorldInfoList();
             }
-            toastr.success(`Lorebook "${bookName}" created successfully.`, EXT_DISPLAY);
+            toastr.success(t`Lorebook "${bookName}" created successfully.`, EXT_DISPLAY);
         }
 
         delete wiCache[bookName];

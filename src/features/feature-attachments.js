@@ -4,6 +4,7 @@ import { _dbgAdd } from '../utils/util-debug.js';
 import { _getCaptionViaExtension } from '../integrations/integ-captioning.js';
 import { getSettings, getCurrentSession } from '../session.js';
 import { EXT_DISPLAY } from '../constants.js';
+import { t } from '../utils/util-i18n.js';
 
 import { updateMsgCount } from '../ui/ui-chat.js';
 
@@ -25,7 +26,7 @@ export async function _processAttachmentsBeforeSend(atts, isPreview = false) {
                     _dbgAdd('IMAGE_CAPTIONING_SERVICE_MISSING', { name: a.name });
                     return '';
                 });
-                if (!cap) toastr.warning(`Captioning failed for ${a.name}`, EXT_DISPLAY);
+                if (!cap) toastr.warning(t`Captioning failed for ${a.name}`, EXT_DISPLAY);
                 processed.push({
                     ...a,
                     sendAsText: true,

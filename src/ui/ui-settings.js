@@ -5,6 +5,7 @@ import { showCustomDialog, escHtml } from '../utils/util-dom.js';
 import { applyCustomTheme, bringWindowToFront } from './ui-window.js';
 import { showColorPicker } from '../utils/util-colorpicker.js';
 import { _dbgAdd } from '../utils/util-debug.js';
+import { t, translate } from '../utils/util-i18n.js';
 
 // ─── Settings Registry ────────────────────────────────────────────────────────
 //
@@ -289,7 +290,7 @@ export async function updateProfilesList() {
         s.connectionProfileId = ''; saveSettings(); currentVal = '';
     }
     if (service?.handleDropdown) { service.handleDropdown(profSel); if (currentVal && Array.from(profSel.options).some(o => o.value === currentVal)) profSel.value = currentVal; return; }
-    profSel.innerHTML = '<option value="">-- Select Profile --</option>';
+    profSel.innerHTML = '<option value="" data-i18n="-- Select Profile --">-- Select Profile --</option>';
     profiles.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; profSel.appendChild(o); });
     if (Array.from(profSel.options).some(o => o.value === currentVal)) profSel.value = currentVal;
 }
@@ -307,7 +308,7 @@ export async function updateSPConnProfileList() {
             if (isOv) setSessionOverride('connectionProfileId', undefined); else { s.connectionProfileId = ''; saveSettings(); }
             targetVal = '';
         }
-        sel.innerHTML = '<option value="">-- Select Profile --</option>';
+        sel.innerHTML = '<option value="" data-i18n="-- Select Profile --">-- Select Profile --</option>';
         profiles.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.appendChild(o); });
         if (Array.from(sel.options).some(o => o.value === targetVal)) sel.value = targetVal;
     });
@@ -366,13 +367,13 @@ export function buildThemeEditor(containerOverride) {
     const profileRow = document.createElement('div'); profileRow.className = 'scp-profile-bar'; profileRow.style.marginBottom = '12px';
     profileRow.innerHTML = `
         <select id="scp-theme-profile-select"></select>
-        <button class="scp-profile-icon-btn" id="scp-theme-save" title="Save current theme"><i class="fa-solid fa-floppy-disk"></i></button>
-        <button class="scp-profile-icon-btn" id="scp-theme-create" title="Create new theme"><i class="fa-solid fa-plus"></i></button>
-        <button class="scp-profile-icon-btn" id="scp-theme-duplicate" title="Duplicate theme"><i class="fa-solid fa-copy"></i></button>
-        <button class="scp-profile-icon-btn" id="scp-theme-rename" title="Rename theme"><i class="fa-solid fa-pen"></i></button>
-        <button class="scp-profile-icon-btn danger" id="scp-theme-delete" title="Delete theme"><i class="fa-solid fa-trash"></i></button>
-        <button class="scp-profile-icon-btn" id="scp-theme-export" title="Export theme"><i class="fa-solid fa-file-export"></i></button>
-        <button class="scp-profile-icon-btn" id="scp-theme-import" title="Import theme"><i class="fa-solid fa-file-import"></i></button>`;
+        <button class="scp-profile-icon-btn" id="scp-theme-save" title="Save current theme" data-i18n="[title]Save current theme"><i class="fa-solid fa-floppy-disk"></i></button>
+        <button class="scp-profile-icon-btn" id="scp-theme-create" title="Create new theme" data-i18n="[title]Create new theme"><i class="fa-solid fa-plus"></i></button>
+        <button class="scp-profile-icon-btn" id="scp-theme-duplicate" title="Duplicate theme" data-i18n="[title]Duplicate theme"><i class="fa-solid fa-copy"></i></button>
+        <button class="scp-profile-icon-btn" id="scp-theme-rename" title="Rename theme" data-i18n="[title]Rename theme"><i class="fa-solid fa-pen"></i></button>
+        <button class="scp-profile-icon-btn danger" id="scp-theme-delete" title="Delete theme" data-i18n="[title]Delete theme"><i class="fa-solid fa-trash"></i></button>
+        <button class="scp-profile-icon-btn" id="scp-theme-export" title="Export theme" data-i18n="[title]Export theme"><i class="fa-solid fa-file-export"></i></button>
+        <button class="scp-profile-icon-btn" id="scp-theme-import" title="Import theme" data-i18n="[title]Import theme"><i class="fa-solid fa-file-import"></i></button>`;
     container.appendChild(profileRow);
     const sel = profileRow.querySelector('#scp-theme-profile-select');
     const optGrpDefault = document.createElement('optgroup'); optGrpDefault.label = 'Default Presets';
@@ -397,7 +398,7 @@ export function buildThemeEditor(containerOverride) {
     sel.addEventListener('change', async () => {
         const name = sel.value;
         if (isThemeDirty()) {
-            const ok = await showCustomDialog({ type: 'confirm', title: 'Unsaved Changes', message: 'You have unsaved changes. Switch anyway?' });
+            const ok = await showCustomDialog({ type: 'confirm', title: translate('Unsaved Changes'), message: 'You have unsaved changes. Switch anyway?' });
             if (!ok) { sel.value = s.activeThemeProfile ? s.activeThemeProfile : sel.value; return; }
         }
         const s2 = getSettings();
@@ -413,15 +414,15 @@ export function buildThemeEditor(containerOverride) {
         if (val.startsWith('__preset__')) {
             const name = await showCustomDialog({ type: 'prompt', title: 'Save as Custom Theme', message: 'Name for your custom theme:', placeholder: 'My Theme' });
             if (!name?.trim()) return;
-            const s2 = getSettings(); s2.savedThemes[name.trim()] = { ...s2.customTheme }; s2.activeThemeProfile = name.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success(`Theme "${name.trim()}" saved`, EXT_DISPLAY); _clearDirty('theme');
+            const s2 = getSettings(); s2.savedThemes[name.trim()] = { ...s2.customTheme }; s2.activeThemeProfile = name.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success(t`Theme "${name.trim()}" saved`, EXT_DISPLAY); _clearDirty('theme');
         } else if (val) {
-            const s2 = getSettings(); s2.savedThemes[val] = { ...s2.customTheme }; saveSettings(); toastr.success(`Theme "${val}" updated`, EXT_DISPLAY); _clearDirty('theme');
+            const s2 = getSettings(); s2.savedThemes[val] = { ...s2.customTheme }; saveSettings(); toastr.success(t`Theme "${val}" updated`, EXT_DISPLAY); _clearDirty('theme');
         }
     });
     profileRow.querySelector('#scp-theme-create').addEventListener('click', async () => {
         const name = await showCustomDialog({ type: 'prompt', title: 'New Theme', message: 'Enter name for new theme:', placeholder: 'My New Theme' });
         if (!name?.trim()) return;
-        const s2 = getSettings(); s2.savedThemes[name.trim()] = { ...s2.customTheme }; s2.activeThemeProfile = name.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success(`Created theme "${name.trim()}"`, EXT_DISPLAY);
+        const s2 = getSettings(); s2.savedThemes[name.trim()] = { ...s2.customTheme }; s2.activeThemeProfile = name.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success(t`Created theme "${name.trim()}"`, EXT_DISPLAY);
     });
     profileRow.querySelector('#scp-theme-duplicate').addEventListener('click', async () => {
         const val = sel.value; if (!val) return;
@@ -430,20 +431,20 @@ export function buildThemeEditor(containerOverride) {
         const name = await showCustomDialog({ type: 'prompt', title: 'Duplicate Theme', message: 'Name for the duplicated theme:', defaultValue: defaultName });
         if (!name?.trim()) return;
         const s2 = getSettings(); s2.savedThemes[name.trim()] = JSON.parse(JSON.stringify(baseTheme)); s2.activeThemeProfile = name.trim(); s2.customTheme = { ...s2.savedThemes[name.trim()] };
-        saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(`Theme duplicated as "${name.trim()}"`, EXT_DISPLAY);
+        saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(t`Theme duplicated as "${name.trim()}"`, EXT_DISPLAY);
     });
     profileRow.querySelector('#scp-theme-rename').addEventListener('click', async () => {
-        const val = sel.value; if (!val || val.startsWith('__preset__')) { toastr.info('Select a custom theme to rename.', EXT_DISPLAY); return; }
+        const val = sel.value; if (!val || val.startsWith('__preset__')) { toastr.info(translate('Select a custom theme to rename.'), EXT_DISPLAY); return; }
         const newName = await showCustomDialog({ type: 'prompt', title: 'Rename Theme', message: 'Enter new name:', defaultValue: val });
         if (!newName?.trim() || newName.trim() === val) return;
-        const s2 = getSettings(); s2.savedThemes[newName.trim()] = s2.savedThemes[val]; delete s2.savedThemes[val]; s2.activeThemeProfile = newName.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success('Theme renamed.', EXT_DISPLAY);
+        const s2 = getSettings(); s2.savedThemes[newName.trim()] = s2.savedThemes[val]; delete s2.savedThemes[val]; s2.activeThemeProfile = newName.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success(translate('Theme renamed.'), EXT_DISPLAY);
     });
     profileRow.querySelector('#scp-theme-delete').addEventListener('click', async () => {
-        const val = sel.value; if (!val || val.startsWith('__preset__')) { toastr.info('Select a custom theme to delete.', EXT_DISPLAY); return; }
+        const val = sel.value; if (!val || val.startsWith('__preset__')) { toastr.info(translate('Select a custom theme to delete.'), EXT_DISPLAY); return; }
         const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Theme', message: `Delete "${val}"?` }); if (!ok) return;
         const s2 = getSettings(); delete s2.savedThemes[val]; s2.activeThemeProfile = Object.keys(s2.savedThemes)[0] || '';
         s2.customTheme = s2.activeThemeProfile ? { ...s2.savedThemes[s2.activeThemeProfile] } : { ...THEME_PRESETS.default };
-        saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success('Deleted.', EXT_DISPLAY);
+        saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(translate('Deleted.'), EXT_DISPLAY);
     });
     profileRow.querySelector('#scp-theme-export').addEventListener('click', () => {
         const s2 = getSettings(); const val = sel.value;
@@ -460,8 +461,8 @@ export function buildThemeEditor(containerOverride) {
                 if (typeof imported !== 'object' || Array.isArray(imported)) throw new Error('Invalid format');
                 const themeName = (data.name && typeof data.name === 'string') ? data.name : file.name.replace(/\.json$/i, '');
                 const s2 = getSettings(); s2.savedThemes[themeName] = { ...THEME_PRESETS.default, ...imported }; s2.activeThemeProfile = themeName; s2.customTheme = { ...s2.savedThemes[themeName] };
-                saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(`Theme "${escHtml(themeName)}" imported.`, EXT_DISPLAY);
-            } catch (e) { toastr.error('Invalid theme file.', EXT_DISPLAY); }
+                saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(t`Theme "${escHtml(themeName)}" imported.`, EXT_DISPLAY);
+            } catch (e) { toastr.error(translate('Invalid theme file.'), EXT_DISPLAY); }
         };
         inp.click();
     });
@@ -881,26 +882,26 @@ export function setupSettingsHandlers() {
         const displayVal = defaultVal || (key === 'charEditPrompt' ? DEFAULT_CHAR_EDIT_DIRECTIVE.trim() : key === 'chatEditPrompt' ? DEFAULT_CHAT_EDIT_DIRECTIVE.trim() : key === 'lorebookManagePrompt' ? DEFAULT_LB_MANAGE_PROMPT : key === 'memoryManagePrompt' ? DEFAULT_MEMORY_PROMPT : DEFAULT_SYSTEM_PROMPT);
         [stId, spId].forEach(id => { const el = document.getElementById(id); if (el) el.value = displayVal; });
         import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession()));
-        toastr.success(`${label} reset.`, EXT_DISPLAY);
+        toastr.success(t`${translate(label)} reset.`, EXT_DISPLAY);
     };
     document.getElementById('scp-reset-prompt')?.addEventListener('click', () => _resetPrompt('systemPrompt', DEFAULT_SYSTEM_PROMPT, 'scp-sysprompt', 'scp-sp-sysprompt', 'System Prompt'));
     document.getElementById('scp-reset-char-edit-prompt')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Char Edit Prompt', message: 'Reset to built-in default?' }); if (!ok) return;
         getSettings().charEditPrompt = ''; saveSettings(); _markDirty('config');
         ['scp-char-edit-prompt', 'scp-sp-char-edit-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_CHAR_EDIT_DIRECTIVE.trim(); });
-        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Char edit prompt reset.', EXT_DISPLAY);
+        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('Char edit prompt reset.'), EXT_DISPLAY);
     });
     document.getElementById('scp-reset-lb-prompt')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Lorebook Prompt', message: 'Reset to default?' }); if (!ok) return;
         getSettings().lorebookManagePrompt = DEFAULT_LB_MANAGE_PROMPT; saveSettings();
         ['scp-lb-manage-prompt', 'scp-sp-lb-manage-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_LB_MANAGE_PROMPT; });
-        toastr.success('Lorebook prompt reset.', EXT_DISPLAY);
+        toastr.success(translate('Lorebook prompt reset.'), EXT_DISPLAY);
     });
     document.getElementById('scp-reset-memory-prompt')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset memory prompt to default?' }); if (!ok) return;
         getSettings().memoryManagePrompt = DEFAULT_MEMORY_PROMPT; saveSettings();
         ['scp-memory-prompt', 'scp-sp-memory-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_MEMORY_PROMPT; });
-        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Prompt reset.', EXT_DISPLAY);
+        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('Prompt reset.'), EXT_DISPLAY);
     });
 
     // ── Profile management (ST drawer) ──
@@ -916,7 +917,7 @@ export function setupSettingsHandlers() {
         const sel = document.getElementById('scp-profile-select'); let name = sel?.value;
         if (!name) { name = await showCustomDialog({ type: 'prompt', title: 'Save Configuration', message: 'Enter a name for this configuration:', placeholder: 'My Config' }); if (!name?.trim()) return; name = name.trim(); }
         saveProfile(name); refreshProfilesDropdown(); if (sel) sel.value = name;
-        updateBindingSection(); toastr.success(`Saved "${name}"`, EXT_DISPLAY); _clearDirty('config');
+        updateBindingSection(); toastr.success(t`Saved "${name}"`, EXT_DISPLAY); _clearDirty('config');
     });
     document.getElementById('scp-profile-create-new')?.addEventListener('click', async () => {
         const name = await showCustomDialog({ type: 'prompt', title: 'New Configuration', message: 'Enter a name for the new default profile:', placeholder: 'New Config' }); if (!name?.trim()) return;
@@ -924,18 +925,18 @@ export function setupSettingsHandlers() {
         s.profiles[n] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8200 };
         saveSettings(); refreshProfilesDropdown(); loadProfile(n);
         const sel = document.getElementById('scp-profile-select'); if (sel) sel.value = n;
-        updateBindingSection(); toastr.success(`Created "${n}"`, EXT_DISPLAY);
+        updateBindingSection(); toastr.success(t`Created "${n}"`, EXT_DISPLAY);
     });
     document.getElementById('scp-profile-duplicate')?.addEventListener('click', async () => {
-        const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return toastr.info('No configuration selected.', EXT_DISPLAY);
+        const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return toastr.info(translate('No configuration selected.'), EXT_DISPLAY);
         const newName = await showCustomDialog({ type: 'prompt', title: 'Duplicate Configuration', message: 'Name for the new profile:', defaultValue: sel.value + ' (Copy)' }); if (!newName?.trim()) return;
         const n = newName.trim(); const s = getSettings(); const p = s.profiles[sel.value]; if (!p) return;
         s.profiles[n] = JSON.parse(JSON.stringify(p)); saveSettings(); refreshProfilesDropdown(); refreshSPProfilesDropdown(); loadProfile(n);
         const newSel = document.getElementById('scp-profile-select'); if (newSel) newSel.value = n;
-        updateBindingSection(); toastr.success(`Duplicated as "${n}"`, EXT_DISPLAY);
+        updateBindingSection(); toastr.success(t`Duplicated as "${n}"`, EXT_DISPLAY);
     });
     document.getElementById('scp-profile-rename')?.addEventListener('click', async () => {
-        const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return toastr.info('No configuration selected.', EXT_DISPLAY);
+        const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return toastr.info(translate('No configuration selected.'), EXT_DISPLAY);
         const newName = await showCustomDialog({ type: 'prompt', title: 'Rename Configuration', message: 'New name:', defaultValue: sel.value }); if (!newName?.trim() || newName.trim() === sel.value) return;
         const s = getSettings(); const p = s.profiles[sel.value]; if (!p) return;
         s.profiles[newName.trim()] = p; delete s.profiles[sel.value];
@@ -943,13 +944,13 @@ export function setupSettingsHandlers() {
         for (const k in s.profileBindings) { if (s.profileBindings[k] === sel.value) s.profileBindings[k] = newName.trim(); }
         saveSettings(); refreshProfilesDropdown();
         const newSel = document.getElementById('scp-profile-select'); if (newSel) newSel.value = newName.trim();
-        updateBindingSection(); toastr.success('Renamed.', EXT_DISPLAY);
+        updateBindingSection(); toastr.success(translate('Renamed.'), EXT_DISPLAY);
     });
     document.getElementById('scp-profile-delete')?.addEventListener('click', async () => {
         const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return;
-        const s = getSettings(); if (Object.keys(s.profiles).length <= 1) { toastr.warning('Cannot delete the last remaining configuration profile.', EXT_DISPLAY); return; }
+        const s = getSettings(); if (Object.keys(s.profiles).length <= 1) { toastr.warning(translate('Cannot delete the last remaining configuration profile.'), EXT_DISPLAY); return; }
         const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Configuration', message: `Delete "${sel.value}"?` }); if (!ok) return;
-        deleteProfile(sel.value); refreshProfilesDropdown(); updateBindingSection(); toastr.success('Deleted.', EXT_DISPLAY);
+        deleteProfile(sel.value); refreshProfilesDropdown(); updateBindingSection(); toastr.success(translate('Deleted.'), EXT_DISPLAY);
     });
     document.getElementById('scp-bind-char')?.addEventListener('click', () => {
         const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return;
@@ -971,7 +972,7 @@ export function setupSettingsHandlers() {
     document.getElementById('scp-open-tools-settings')?.addEventListener('click', () => { openSettingsPanel(); setTimeout(() => document.querySelector('[data-sptab="tools"]')?.click(), 80); });
     document.getElementById('scp-cleanup-files')?.addEventListener('click', () => import('../features/feature-storage-cleanup.js').then(m => m.runOrphanCleanup()));
     document.getElementById('scp-clear-sessions')?.addEventListener('click', async () => {
-        const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete all Copilot sessions in this chat? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
+        const ok = await showCustomDialog({ type: 'confirm', title: translate('Clear All Sessions'), message: translate('Delete all Copilot sessions in this chat? This cannot be undone.'), delayConfirm: 3 }); if (!ok) return;
         const { charId, chatId } = getBindingKey();
         _dbgAdd('SESSION_CLEAR_REQUESTED', { source: 'st-drawer', charId, chatId });
         getSettings().sessions = {}; saveSettings();
@@ -980,11 +981,11 @@ export function setupSettingsHandlers() {
             _dbgAdd('SESSION_CLEAR_DONE', { source: 'st-drawer', charId, chatId });
         } catch (e) {
             _dbgAdd('SESSION_CLEAR_FAILED', { source: 'st-drawer', charId, chatId, error: e?.message || String(e), stack: e?.stack });
-            toastr.error(`Failed to clear sessions: ${e.message}`, EXT_DISPLAY);
+            toastr.error(t`Failed to clear sessions: ${e.message}`, EXT_DISPLAY);
             return;
         }
         import('./ui-chat.js').then(m => m.onChatChanged());
-        toastr.success('Sessions cleared.', EXT_DISPLAY);
+        toastr.success(translate('Sessions cleared.'), EXT_DISPLAY);
     });
 
     // ── Background (ST) ──
@@ -1035,7 +1036,7 @@ export function setupSettingsPanelListeners() {
         const sel = document.getElementById('scp-sp-profile-select'); let name = sel?.value;
         if (!name) { name = await showCustomDialog({ type: 'prompt', title: 'Save Configuration', message: 'Profile name:', placeholder: 'My Config' }); if (!name?.trim()) return; name = name.trim(); }
         saveProfile(name); refreshSPProfilesDropdown(); refreshProfilesDropdown(); if (sel) sel.value = name;
-        updateSPBindingSection(); toastr.success(`Saved "${name}"`, EXT_DISPLAY); _clearDirty('config');
+        updateSPBindingSection(); toastr.success(t`Saved "${name}"`, EXT_DISPLAY); _clearDirty('config');
     });
     document.getElementById('scp-sp-profile-create')?.addEventListener('click', async () => {
         const name = await showCustomDialog({ type: 'prompt', title: 'New Configuration', message: 'Name:', placeholder: 'New Config' }); if (!name?.trim()) return;
@@ -1043,15 +1044,15 @@ export function setupSettingsPanelListeners() {
         s.profiles[n] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8200, applyRegexToContext: true };
         saveSettings(); refreshSPProfilesDropdown(); refreshProfilesDropdown(); loadProfile(n); syncSPFromSettings(); updateSettingsUI();
         const sel = document.getElementById('scp-sp-profile-select'); if (sel) sel.value = n;
-        updateSPBindingSection(); toastr.success(`Created "${n}"`, EXT_DISPLAY);
+        updateSPBindingSection(); toastr.success(t`Created "${n}"`, EXT_DISPLAY);
     });
     document.getElementById('scp-sp-profile-duplicate')?.addEventListener('click', async () => {
-        const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return toastr.info('No configuration selected.', EXT_DISPLAY);
+        const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return toastr.info(translate('No configuration selected.'), EXT_DISPLAY);
         const newName = await showCustomDialog({ type: 'prompt', title: 'Duplicate Configuration', message: 'Name for the new profile:', defaultValue: sel.value + ' (Copy)' }); if (!newName?.trim()) return;
         const n = newName.trim(); const s = getSettings(); const p = s.profiles[sel.value]; if (!p) return;
         s.profiles[n] = JSON.parse(JSON.stringify(p)); saveSettings(); refreshSPProfilesDropdown(); refreshProfilesDropdown(); loadProfile(n); syncSPFromSettings(); updateSettingsUI();
         const newSel = document.getElementById('scp-sp-profile-select'); if (newSel) newSel.value = n;
-        updateSPBindingSection(); toastr.success(`Duplicated as "${n}"`, EXT_DISPLAY);
+        updateSPBindingSection(); toastr.success(t`Duplicated as "${n}"`, EXT_DISPLAY);
     });
     document.getElementById('scp-sp-profile-rename')?.addEventListener('click', async () => {
         const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return;
@@ -1062,13 +1063,13 @@ export function setupSettingsPanelListeners() {
         for (const k in s.profileBindings) { if (s.profileBindings[k] === sel.value) s.profileBindings[k] = newName.trim(); }
         saveSettings(); refreshSPProfilesDropdown(); refreshProfilesDropdown();
         const newSel = document.getElementById('scp-sp-profile-select'); if (newSel) newSel.value = newName.trim();
-        updateSPBindingSection(); toastr.success('Renamed.', EXT_DISPLAY);
+        updateSPBindingSection(); toastr.success(translate('Renamed.'), EXT_DISPLAY);
     });
     document.getElementById('scp-sp-profile-delete')?.addEventListener('click', async () => {
         const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return;
-        const s = getSettings(); if (Object.keys(s.profiles).length <= 1) { toastr.warning('Cannot delete the last profile.', EXT_DISPLAY); return; }
+        const s = getSettings(); if (Object.keys(s.profiles).length <= 1) { toastr.warning(translate('Cannot delete the last profile.'), EXT_DISPLAY); return; }
         const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Profile', message: `Delete "${sel.value}"?` }); if (!ok) return;
-        deleteProfile(sel.value); refreshSPProfilesDropdown(); refreshProfilesDropdown(); updateSPBindingSection(); toastr.success('Deleted.', EXT_DISPLAY);
+        deleteProfile(sel.value); refreshSPProfilesDropdown(); refreshProfilesDropdown(); updateSPBindingSection(); toastr.success(translate('Deleted.'), EXT_DISPLAY);
     });
     document.getElementById('scp-sp-bind-char')?.addEventListener('click', () => {
         const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return;
@@ -1093,37 +1094,37 @@ export function setupSettingsPanelListeners() {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset System Prompt', message: 'Reset to default?' }); if (!ok) return;
         getSettings().systemPrompt = DEFAULT_SYSTEM_PROMPT; saveSettings();
         ['scp-sp-sysprompt', 'scp-sysprompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_SYSTEM_PROMPT; });
-        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success('System prompt reset.', EXT_DISPLAY);
+        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('System prompt reset.'), EXT_DISPLAY);
     });
     document.getElementById('scp-sp-reset-lb-prompt')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset LB Prompt', message: 'Reset to default?' }); if (!ok) return;
         getSettings().lorebookManagePrompt = DEFAULT_LB_MANAGE_PROMPT; saveSettings();
         ['scp-sp-lb-manage-prompt', 'scp-lb-manage-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_LB_MANAGE_PROMPT; });
-        toastr.success('Lorebook prompt reset.', EXT_DISPLAY);
+        toastr.success(translate('Lorebook prompt reset.'), EXT_DISPLAY);
     });
     document.getElementById('scp-sp-reset-char-edit-prompt')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Char Edit Prompt', message: 'Reset to built-in default?' }); if (!ok) return;
         getSettings().charEditPrompt = ''; saveSettings(); _markDirty('config');
         ['scp-sp-char-edit-prompt', 'scp-char-edit-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_CHAR_EDIT_DIRECTIVE.trim(); });
-        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Char edit prompt reset.', EXT_DISPLAY);
+        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('Char edit prompt reset.'), EXT_DISPLAY);
     });
     document.getElementById('scp-sp-reset-chat-edit-prompt')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Chat Edit Prompt', message: 'Reset to default?' }); if (!ok) return;
         getSettings().chatEditPrompt = ''; saveSettings(); _markDirty('config');
         ['scp-sp-chat-edit-prompt', 'scp-chat-edit-prompt-st'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_CHAT_EDIT_DIRECTIVE.trim(); });
-        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Chat edit prompt reset.', EXT_DISPLAY);
+        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('Chat edit prompt reset.'), EXT_DISPLAY);
     });
     document.getElementById('scp-sp-reset-memory-prompt')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset memory prompt to default?' }); if (!ok) return;
         getSettings().memoryManagePrompt = DEFAULT_MEMORY_PROMPT; saveSettings();
         ['scp-sp-memory-prompt', 'scp-memory-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_MEMORY_PROMPT; });
-        toastr.success('Prompt reset.', EXT_DISPLAY);
+        toastr.success(translate('Prompt reset.'), EXT_DISPLAY);
     });
     document.getElementById('scp-sp-tools-reset')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset tools prompt to default?' }); if (!ok) return;
         getSettings().toolsSystemPrompt = DEFAULT_TOOLS_PROMPT; saveSettings();
         const ta = document.getElementById('scp-sp-tools-prompt'); if (ta) ta.value = DEFAULT_TOOLS_PROMPT;
-        toastr.success('Tools prompt reset.', EXT_DISPLAY);
+        toastr.success(translate('Tools prompt reset.'), EXT_DISPLAY);
     });
 
     // ── Misc SP ──
@@ -1131,7 +1132,7 @@ export function setupSettingsPanelListeners() {
     document.getElementById('scp-sp-download-debug')?.addEventListener('click', () => import('../utils/util-debug.js').then(m => m.dbgDownload()));
     document.getElementById('scp-sp-cleanup-files')?.addEventListener('click', () => import('../features/feature-storage-cleanup.js').then(m => m.runOrphanCleanup()));
     document.getElementById('scp-sp-clear-sessions')?.addEventListener('click', async () => {
-        const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete all Copilot sessions in this chat? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
+        const ok = await showCustomDialog({ type: 'confirm', title: translate('Clear All Sessions'), message: translate('Delete all Copilot sessions in this chat? This cannot be undone.'), delayConfirm: 3 }); if (!ok) return;
         const { charId, chatId } = getBindingKey();
         _dbgAdd('SESSION_CLEAR_REQUESTED', { source: 'settings-overlay', charId, chatId });
         getSettings().sessions = {}; saveSettings();
@@ -1139,17 +1140,17 @@ export function setupSettingsPanelListeners() {
             await initChatBucket({ forceReset: true });
             _dbgAdd('SESSION_CLEAR_DONE', { source: 'settings-overlay', charId, chatId });
             import('./ui-chat.js').then(m => m.onChatChanged());
-            toastr.success('Sessions cleared.', EXT_DISPLAY);
+            toastr.success(translate('Sessions cleared.'), EXT_DISPLAY);
         } catch (e) {
             _dbgAdd('SESSION_CLEAR_FAILED', { source: 'settings-overlay', charId, chatId, error: e?.message || String(e), stack: e?.stack });
-            toastr.error(`Failed to clear sessions: ${e.message}`, EXT_DISPLAY);
+            toastr.error(t`Failed to clear sessions: ${e.message}`, EXT_DISPLAY);
         }
     });
     document.getElementById('scp-sp-reset-all-overrides')?.addEventListener('click', async () => {
-        if (!hasSessionOverrides()) { toastr.info('No session overrides active.', EXT_DISPLAY); return; }
+        if (!hasSessionOverrides()) { toastr.info(translate('No session overrides active.'), EXT_DISPLAY); return; }
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Session Overrides', message: 'Clear all session overrides for this session?' }); if (!ok) return;
         clearAllSessionOverrides(); syncSPFromSettings();
-        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Session overrides cleared.', EXT_DISPLAY);
+        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('Session overrides cleared.'), EXT_DISPLAY);
     });
 
     // ── Session Override bindings ──
@@ -1241,7 +1242,7 @@ export function buildBackgroundSettingsUI(container) {
     const typeSel = document.createElement('select'); typeSel.className = isSP ? 'scp-sp-select text_pole' : 'text_pole'; typeSel.style.flex = '1';
 
     const renderDropdown = () => {
-        typeSel.innerHTML = '<option value="none">None</option>';
+        typeSel.innerHTML = '<option value="none" data-i18n="None">None</option>';
         if (Object.keys(s.customBackgrounds).length) {
             const grp = document.createElement('optgroup'); grp.label = 'Custom Backgrounds';
             for (const [key, bg] of Object.entries(s.customBackgrounds)) { const o = document.createElement('option'); o.value = key; o.textContent = bg.name; grp.appendChild(o); }
@@ -1259,7 +1260,7 @@ export function buildBackgroundSettingsUI(container) {
         const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*,video/mp4,video/webm';
         inp.onchange = async () => {
             const file = inp.files?.[0]; if (!file) return;
-            if (file.size > 25 * 1024 * 1024) { toastr.warning('File too large (>25MB).', EXT_DISPLAY); return; }
+            if (file.size > 25 * 1024 * 1024) { toastr.warning(translate('File too large (>25MB).'), EXT_DISPLAY); return; }
             const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(null); r.readAsDataURL(file); });
             if (!dataUrl) return;
             const s2 = getSettings(); const id = 'bg_' + Date.now();
@@ -1279,7 +1280,7 @@ export function buildBackgroundSettingsUI(container) {
         const newName = await showCustomDialog({ type: 'prompt', title: 'Rename Background', message: 'New name:', defaultValue: s.customBackgrounds[val]?.name });
         if (newName?.trim()) { s.customBackgrounds[val].name = newName.trim(); saveSettings(); rebuildAll(); }
     }));
-    actWrap.appendChild(mkBtn('trash', 'Delete', isSP ? 'scp-sp-danger-btn' : '', async () => {
+    actWrap.appendChild(mkBtn('trash', translate('Delete'), isSP ? 'scp-sp-danger-btn' : '', async () => {
         const val = typeSel.value; if (val === 'none') return;
         const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Background', message: 'Delete this background?' }); if (!ok) return;
         const s2 = getSettings(); delete s2.customBackgrounds[val]; s2.windowBg = 'none'; saveSettings(); rebuildAll();
@@ -1318,7 +1319,7 @@ export function buildQPSettingsUI(container) {
     const renderList = () => {
         list.innerHTML = '';
         const prompts = getSettings().quickPrompts || [];
-        if (!prompts.length) { list.innerHTML = `<div style="font-size:11px;color:var(--scp-text-muted);text-align:center;padding:10px 0">No quick prompts yet. Add one below.</div>`; }
+        if (!prompts.length) { list.innerHTML = `<div style="font-size:11px;color:var(--scp-text-muted);text-align:center;padding:10px 0" data-i18n="No quick prompts yet. Add one below.">No quick prompts yet. Add one below.</div>`; }
         prompts.forEach((qp, idx) => {
             const row = document.createElement('div'); row.className = 'scp-qp-settings-row';
             const iconBtn = document.createElement('button'); iconBtn.className = 'scp-qp-settings-icon-btn'; iconBtn.textContent = qp.icon || '⚡'; iconBtn.title = 'Change icon';
@@ -1331,7 +1332,7 @@ export function buildQPSettingsUI(container) {
             moveUpBtn.addEventListener('click', () => { if (idx === 0) return; const arr = getSettings().quickPrompts; [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]]; saveSettings(); renderList(); import('./ui-widgets.js').then(m => m.renderQuickPromptsBar()); });
             const moveDnBtn = document.createElement('button'); moveDnBtn.className = 'scp-qp-settings-move'; moveDnBtn.textContent = '↓'; moveDnBtn.title = 'Move down'; moveDnBtn.disabled = idx === prompts.length - 1;
             moveDnBtn.addEventListener('click', () => { const arr = getSettings().quickPrompts; if (idx >= arr.length - 1) return; [arr[idx], arr[idx+1]] = [arr[idx+1], arr[idx]]; saveSettings(); renderList(); import('./ui-widgets.js').then(m => m.renderQuickPromptsBar()); });
-            const delBtn = document.createElement('button'); delBtn.className = 'scp-qp-settings-del'; delBtn.innerHTML = I.trash; delBtn.title = 'Delete';
+            const delBtn = document.createElement('button'); delBtn.className = 'scp-qp-settings-del'; delBtn.innerHTML = I.trash; delBtn.title = translate('Delete');
             delBtn.addEventListener('click', async () => { const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Prompt', message: `Delete "${qp.label || 'this prompt'}"?` }); if (!ok) return; getSettings().quickPrompts.splice(idx, 1); saveSettings(); renderList(); import('./ui-widgets.js').then(m => m.renderQuickPromptsBar()); });
             const textArea = document.createElement('textarea'); textArea.className = 'scp-qp-settings-text scp-sp-textarea'; textArea.placeholder = 'Prompt text… (supports {{user}}, {{char}} macros)'; textArea.rows = 2; textArea.value = qp.text || '';
             textArea.addEventListener('input', () => { getSettings().quickPrompts[idx].text = textArea.value; saveSettings(); });
@@ -1342,7 +1343,7 @@ export function buildQPSettingsUI(container) {
     };
     renderList();
 
-    const addBtn = document.createElement('button'); addBtn.className = 'scp-action-btn'; addBtn.style.marginTop = '8px'; addBtn.innerHTML = `${I.plus}<span>Add Prompt</span>`;
+    const addBtn = document.createElement('button'); addBtn.className = 'scp-action-btn'; addBtn.style.marginTop = '8px'; addBtn.innerHTML = `${I.plus}<span data-i18n="Add Prompt">Add Prompt</span>`;
     addBtn.addEventListener('click', async () => {
         const label = await showCustomDialog({ type: 'prompt', title: 'New Quick Prompt', message: 'Label for this prompt:', placeholder: 'My Prompt' }); if (label === null) return;
         getSettings().quickPrompts.push({ id: 'qp_'+Date.now(), label: label.trim() || 'Prompt', icon: '⚡', text: '' }); saveSettings(); renderList(); import('./ui-widgets.js').then(m => m.renderQuickPromptsBar());

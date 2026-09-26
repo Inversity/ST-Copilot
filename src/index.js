@@ -13,6 +13,7 @@ import { updateMemoryDot } from './features/feature-memory.js';
 import { setupChatPickerListeners, onChatChanged, updateDepthSlidersMax, renderSession, openSearch, navigateSearch, performSearch, closeSearch, openChatPicker, toggleSearchWholeWord, setupDepthClickEdit, updateMsgCount, setupSearchHotkey, setupMessagesScrollTracking } from './ui/ui-chat.js';
 import { checkChangelogAutoShow, setupChangelogListeners, openChangelog, openFavoritesPanel, closeFavoritesPanel, openInspector, renderQuickPromptsBar } from './ui/ui-widgets.js';
 import { _setupAttachButton } from './features/feature-attachments.js';
+import { loadLocale, translate } from './utils/util-i18n.js';
 
 import * as apiMod from './api.js';
 
@@ -82,7 +83,7 @@ export function refreshSessionDropdown() {
     listEl.innerHTML = '';
     
     if (!bucket.sessions.length) {
-        listEl.innerHTML = `<div class="scp-sess-empty-label">No sessions — create one below</div>`;
+        listEl.innerHTML = `<div class="scp-sess-empty-label" data-i18n="No sessions — create one below">No sessions — create one below</div>`;
     } else {
         for (const sess of bucket.sessions) {
             const item = document.createElement('div');
@@ -221,7 +222,7 @@ function attachWindowListeners() {
     // Session dropdown
     document.getElementById('scp-sess-trigger')?.addEventListener('click', e => {
         e.stopPropagation();
-        if (state.generating) { toastr.warning('Please wait for generation to finish.', EXT_DISPLAY); return; }
+        if (state.generating) { toastr.warning(translate('Please wait for generation to finish.'), EXT_DISPLAY); return; }
         const panel = document.getElementById('scp-sess-panel'); const trigger = document.getElementById('scp-sess-trigger');
         const isOpen = panel.classList.contains('open');
         panel.classList.toggle('open', !isOpen); trigger.classList.toggle('open', !isOpen);
@@ -503,6 +504,7 @@ async function init() {
     
     getSettings();
     _dbgSnapshotSettings();
+    await loadLocale(__extPath);
     await injectUI();
     
     const ctx = SillyTavern.getContext();

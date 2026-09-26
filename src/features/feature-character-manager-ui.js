@@ -2,6 +2,7 @@ import { EXT_DISPLAY, I, THEME_PRESETS } from '../constants.js';
 import { getSettings, saveSettings } from '../session.js';
 import { applyCustomTheme, bringWindowToFront } from '../ui/ui-window.js';
 import { getUserPersona } from '../utils/util-st.js';
+import { t, translate } from '../utils/util-i18n.js';
 import {
     getActiveCharacterEntities, getCharFieldValue, saveCharacterField,
     getEffectiveCharField, getCharFieldOverride, setCharFieldOverride,
@@ -51,12 +52,12 @@ function _showUnsavedDialog(onSave, onDiscard) {
     overlay.style.zIndex = '2147483055';
     overlay.innerHTML = `
         <div class="scp-dialog-box">
-            <div class="scp-dialog-title">Unsaved Changes</div>
-            <div class="scp-dialog-msg">You have unsaved changes to character fields. What would you like to do?</div>
+            <div class="scp-dialog-title" data-i18n="Unsaved Changes">Unsaved Changes</div>
+            <div class="scp-dialog-msg" data-i18n="You have unsaved changes to character fields. What would you like to do?">You have unsaved changes to character fields. What would you like to do?</div>
             <div class="scp-dialog-btns">
-                <button class="scp-dialog-btn scp-dialog-cancel" id="_uc_cancel">Cancel</button>
-                <button class="scp-dialog-btn scp-dialog-cancel" id="_uc_discard" style="color:var(--scp-danger,#ff5c5c)">Discard</button>
-                <button class="scp-dialog-btn scp-dialog-ok" id="_uc_save">Save &amp; Exit</button>
+                <button class="scp-dialog-btn scp-dialog-cancel" id="_uc_cancel" data-i18n="Cancel">Cancel</button>
+                <button class="scp-dialog-btn scp-dialog-cancel" id="_uc_discard" style="color:var(--scp-danger,#ff5c5c)" data-i18n="Discard">Discard</button>
+                <button class="scp-dialog-btn scp-dialog-ok" id="_uc_save" data-i18n="Save &amp; Exit">Save &amp; Exit</button>
             </div>
         </div>`;
     document.body.appendChild(overlay);
@@ -240,7 +241,7 @@ function _buildFieldRow(fieldDef, getValueFn, onDirtyFn) {
     labelRow.className = 'scp-char-field-label-row';
     const label = document.createElement('span');
     label.className = 'scp-char-field-label';
-    label.textContent = fieldDef.label;
+    label.textContent = translate(fieldDef.label);
     const tokenSpan = document.createElement('span');
     tokenSpan.className = 'scp-char-field-tokens';
     labelRow.appendChild(label);
@@ -323,18 +324,18 @@ function _buildCurrentInfoTab(entity, saveBtn, revertBtn) {
         if (!Object.keys(dirty).length) return true;
         const origLabel = saveBtn.innerHTML;
         saveBtn.disabled = true;
-        saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>Saving…</span>`;
+        saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span data-i18n="Saving…">Saving…</span>`;
         try {
             for (const [key, val] of Object.entries(dirty)) {
                 await saveCharacterField(charRef, key, val);
                 delete dirty[key];
             }
             _currentIsDirty = false;
-            toastr.success('Saved.', EXT_DISPLAY);
+            toastr.success(translate('Saved.'), EXT_DISPLAY);
             _renderCharDetail(entity);
             return true;
         } catch (e) {
-            toastr.error(`Failed: ${e.message}`, EXT_DISPLAY);
+            toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
             saveBtn.innerHTML = origLabel;
             updateBtns();
             return false;
@@ -366,13 +367,13 @@ function _buildOverrideRow(entity, fieldDef) {
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     const span = document.createElement('span');
-    span.textContent = fieldDef.label;
+    span.textContent = translate(fieldDef.label);
     label.appendChild(cb);
     label.appendChild(span);
 
     const resetBtn = document.createElement('button');
     resetBtn.className = 'scp-sp-ov-clear';
-    resetBtn.title = 'Clear override';
+    resetBtn.title = translate('Clear override');
     resetBtn.textContent = '↺';
 
     const refresh = () => {
@@ -452,13 +453,13 @@ function _renderCharDetail(entity) {
 
     const saveBtn = document.createElement('button');
     saveBtn.className = 'scp-action-btn scp-char-banner-save-btn';
-    saveBtn.innerHTML = `${I.check}<span>Save</span>`;
+    saveBtn.innerHTML = `${I.check}<span data-i18n="Save">Save</span>`;
     saveBtn.disabled = true;
     saveBtn.style.opacity = '0.4';
 
     const revertBtn = document.createElement('button');
     revertBtn.className = 'scp-action-btn';
-    revertBtn.innerHTML = `${I.x}<span>Revert</span>`;
+    revertBtn.innerHTML = `${I.x}<span data-i18n="Revert">Revert</span>`;
     revertBtn.disabled = true;
     revertBtn.style.opacity = '0.4';
 

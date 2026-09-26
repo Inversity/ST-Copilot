@@ -2,6 +2,7 @@ import { getSettings, saveSettings } from '../session.js';
 import { state } from '../state.js';
 import { THEME_CSS_MAP, THEME_PRESETS, ICON_STORAGE_KEY, WIN_ID, EXT_DISPLAY } from '../constants.js';
 import { scrollToBottom, saveScrollPosition, restoreScrollPosition } from './ui-chat.js';
+import { translate } from '../utils/util-i18n.js';
 
 const SCP_TOP_Z_INDEX = 2147483000;
 const WIN_POS_STORAGE_KEY = 'scp-win-pos';
@@ -695,7 +696,7 @@ export function showWindow() {
     const windowEl = document.getElementById(WIN_ID);
     const iconEl = document.getElementById('scp-dock-icon');
     const s = getSettings(); 
-    if (!s.enabled) { toastr.warning('ST-Copilot is disabled.', EXT_DISPLAY); return; }
+    if (!s.enabled) { toastr.warning(translate('ST-Copilot is disabled.'), EXT_DISPLAY); return; }
     s.windowVisible = true; 
     s.minimized = false;
     if(windowEl) windowEl.style.display = 'flex';
@@ -743,7 +744,7 @@ export function _setupBgUpload(btnId, inputId, onUploadSuccess) {
         inp.onchange = async () => {
             const file = inp.files[0];
             if (!file) return;
-            if (file.size > 25 * 1024 * 1024) { toastr.warning('File is too large (>25MB). Use URL instead.', 'ST-Copilot'); return; }
+            if (file.size > 25 * 1024 * 1024) { toastr.warning(translate('File is too large (>25MB). Use URL instead.'), 'ST-Copilot'); return; }
             const url = await _uploadBgToST(file).catch(() => null);
             if (url) {
                 getSettings().windowBgUrl = url;
@@ -753,7 +754,7 @@ export function _setupBgUpload(btnId, inputId, onUploadSuccess) {
                 applyWindowBackground();
                 if (onUploadSuccess) onUploadSuccess();
             } else {
-                toastr.error('Failed to upload background.', 'ST-Copilot');
+                toastr.error(translate('Failed to upload background.'), 'ST-Copilot');
             }
         };
         inp.click();

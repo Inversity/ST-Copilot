@@ -1,6 +1,7 @@
 import { getSettings, saveSettings, getBindingKey } from '../session.js';
 import { escHtml, showCustomDialog } from '../utils/util-dom.js';
 import { EXT_DISPLAY } from '../constants.js';
+import { translate } from '../utils/util-i18n.js';
 
 export const SM = { msg:0, regen:1, sess:2, tokIn:3, tokOut:4, qp:5, lb:6, edit:7 };
 const _STAT_N = 8;
@@ -157,7 +158,7 @@ export function renderStatsPane(container) {
         items.forEach(([val, txt]) => {
             const btn = document.createElement('button');
             btn.className = `scp-stats-pill${s[stateKey] === val ? ' active' : ''}`;
-            btn.textContent = txt;
+            btn.textContent = translate(txt);
             btn.dataset[stateKey] = val;
             btn.addEventListener('click', () => {
                 if (_statsState[stateKey] === val) return;
@@ -194,17 +195,17 @@ export function renderStatsPane(container) {
 
     const danger = document.createElement('div');
     danger.className = 'scp-sp-group scp-stats-danger';
-    danger.innerHTML = `<div class="scp-sp-group-title" style="color:var(--scp-danger)"><i class="fa-solid fa-triangle-exclamation"></i> Danger Zone</div>`;
+    danger.innerHTML = `<div class="scp-sp-group-title" style="color:var(--scp-danger)"><i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="Danger Zone">Danger Zone</span></div>`;
     const resetBtn = document.createElement('button');
     resetBtn.className = 'scp-action-btn scp-sp-danger-btn';
-    resetBtn.innerHTML = '<i class="fa-solid fa-trash"></i><span>Reset Statistics</span>';
+    resetBtn.innerHTML = '<i class="fa-solid fa-trash"></i><span data-i18n="Reset Statistics">Reset Statistics</span>';
     resetBtn.addEventListener('click', async () => {
-        const ok = await showCustomDialog({ type:'confirm', title:'Reset Statistics', message:'Delete ALL collected statistics permanently? This cannot be undone.', delayConfirm:3 });
+        const ok = await showCustomDialog({ type:'confirm', title:translate('Reset Statistics'), message:'Delete ALL collected statistics permanently? This cannot be undone.', delayConfirm:3 });
         if (!ok) return;
         getSettings().stats = { g:{}, c:{}, ch:{} };
         saveSettings();
         renderStatsPane(container);
-        toastr.success('Statistics cleared.', EXT_DISPLAY);
+        toastr.success(translate('Statistics cleared.'), EXT_DISPLAY);
     });
     danger.appendChild(resetBtn);
     container.appendChild(danger);

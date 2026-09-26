@@ -5,6 +5,7 @@ import { _dbgAdd } from '../utils/util-debug.js';
 import { escHtml, autoResize, showCustomDialog, copyText } from '../utils/util-dom.js';
 import { getCharInfo } from '../utils/util-st.js';
 import { applyRegexIfEnabled } from '../integrations/integ-regex.js';
+import { t, translate } from '../utils/util-i18n.js';
 
 import { parseLBChangesFromText, stripLBChangesBlock } from '../features/feature-lorebook-engine.js';
 import { renderProposalCard, appendLBHistoryEl } from '../features/feature-lorebook-ui.js';
@@ -1209,7 +1210,7 @@ export function renderSession(session) {
                 <div class="scp-empty-icon">
                     <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7" /><ellipse cx="12" cy="12" rx="11" ry="3" transform="rotate(-25 12 12)" /><circle cx="21.5" cy="7.5" r="1.5" fill="currentColor" stroke="none" /></svg>
                 </div>
-                <div class="scp-empty-title">New Session</div>
+                <div class="scp-empty-title" data-i18n="New Session">New Session</div>
                 <div class="scp-empty-sub">Ask anything about your roleplay — continuity checks, character analysis, writing feedback, worldbuilding, and more.</div>
             </div>`;
         updateMsgCount(session);
@@ -1659,7 +1660,7 @@ export function renderPickerMessages() {
 
     body.innerHTML = '';
     if (!msgs.length) {
-        body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--scp-text-muted)">No messages in current chat</div>';
+        body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--scp-text-muted)" data-i18n="No messages in current chat">No messages in current chat</div>';
         _updatePickerCountEl(0);
         return;
     }
@@ -1667,7 +1668,7 @@ export function renderPickerMessages() {
     const frag = document.createDocumentFragment();
     msgs.forEach((msg, idx) => {
         const isUser = msg.is_user;
-        const name = isUser ? (ctx.name1 || 'User') : (msg.name || charInfo?.name || 'Character');
+        const name = isUser ? (ctx.name1 || 'User') : (msg.name || charInfo?.name || translate('Character'));
         const isSelected = pickedSet.has(idx);
         const row = document.createElement('div');
         row.className = `scp-picker-row${isSelected ? ' selected' : ''}${isUser ? ' user' : ''}`;
@@ -1777,7 +1778,7 @@ export function _updatePickerCountEl(count) {
     const el = document.getElementById('scp-picker-count');
     if (!el) return;
     const n = count !== undefined ? count : document.querySelectorAll('#scp-picker-body .scp-picker-row.selected').length;
-    el.textContent = `${n} selected`;
+    el.textContent = t`${n} selected`;
 }
 
 export function setupChatPickerListeners() {
@@ -1833,7 +1834,7 @@ export function setGeneratingState(on) {
         bar.style.display = on ? 'flex' : 'none';
         if (on) {
             const t = document.getElementById('scp-thinking-text');
-            if (t) t.textContent = 'Thinking…';
+            if (t) t.textContent = translate('Thinking…');
         }
     }
     if (sendBtn) sendBtn.disabled = on;
@@ -1955,7 +1956,7 @@ export function setupDepthClickEdit() {
             
             const span = document.createElement('span');
             span.className = 'scp-depth-val scp-depth-clickable'; span.id = 'scp-depth-val';
-            span.title = 'Click to enter exact value'; span.textContent = val;
+            span.title = translate('Click to enter exact value'); span.textContent = val;
             
             input.parentNode.replaceChild(span, input);
             setupDepthClickEdit();

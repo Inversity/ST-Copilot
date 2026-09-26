@@ -115,7 +115,7 @@ export function processDiffLinesForInline(diffLines) {
 }
 
 export function renderDiffUnified(diffLines) {
-    if (!diffLines.length) return '<div style="padding:20px;color:var(--scp-text-muted);text-align:center">No changes to display</div>';
+    if (!diffLines.length) return '<div style="padding:20px;color:var(--scp-text-muted);text-align:center" data-i18n="No changes to display">No changes to display</div>';
     const processed = processDiffLinesForInline(diffLines);
     return `<div class="scp-diff-unified">${processed.map(l => {
         const cls = l.type === 'added' ? 'scp-diff-add' : l.type === 'removed' ? 'scp-diff-rem' : 'scp-diff-ctx';
@@ -164,7 +164,7 @@ export function renderDiffSplit(original, modified) {
             ai = a.length; bi = b.length;
         }
     }
-    return `<table class="scp-diff-split-table"><thead><tr><th>Original</th><th>Modified</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+    return `<table class="scp-diff-split-table"><thead><tr><th data-i18n="Original">Original</th><th data-i18n="Modified">Modified</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
 }
 
 export function openTextDiffModal(title, originalText, newText) {

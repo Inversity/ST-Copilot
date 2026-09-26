@@ -8,6 +8,7 @@ import {
 } from './constants.js';
 import { _dbgAdd, _dbgDiffSettings } from './utils/util-debug.js';
 import { _repairJSON } from './utils/util-text.js';
+import { t, translate } from './utils/util-i18n.js';
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 export function getSettings() {
@@ -414,7 +415,7 @@ export async function initChatBucket({ forceReset = false } = {}) {
         _currentSessionFileId = targetFileId;
         _fileOnDisk = false;
 
-        toastr.error('Copilot session file was corrupted and could not be recovered. Started a fresh session storage for this chat; the broken file was kept on disk for manual recovery.', EXT_DISPLAY, { timeOut: 15000 });
+        toastr.error(translate('Copilot session file was corrupted and could not be recovered. Started a fresh session storage for this chat; the broken file was kept on disk for manual recovery.'), EXT_DISPLAY, { timeOut: 15000 });
         return;
     }
 
@@ -656,9 +657,9 @@ export function exportCurrentSession() {
         a.download = `st-copilot-session-${safeName}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        toastr.success('Session exported.', EXT_DISPLAY);
+        toastr.success(translate('Session exported.'), EXT_DISPLAY);
     } catch (e) {
-        toastr.error(`Export failed: ${e.message}`, EXT_DISPLAY);
+        toastr.error(t`Export failed: ${e.message}`, EXT_DISPLAY);
     }
 }
 
@@ -671,7 +672,7 @@ export function importSession(onSuccessCallback) {
             const text = await file.text();
             const data = JSON.parse(text);
             if (!data.session || !data.session.id || !Array.isArray(data.session.messages)) {
-                toastr.error('Invalid session file.', EXT_DISPLAY); return;
+                toastr.error(translate('Invalid session file.'), EXT_DISPLAY); return;
             }
             const ok = await showCustomDialog({
                 type: 'confirm',
@@ -685,10 +686,10 @@ export function importSession(onSuccessCallback) {
             bucket.sessions.push(imported);
             bucket.activeSessionId = imported.id;
             saveSessionsToMetadata();
-            toastr.success(`Session "${escHtml(imported.name)}" imported.`, EXT_DISPLAY);
+            toastr.success(t`Session "${escHtml(imported.name)}" imported.`, EXT_DISPLAY);
             if (onSuccessCallback) onSuccessCallback();
         } catch (e) {
-            toastr.error(`Import failed: ${e.message}`, EXT_DISPLAY);
+            toastr.error(t`Import failed: ${e.message}`, EXT_DISPLAY);
         }
     };
     inp.click();
@@ -701,16 +702,16 @@ export function showSessionDialog({ defaultName = '' } = {}) {
         overlay.style.zIndex = '2147483050';
         overlay.innerHTML = `
             <div class="scp-dialog-box">
-                <div class="scp-dialog-title">New Session</div>
-                <div class="scp-dialog-msg">Session name:</div>
+                <div class="scp-dialog-title" data-i18n="New Session">New Session</div>
+                <div class="scp-dialog-msg" data-i18n="Session name:">Session name:</div>
                 <input type="text" class="scp-dialog-input" value="${escHtml(defaultName)}" placeholder="${escHtml(defaultName)}">
                 <label class="scp-sess-tmp-label">
                     <div class="scp-lb-toggle" id="scp-sess-tmp-toggle"><div class="scp-lb-toggle-knob"></div></div>
-                    <span>Temporary — auto-delete when switching</span>
+                    <span data-i18n="Temporary — auto-delete when switching">Temporary — auto-delete when switching</span>
                 </label>
                 <div class="scp-dialog-btns">
-                    <button class="scp-dialog-btn scp-dialog-cancel">Cancel</button>
-                    <button class="scp-dialog-btn scp-dialog-ok">Create</button>
+                    <button class="scp-dialog-btn scp-dialog-cancel" data-i18n="Cancel">Cancel</button>
+                    <button class="scp-dialog-btn scp-dialog-ok" data-i18n="Create">Create</button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);

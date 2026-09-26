@@ -6,6 +6,7 @@ import { recordStat, SM } from '../features/feature-stats.js';
 import { _processAttachmentsBeforeSend } from '../features/feature-attachments.js';
 import { assembleMessages } from '../api.js';
 import { state } from '../state.js';
+import { t, translate } from '../utils/util-i18n.js';
 
 // ─── Quick Prompts ───────────────────────────────────────────────────────────
 
@@ -216,14 +217,14 @@ export function buildPromptPresetManager(containerEl, getTextFn, setTextFn, dict
     const trigger = document.createElement('button');
     trigger.type = 'button';
     trigger.className = 'scp-preset-mgr-trigger';
-    trigger.innerHTML = `<span class="scp-pmt-label">Select a preset…</span><svg class="scp-pmt-chevron" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+    trigger.innerHTML = `<span class="scp-pmt-label">${escHtml(translate('Select a preset…'))}</span><svg class="scp-pmt-chevron" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>`;
 
     const labelEl = trigger.querySelector('.scp-pmt-label');
 
     const setActive = (name, source) => {
         _activeName = name;
         _activeSource = source;
-        labelEl.textContent = name || 'Select a preset…';
+        labelEl.textContent = name || translate('Select a preset…');
         trigger.classList.toggle('scp-pmt--has-value', !!name);
         updateBtnStates();
     };
@@ -275,19 +276,19 @@ export function buildPromptPresetManager(containerEl, getTextFn, setTextFn, dict
         if (_activeName && _activeSource === 'custom') {
             s[dictKey][_activeName] = getTextFn();
             saveSettings();
-            toastr.success(`Saved preset "${escHtml(_activeName)}"`, EXT_DISPLAY);
+            toastr.success(t`Saved preset "${escHtml(_activeName)}"`, EXT_DISPLAY);
         } else {
             const name = await showCustomDialog({ type: 'prompt', title: 'Save Prompt Preset', message: 'Preset name:', placeholder: 'My Preset' });
             if (!name?.trim()) return;
             s[dictKey][name.trim()] = getTextFn();
             saveSettings();
             setActive(name.trim(), 'custom');
-            toastr.success(`Saved preset "${escHtml(name.trim())}"`, EXT_DISPLAY);
+            toastr.success(t`Saved preset "${escHtml(name.trim())}"`, EXT_DISPLAY);
         }
     });
 
     const renameBtn = mkBtn('pen', 'Rename selected custom preset', '', async () => {
-        if (!_activeName || _activeSource !== 'custom') { toastr.info('Select a custom preset first.', EXT_DISPLAY); return; }
+        if (!_activeName || _activeSource !== 'custom') { toastr.info(translate('Select a custom preset first.'), EXT_DISPLAY); return; }
         const newName = await showCustomDialog({ type: 'prompt', title: 'Rename Preset', message: 'New name:', defaultValue: _activeName });
         if (!newName?.trim() || newName.trim() === _activeName) return;
         s[dictKey][newName.trim()] = s[dictKey][_activeName];
@@ -297,7 +298,7 @@ export function buildPromptPresetManager(containerEl, getTextFn, setTextFn, dict
     });
 
     const deleteBtn = mkBtn('trash', 'Delete selected custom preset', 'danger', async () => {
-        if (!_activeName || _activeSource !== 'custom') { toastr.info('Only custom presets can be deleted.', EXT_DISPLAY); return; }
+        if (!_activeName || _activeSource !== 'custom') { toastr.info(translate('Only custom presets can be deleted.'), EXT_DISPLAY); return; }
         const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Preset', message: `Delete "${_activeName}"?` });
         if (!ok) return;
         delete s[dictKey][_activeName];
@@ -371,7 +372,7 @@ export function buildQPSetManager(containerEl, onSetLoaded) {
             setActive(value);
             renderQuickPromptsBar();
             if (onSetLoaded) onSetLoaded();
-            toastr.success(`Loaded set "${escHtml(value)}"`, EXT_DISPLAY);
+            toastr.success(t`Loaded set "${escHtml(value)}"`, EXT_DISPLAY);
         }, { placeholder: 'Search sets…', width: 340, emptyText: 'No sets saved yet. Save one below.' });
     });
 
@@ -396,7 +397,7 @@ export function buildQPSetManager(containerEl, onSetLoaded) {
         s.activeQuickPromptSet = name;
         saveSettings();
         setActive(name);
-        toastr.success(`Saved set "${escHtml(name)}"`, EXT_DISPLAY);
+        toastr.success(t`Saved set "${escHtml(name)}"`, EXT_DISPLAY);
     });
 
     const saveAsBtn = mkBtn('plus', 'Save current prompts as a new set', '', async () => {
@@ -407,11 +408,11 @@ export function buildQPSetManager(containerEl, onSetLoaded) {
         s.activeQuickPromptSet = n;
         saveSettings();
         setActive(n);
-        toastr.success(`Created set "${escHtml(n)}"`, EXT_DISPLAY);
+        toastr.success(t`Created set "${escHtml(n)}"`, EXT_DISPLAY);
     });
 
     const renameBtn = mkBtn('pen', 'Rename selected set', '', async () => {
-        if (!_activeName) { toastr.info('Select a set first.', EXT_DISPLAY); return; }
+        if (!_activeName) { toastr.info(translate('Select a set first.'), EXT_DISPLAY); return; }
         const newName = await showCustomDialog({ type: 'prompt', title: 'Rename Set', message: 'New name:', defaultValue: _activeName });
         if (!newName?.trim() || newName.trim() === _activeName) return;
         const n = newName.trim();
@@ -423,7 +424,7 @@ export function buildQPSetManager(containerEl, onSetLoaded) {
     });
 
     const deleteBtn = mkBtn('trash', 'Delete selected set', 'danger', async () => {
-        if (!_activeName) { toastr.info('Select a set first.', EXT_DISPLAY); return; }
+        if (!_activeName) { toastr.info(translate('Select a set first.'), EXT_DISPLAY); return; }
         const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Set', message: `Delete set "${_activeName}"?` });
         if (!ok) return;
         delete s.quickPromptSets[_activeName];
@@ -650,7 +651,7 @@ export function renderFavoritesPanel() {
                 </div>
                 <div class="scp-fav-item-text">${escHtml(preview)}</div>
             </div>
-            <button class="scp-fav-item-remove" title="Remove from starred">✕</button>`;
+            <button class="scp-fav-item-remove" title="Remove from starred" data-i18n="[title]Remove from starred">✕</button>`;
 
         item.addEventListener('click', e => {
             if (e.target.classList.contains('scp-fav-item-remove')) return;
@@ -1010,7 +1011,7 @@ export function buildSoundSettingsUI(container) {
     const typeLbl = document.createElement(isSP ? 'label' : 'b');
     typeLbl.className = isSP ? 'scp-sp-label' : '';
     if (!isSP) typeLbl.style.fontSize = '12px';
-    typeLbl.textContent = 'Completion Sound';
+    typeLbl.textContent = translate('Completion Sound');
     
     const typeWrap = document.createElement('div');
     typeWrap.style.cssText = 'display:flex;gap:6px;align-items:center';
@@ -1027,7 +1028,7 @@ export function buildSoundSettingsUI(container) {
         groupPreset.label = 'Presets';
         for (const [key, preset] of Object.entries(_SOUND_PRESETS)) {
             const opt = document.createElement('option');
-            opt.value = key; opt.textContent = preset.label;
+            opt.value = key; opt.textContent = translate(preset.label);
             groupPreset.appendChild(opt);
         }
         typeSel.appendChild(groupPreset);
@@ -1054,7 +1055,7 @@ export function buildSoundSettingsUI(container) {
 
     const testBtn = document.createElement('button');
     testBtn.className = isSP ? 'scp-action-btn' : 'menu_button interactable';
-    testBtn.innerHTML = `<i class="fa-solid fa-play"></i><span>Test</span>`;
+    testBtn.innerHTML = `<i class="fa-solid fa-play"></i><span data-i18n="Test">Test</span>`;
     if (!isSP) testBtn.style.flex = '0 0 auto';
     testBtn.addEventListener('click', () => playCompletionSound(true));
     
@@ -1069,7 +1070,7 @@ export function buildSoundSettingsUI(container) {
     
     const uploadBtn = document.createElement('button');
     uploadBtn.className = isSP ? 'scp-action-btn' : 'menu_button interactable';
-    uploadBtn.innerHTML = `<i class="fa-solid fa-upload"></i><span>Upload Custom</span>`;
+    uploadBtn.innerHTML = `<i class="fa-solid fa-upload"></i><span data-i18n="Upload Custom">Upload Custom</span>`;
     if (!isSP) uploadBtn.style.flex = '1';
 
     uploadBtn.addEventListener('click', () => {
@@ -1077,11 +1078,11 @@ export function buildSoundSettingsUI(container) {
         inp.type = 'file'; inp.accept = 'audio/*';
         inp.onchange = async () => {
             const file = inp.files?.[0]; if (!file) return;
-            if (file.size > 5 * 1024 * 1024) { toastr.warning('Audio file too large (>5MB).', EXT_DISPLAY); return; }
+            if (file.size > 5 * 1024 * 1024) { toastr.warning(translate('Audio file too large (>5MB).'), EXT_DISPLAY); return; }
             
             const { _fileToDataUrl } = await import('../utils/util-dom.js');
             const dataUrl = await _fileToDataUrl(file).catch(() => null);
-            if (!dataUrl) { toastr.error('Failed to load audio', EXT_DISPLAY); return; }
+            if (!dataUrl) { toastr.error(translate('Failed to load audio'), EXT_DISPLAY); return; }
             
             const s2 = getSettings();
             const id = 'snd_' + Date.now();
@@ -1097,7 +1098,7 @@ export function buildSoundSettingsUI(container) {
 
     const deleteBtn = document.createElement('button');
     deleteBtn.className = isSP ? 'scp-action-btn scp-sp-danger-btn' : 'menu_button interactable';
-    deleteBtn.innerHTML = `<i class="fa-solid fa-trash"></i><span>Delete</span>`;
+    deleteBtn.innerHTML = `<i class="fa-solid fa-trash"></i><span data-i18n="Delete">Delete</span>`;
     if (!isSP) deleteBtn.style.flex = '1';
 
     deleteBtn.addEventListener('click', async () => {

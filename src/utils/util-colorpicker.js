@@ -46,7 +46,7 @@ export function showColorPicker(anchorEl, initialVal, onChange) {
         <div class="scp-color-pop-row">
             <input type="color" class="scp-color-pop-wheel" value="${hexVal}">
             <div class="scp-color-pop-alpha-col">
-                <span class="scp-color-pop-alpha-label">Alpha</span>
+                <span class="scp-color-pop-alpha-label" data-i18n="Alpha">Alpha</span>
                 <input type="range" class="scp-slider scp-color-pop-alpha" min="0" max="100" value="${alphaVal}">
                 <span class="scp-color-pop-alpha-val">${alphaVal}%</span>
             </div>

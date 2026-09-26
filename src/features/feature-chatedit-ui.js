@@ -5,6 +5,7 @@ import { applySearchReplaceToField } from '../utils/util-text.js';
 import { openTextDiffModal } from '../utils/util-diff.js';
 import { stripChatChangesBlock, reconstructChatChangesBlock, _resolveStMsgByIndexOrId } from './feature-chatedit-engine.js';
 import { bringWindowToFront } from '../ui/ui-window.js';
+import { t, translate } from '../utils/util-i18n.js';
 
 import { addHistoryToSwipe, _renderMsgBodyContent } from '../ui/ui-chat.js';
 import { appendLBHistoryEl } from './feature-lorebook-ui.js';
@@ -42,15 +43,15 @@ export function renderChatProposalCard(changes, msgEl) {
     const itemStates = editableChanges.map(() => 'pending');
 
     const ACTION_LABELS = { 
-        add: '<i class="fa-solid fa-square-plus" style="margin-right: 4px;"></i> Add', 
+        add: '<i class="fa-solid fa-square-plus" style="margin-right: 4px;"></i> <span data-i18n="Add">Add</span>',
         replace: '<i class="fa-solid fa-pen-to-square" style="margin-right: 4px;"></i> Replace', 
         overwrite: '<i class="fa-solid fa-rotate" style="margin-right: 4px;"></i> Overwrite', 
         prepend: '<i class="fa-solid fa-arrow-up" style="margin-right: 4px;"></i> Prepend', 
         append: '<i class="fa-solid fa-arrow-down" style="margin-right: 4px;"></i> Append', 
         bulk_replace: '<i class="fa-solid fa-list-check" style="margin-right: 4px;"></i> Bulk', 
         regex: '<i class="fa-solid fa-terminal" style="margin-right: 4px;"></i> Regex', 
-        delete: '<i class="fa-solid fa-trash" style="margin-right: 4px;"></i> Delete', 
-        hide: '<i class="fa-solid fa-eye-slash" style="margin-right: 4px;"></i> Hide', 
+        delete: '<i class="fa-solid fa-trash" style="margin-right: 4px;"></i> <span data-i18n="Delete">Delete</span>',
+        hide: '<i class="fa-solid fa-eye-slash" style="margin-right: 4px;"></i> <span data-i18n="Hide">Hide</span>',
         unhide: '<i class="fa-solid fa-eye" style="margin-right: 4px;"></i> Unhide',
         rename_chat: '<i class="fa-solid fa-tag" style="margin-right: 4px;"></i> Rename Chat' 
     };
@@ -219,7 +220,7 @@ export function renderChatProposalCard(changes, msgEl) {
     const countBadge = document.createElement('span');
     countBadge.className = 'scp-lb-proposal-count';
     countBadge.textContent = `${editableChanges.length} pending`;
-    headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-accent);display:flex">${I.chatEdit}</span><span class="scp-lb-proposal-title">Proposed Chat Edits</span>`;
+    headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-accent);display:flex">${I.chatEdit}</span><span class="scp-lb-proposal-title" data-i18n="Proposed Chat Edits">Proposed Chat Edits</span>`;
     headerLeft.appendChild(countBadge);
     const dismissBtn = document.createElement('button');
     dismissBtn.className = 'scp-lb-proposal-dismiss'; dismissBtn.innerHTML = I.x; dismissBtn.title = 'Dismiss all';
@@ -297,11 +298,11 @@ export function renderChatProposalCard(changes, msgEl) {
                 } else {
                     let startIdx = change.msg_index !== undefined ? change.msg_index : (change.msg_range ? change.msg_range[0] : null);
                     let endIdx = change.msg_index !== undefined ? change.msg_index : (change.msg_range ? change.msg_range[1] : null);
-                    if (startIdx === null || endIdx === null) { toastr.warning('Message index not specified.', EXT_DISPLAY); return; }
+                    if (startIdx === null || endIdx === null) { toastr.warning(translate('Message index not specified.'), EXT_DISPLAY); return; }
                     for (let i = Math.max(0, startIdx); i <= Math.min(stMsgs.length - 1, endIdx); i++) { if (stMsgs[i]) targetIdxList.push(i); }
                 }
 
-                if (!targetIdxList.length) { toastr.warning(`Message(s) not found — chat may have changed since this proposal was generated.`, EXT_DISPLAY, { timeOut: 7000 }); return; }
+                if (!targetIdxList.length) { toastr.warning(translate('Message(s) not found — chat may have changed since this proposal was generated.'), EXT_DISPLAY, { timeOut: 7000 }); return; }
                 
                 let origCombined = [];
                 let newCombined = [];
@@ -320,7 +321,7 @@ export function renderChatProposalCard(changes, msgEl) {
                 }
 
                 if (changesFound === 0) {
-                    toastr.info('No changes would be made to these messages.', EXT_DISPLAY);
+                    toastr.info(translate('No changes would be made to these messages.'), EXT_DISPLAY);
                     return;
                 }
 
@@ -387,7 +388,7 @@ export function renderChatProposalCard(changes, msgEl) {
                     updateFooterBtns(); 
                     syncBlockToMessage(); 
 
-                    toastr.error(`Failed: ${err.message}`, EXT_DISPLAY);
+                    toastr.error(t`Failed: ${err.message}`, EXT_DISPLAY);
                     applyBtn.disabled = false; 
                     applyBtn.textContent = '✓';
                 }
@@ -512,7 +513,7 @@ export function renderChatProposalCard(changes, msgEl) {
                         refreshPreview(); 
                         refreshValidation(); 
                     });
-                    editPanel.appendChild(mkRow('Content', valueTa));
+                    editPanel.appendChild(mkRow(translate('Content'), valueTa));
                 } else if (change.action === 'replace') {
                     (change.patches || []).forEach((patch, pi) => {
                         const pHdr = document.createElement('div');
@@ -537,7 +538,7 @@ export function renderChatProposalCard(changes, msgEl) {
                     });
                     const addPatchBtn = document.createElement('button');
                     addPatchBtn.className = 'scp-action-btn'; addPatchBtn.style.marginTop = '8px';
-                    addPatchBtn.innerHTML = `${I.plus}<span>Add Patch</span>`;
+                    addPatchBtn.innerHTML = `${I.plus}<span data-i18n="Add Patch">Add Patch</span>`;
                     addPatchBtn.addEventListener('click', () => { change.patches.push({ search: '', replace: '' }); rebuildEditPanel(); });
                     editPanel.appendChild(addPatchBtn);
                 } else if (change.action === 'bulk_replace') {
@@ -565,7 +566,7 @@ export function renderChatProposalCard(changes, msgEl) {
                     const valueTa = document.createElement('textarea');
                     valueTa.className = 'scp-lb-pe-textarea'; valueTa.rows = 5; valueTa.value = change.content || '';
                     valueTa.addEventListener('input', () => { change.content = valueTa.value; refreshPreview(); refreshValidation(); });
-                    editPanel.appendChild(mkRow('Content', valueTa));
+                    editPanel.appendChild(mkRow(translate('Content'), valueTa));
                 }
             };
             rebuildEditPanel();
@@ -665,7 +666,7 @@ export function renderChatProposalCard(changes, msgEl) {
                 updateFooterBtns(); 
                 syncBlockToMessage(); 
                 
-                toastr.error(`Failed: ${e.message}`, EXT_DISPLAY);
+                toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
                 applyAllBtn.disabled = false; 
                 applyAllBtn.textContent = 'Apply All';
             }

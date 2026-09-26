@@ -5,6 +5,7 @@ import { bringWindowToFront } from '../ui/ui-window.js';
 import { applySearchReplaceToField } from '../utils/util-text.js';
 import { getCharFieldValue, saveCharacterField, stripCharCreationBlock, stripCharChangesBlock, createCharacterAPI, groupChangesByCharacter } from './feature-character-engine.js';
 import { openTextDiffModal } from '../utils/util-diff.js';
+import { t, translate } from '../utils/util-i18n.js';
 
 import { addHistoryToSwipe, _renderMsgBodyContent } from '../ui/ui-chat.js';
 import { appendLBHistoryEl } from './feature-lorebook-ui.js';
@@ -38,7 +39,7 @@ export function buildAltGreetingsPicker(container, isOverride = false) {
     if (!isEnabled) { container.style.display = 'none'; return; }
 
     if (!greetings.length) {
-        container.innerHTML = '<div style="font-size:11px;color:var(--scp-text-muted);font-style:italic;padding:4px">No alternate greetings found for current character.</div>';
+        container.innerHTML = '<div style="font-size:11px;color:var(--scp-text-muted);font-style:italic;padding:4px" data-i18n="No alternate greetings found for current character.">No alternate greetings found for current character.</div>';
         container.style.display = '';
         return;
     }
@@ -126,7 +127,7 @@ export function refreshAltGreetingsPickers() {
 }
 
 export async function applyCharChanges(changes, char, afterMsgId = null) {
-    if (!char) { toastr.error('[CharEdit] No active character.', EXT_DISPLAY); return; }
+    if (!char) { toastr.error(translate('[CharEdit] No active character.'), EXT_DISPLAY); return; }
     const successLog = [];
 
     for (const change of changes) {
@@ -141,7 +142,7 @@ export async function applyCharChanges(changes, char, afterMsgId = null) {
                     successLog.push(change);
                 } else {
                     const idx = (change.index || 1) - 1;
-                    if (idx < 0 || idx >= greetings.length) { toastr.warning(`[CharEdit] Greeting index ${change.index} out of range.`, EXT_DISPLAY); continue; }
+                    if (idx < 0 || idx >= greetings.length) { toastr.warning(t`[CharEdit] Greeting index ${change.index} out of range.`, EXT_DISPLAY); continue; }
 
                     if (action === 'overwrite') {
                         greetings[idx] = change.value || '';
@@ -154,7 +155,7 @@ export async function applyCharChanges(changes, char, afterMsgId = null) {
                         let allMatched = true;
                         for (const patch of (change.patches || [])) {
                             const { result, matched } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
-                            if (!matched) { toastr.warning(`[CharEdit] SEARCH not found in greeting #${change.index}.`, EXT_DISPLAY); allMatched = false; break; }
+                            if (!matched) { toastr.warning(t`[CharEdit] SEARCH not found in greeting #${change.index}.`, EXT_DISPLAY); allMatched = false; break; }
                             current = result;
                         }
                         if (!allMatched) continue;
@@ -180,7 +181,7 @@ export async function applyCharChanges(changes, char, afterMsgId = null) {
                 let allMatched = true;
                 for (const patch of (change.patches || [])) {
                     const { result, matched } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
-                    if (!matched) { toastr.warning(`[CharEdit] SEARCH not found in field "${field}": "${(patch.search || '').slice(0, 60)}…"`, EXT_DISPLAY, { timeOut: 8000 }); allMatched = false; break; }
+                    if (!matched) { toastr.warning(t`[CharEdit] SEARCH not found in field "${field}": "${(patch.search || '').slice(0, 60)}…"`, EXT_DISPLAY, { timeOut: 8000 }); allMatched = false; break; }
                     current = result;
                 }
                 if (!allMatched) continue;
@@ -189,13 +190,13 @@ export async function applyCharChanges(changes, char, afterMsgId = null) {
             }
         } catch (e) {
             console.error(`[ST-Copilot-Debug] Failed on char field "${field}":`, e);
-            toastr.error(`[CharEdit] Failed on "${field}": ${e.message}`, EXT_DISPLAY, { timeOut: 10000 });
+            toastr.error(t`[CharEdit] Failed on "${field}": ${e.message}`, EXT_DISPLAY, { timeOut: 10000 });
         }
     }
 
     if (successLog.length > 0) {
         logCharEditHistory(successLog, 'Applied', afterMsgId, char.name);
-        toastr.success(`[CharEdit] ${successLog.length} change(s) applied to ${char.name}.`, EXT_DISPLAY);
+        toastr.success(t`[CharEdit] ${successLog.length} change(s) applied to ${char.name}.`, EXT_DISPLAY);
     }
 }
 
@@ -307,7 +308,7 @@ export function renderCharCreationCard(creationData, msgEl) {
     header.className = 'scp-lb-proposal-header';
     const headerLeft = document.createElement('div');
     headerLeft.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0';
-    headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-success);display:flex"><i class="fa-solid fa-user-plus"></i></span><span class="scp-lb-proposal-title">New Character Proposal</span>`;
+    headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-success);display:flex"><i class="fa-solid fa-user-plus"></i></span><span class="scp-lb-proposal-title" data-i18n="New Character Proposal">New Character Proposal</span>`;
     const dismissBtn = document.createElement('button');
     dismissBtn.className = 'scp-lb-proposal-dismiss'; dismissBtn.innerHTML = I.x; dismissBtn.title = 'Dismiss';
     dismissBtn.addEventListener('click', () => {
@@ -330,7 +331,7 @@ export function renderCharCreationCard(creationData, msgEl) {
         row.className = 'scp-lb-pe-row';
         const lbl = document.createElement('label');
         lbl.className = 'scp-lb-pe-label';
-        lbl.textContent = f.label + (f.key === 'name' ? ' *' : '');
+        lbl.textContent = translate(f.label) + (f.key === 'name' ? ' *' : '');
         let inp;
         if (f.multiline) {
             inp = document.createElement('textarea');
@@ -360,11 +361,11 @@ export function renderCharCreationCard(creationData, msgEl) {
 
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'scp-lb-proposal-reject';
-    cancelBtn.textContent = 'Cancel';
+    cancelBtn.textContent = translate('Cancel');
 
     createBtn.addEventListener('click', async () => {
         if (!editableData.name?.trim()) {
-            toastr.warning('Character name is required.', EXT_DISPLAY);
+            toastr.warning(translate('Character name is required.'), EXT_DISPLAY);
             inputs.name.focus();
             return;
         }
@@ -380,11 +381,11 @@ export function renderCharCreationCard(creationData, msgEl) {
         try {
             await createCharacterAPI(editableData);
             logCharCreationHistory(editableData, 'Applied', card.dataset.for);
-            toastr.success(`Character "${escHtml(editableData.name)}" created!`, EXT_DISPLAY);
+            toastr.success(t`Character "${escHtml(editableData.name)}" created!`, EXT_DISPLAY);
             card.remove();
         } catch (e) {
             console.error('[ST-Copilot-Debug] Character creation UI error:', e);
-            toastr.error(`Failed: ${e.message}`, EXT_DISPLAY, { timeOut: 10000 });
+            toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY, { timeOut: 10000 });
             createBtn.disabled = false;
             createBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Create Character';
         }
@@ -522,7 +523,7 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
             : c.action === 'prepend' ? '⬆ Prepend'
             : c.action === 'append_text' ? '⬇ Append'
             : `✎ Replace${patchCount}`;
-        meta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(actionLabel)}</span><span class="scp-lb-proposal-name">${escHtml(getFieldLabel(c.field))}${c.index?` #${c.index}`:''}</span>`;
+        meta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(actionLabel)}</span><span class="scp-lb-proposal-name">${escHtml(translate(getFieldLabel(c.field)))}${c.index?` #${c.index}`:''}</span>`;
 
         const btns = document.createElement('div');
         btns.className = 'scp-lb-proposal-item-btns';
@@ -584,7 +585,7 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
                 countBadge.textContent = `${getPending()} pending`; updateFooter();
                 checkAllResolved();
             } catch (err) {
-                toastr.error(`Failed: ${err.message}`, EXT_DISPLAY);
+                toastr.error(t`Failed: ${err.message}`, EXT_DISPLAY);
                 applyBtn.disabled = false; applyBtn.textContent = '\u2713';
                 if (isNameField) { itemStates[ci] = 'pending'; _syncAllCardsToMessage(msgId); }
             }
@@ -693,7 +694,7 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
 
                 const addPatchBtn = document.createElement('button');
                 addPatchBtn.className = 'scp-action-btn'; addPatchBtn.style.marginTop = '8px';
-                addPatchBtn.innerHTML = `${I.plus}<span>Add Patch</span>`;
+                addPatchBtn.innerHTML = `${I.plus}<span data-i18n="Add Patch">Add Patch</span>`;
                 addPatchBtn.addEventListener('click', () => { change.patches.push({ search: '', replace: '' }); rebuildEditPanel(); });
                 editPanel.appendChild(addPatchBtn);
             } else {
@@ -752,7 +753,7 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
             countBadge.textContent = `${getPending()} pending`; updateFooter();
             checkAllResolved();
         } catch (e) {
-            toastr.error(`Failed: ${e.message}`, EXT_DISPLAY);
+            toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
             applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';
             if (hasNameField) { pendingIndices.forEach(i => { itemStates[i] = 'pending'; }); _syncAllCardsToMessage(msgId); }
         }
