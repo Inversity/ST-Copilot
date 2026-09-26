@@ -2831,74 +2831,41 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
 
   async function resolveLBChangeTarget(change, strictBook = false) {
       let bookName = change.worldName || '';
-      let targetUid = change.uid;
-
-      const fuzzyWorld = bookName.toLowerCase();
-      const fuzzyName = (change.originalName || change.name || '').toLowerCase();
-      
-      if (fuzzyName && !strictBook) {
-          const activeMatch = lastActiveEntries.find(le => {
-              const wMatch = !fuzzyWorld || le.displayName.toLowerCase() === fuzzyWorld || le.bookName.toLowerCase() === fuzzyWorld;
-              const nMatch = le.entryName.toLowerCase() === fuzzyName || le.entryName.toLowerCase().includes(fuzzyName) || fuzzyName.includes(le.entryName.toLowerCase());
-              return wMatch && nMatch;
-          });
-          if (activeMatch) {
-              if (targetUid == null) targetUid = activeMatch.uid;
-              bookName = activeMatch.bookName;
-          }
-      }
+      const targetName = (change.originalName || change.name || '').trim().toLowerCase();
+      const hasUid = change.uid !== undefined && change.uid !== null;
 
       if (bookName === getDisplayName(EMBEDDED_BOOK_KEY)) bookName = EMBEDDED_BOOK_KEY;
 
-      let data = await fetchWorldInfoBook(bookName);
-      if (!data && bookName && !strictBook) {
-          const allActive = getActiveLorebookNames();
-          const match = allActive.find(n => n.toLowerCase() === fuzzyWorld || n.toLowerCase().includes(fuzzyWorld) || fuzzyWorld.includes(n.toLowerCase()));
-          if (match) {
-              bookName = match;
-              data = await fetchWorldInfoBook(bookName);
+      const findEntry = (data) => {
+          const entries = Object.values(data?.entries || {});
+          // IDs are authoritative and book-local. Never fall back to a name when
+          // an explicit ID is missing; name may also be the requested NEW title.
+          const matches = hasUid
+              ? entries.filter(entry => String(entry.uid) === String(change.uid))
+              : entries.filter(entry => targetName && (entry.comment || 'Entry #' + entry.uid).trim().toLowerCase() === targetName);
+          return matches.length === 1 ? matches[0] : null;
+      };
+
+      if (bookName) {
+          const data = await fetchWorldInfoBook(bookName);
+          return { bookName, data, origEntry: findEntry(data) };
+      }
+
+      // Without a book, only an unambiguous exact name can identify the target.
+      // Never reinterpret an ID in a different book or guess using substrings.
+      if (strictBook || hasUid || !targetName || change.action === 'add') {
+          return { bookName, data: null, origEntry: null };
+      }
+      const matches = [];
+      for (const name of getActiveLorebookNames()) {
+          const data = await fetchWorldInfoBook(name);
+          for (const entry of Object.values(data?.entries || {})) {
+              if ((entry.comment || 'Entry #' + entry.uid).trim().toLowerCase() === targetName) {
+                  matches.push({ bookName: name, data, origEntry: entry });
+              }
           }
       }
-
-      let origEntry = null;
-      if (data && data.entries) {
-          origEntry = Object.values(data.entries).find(en => {
-              if (targetUid != null && String(en.uid) === String(targetUid)) return true;
-              if (!fuzzyName) return false;
-              const cStr = (en.comment || `Entry #${en.uid}`).trim().toLowerCase();
-              if (cStr === fuzzyName) return true;
-              return cStr.includes(fuzzyName) || fuzzyName.includes(cStr);
-          });
-      }
-
-      if (!origEntry && /^\d+$/.test(fuzzyName) && data && data.entries[fuzzyName]) {
-          origEntry = data.entries[fuzzyName];
-      }
-
-      if (!origEntry && fuzzyName && !strictBook) {
-          for (const name of getActiveLorebookNames()) {
-              if (name === bookName) continue;
-              const bd = await fetchWorldInfoBook(name);
-              if (!bd) continue;
-              origEntry = Object.values(bd.entries).find(en => {
-                  const c = (en.comment || `Entry #${en.uid}`).trim().toLowerCase();
-                  return c === fuzzyName || c.includes(fuzzyName) || fuzzyName.includes(c);
-              });
-              if (origEntry) { bookName = name; data = bd; break; }
-          }
-      }
-
-      if (!data) {
-          console.warn(`[${EXT_DISPLAY}] resolveLBChangeTarget: no book data found`, {
-              change, resolvedBookName: bookName, activeBooks: getActiveLorebookNames(), cacheKeys: Object.keys(wiCache)
-          });
-      } else if (!origEntry && change.action !== 'add') {
-          console.warn(`[${EXT_DISPLAY}] resolveLBChangeTarget: entry not found`, {
-              fuzzyName, fuzzyWorld, targetUid,
-              entries: Object.values(data.entries || {}).map(e => ({ uid: e.uid, comment: e.comment, key: e.key?.slice(0, 3) }))
-          });
-      }
-      return { bookName, data, origEntry };
+      return matches.length === 1 ? matches[0] : { bookName, data: null, origEntry: null };
   }
 
   async function expandOutletsAsync(text, depth = 0) {
@@ -3912,11 +3879,12 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       console.log(`[${EXT_DISPLAY}] applyLBChanges: processing ${changes.length} change(s)`, JSON.parse(JSON.stringify(changes)));
       const bookCache = {};
       const successfulChanges =[];
+      const changeBooks = new Map();
 
       for (const change of changes) {
           let { bookName, data, origEntry } = await resolveLBChangeTarget(change);
 
-          if (change.worldName && change.action !== 'delete') {
+          if (change.worldName && change.action === 'add') {
               const activeBooks = getActiveLorebookNames();
               
               if (!activeBooks.includes(change.worldName)) {
@@ -3939,6 +3907,14 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
               toastr.error(t`[LB] Could not resolve book name for change: "${change.name || change.uid || '?'}"`, EXT_DISPLAY, { timeOut: 10000 });
               continue;
           }
+          if (data._embedded) {
+              toastr.warning(translate('Cannot save embedded character books directly.'), EXT_DISPLAY);
+              continue;
+          }
+          // Work on a copy so a failed save cannot mutate SillyTavern's loaded book.
+          data = bookCache[bookName] || structuredClone(data);
+          if (origEntry) origEntry = Object.values(data.entries).find(entry => String(entry.uid) === String(origEntry.uid));
+          changeBooks.set(change, bookName);
 
           if (change.action === 'add' && data) {
               const exists = Object.values(data.entries).find(e => e.comment && e.comment.toLowerCase() === (change.name || '').toLowerCase());
@@ -4063,21 +4039,26 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
 
       if (changes.length > 0 && !Object.keys(bookCache).length) {
           toastr.warning(translate('[LB] No changes were applied — see browser console (F12) for details'), EXT_DISPLAY, { timeOut: 10000 });
-          return;
+          return [];
       }
 
+      const savedBooks = new Set();
       for (const [name, data] of Object.entries(bookCache)) {
           try {
               await saveWorldInfoBook(name, data);
+              savedBooks.add(name);
           } catch (e) {
+              delete wiCache[name];
               toastr.error(t`[LB] Save failed for "${name}": ${e.message}`, EXT_DISPLAY, { timeOut: 12000 });
           }
       }
 
-      if (successfulChanges.length > 0) {
-          recordStat(SM.lb, successfulChanges.length);
-          logLBHistoryChanges(successfulChanges, 'Accepted', afterMsgId);
+      const appliedChanges = successfulChanges.filter(change => savedBooks.has(changeBooks.get(change)));
+      if (appliedChanges.length > 0) {
+          recordStat(SM.lb, appliedChanges.length);
+          logLBHistoryChanges(appliedChanges, 'Accepted', afterMsgId);
       }
+      return appliedChanges;
   }
 
   function renderProposalCard(changes, msgEl) {
@@ -4220,18 +4201,24 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
               }
           };
 
+          let validationVersion = 0;
           const _validateBookEntry = async (bookName) => {
+              const version = ++validationVersion;
               worldTrigger.classList.add('loading');
               const checkChange = { ...editableChanges[ci], worldName: bookName };
               if (bookName !== editableChanges[ci].worldName) delete checkChange.uid;
               
               const resolved = await resolveLBChangeTarget(checkChange, true);
+              // A slower response for the previous book must not pin its ID into
+              // the newly selected book, where the same ID can mean another entry.
+              if (version !== validationVersion || bookName !== (editableChanges[ci].worldName || '')) return;
               worldTrigger.classList.remove('loading');
 
               const found = !!resolved.origEntry;
               if (found) {
                   const orig = resolved.origEntry;
                   const n = orig.comment || `Entry #${orig.uid}`;
+                  editableChanges[ci].uid = orig.uid;
                   editableChanges[ci].originalName = n;
                   if (!editableChanges[ci].name) editableChanges[ci].name = n;
                   
@@ -4285,6 +4272,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           };
 
           const selectBook = async (name) => {
+              if (name !== editableChanges[ci].worldName) delete editableChanges[ci].uid;
               _selectedBook = name;
               editableChanges[ci].worldName = name;
               worldTriggerText.textContent = `in ${getDisplayName(name)}`;
@@ -4354,7 +4342,8 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
               closeEditPanel();
               applyItemBtn.disabled = true; applyItemBtn.textContent = '…';
               try {
-                  await applyLBChanges([editableChanges[ci]], card.dataset.for);
+                  const applied = await applyLBChanges([editableChanges[ci]], card.dataset.for);
+                  if (!applied.includes(editableChanges[ci])) throw new Error('Change was not saved. Check the target book and entry.');
                   itemStates[ci] = 'applied'; item.classList.add('scp-lb-item-applied');
                   itemBtns.querySelectorAll('button').forEach(b => { b.disabled = true; });
                   updateCountBadge(); updateFooterBtns(); syncBlockToMessage(); checkAllResolved();
@@ -4534,10 +4523,11 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           if (!pending.length) return;
           applyAllBtn.disabled = true; applyAllBtn.textContent = 'Applying…';
           try {
-              await applyLBChanges(pending, card.dataset.for);
-              itemStates.forEach((s, i) => { if (s === 'pending') { itemStates[i] = 'applied'; itemEls[i].classList.add('scp-lb-item-applied'); itemEls[i].querySelectorAll('button').forEach(b => { b.disabled = true; }); } });
-              updateCountBadge(); updateFooterBtns(); checkAllResolved();
-              toastr.success(t`[LB] ${pending.length} changes applied.`, EXT_DISPLAY);
+              const applied = await applyLBChanges(pending, card.dataset.for);
+              itemStates.forEach((s, i) => { if (s === 'pending' && applied.includes(editableChanges[i])) { itemStates[i] = 'applied'; itemEls[i].classList.add('scp-lb-item-applied'); itemEls[i].querySelectorAll('button').forEach(b => { b.disabled = true; }); } });
+              updateCountBadge(); updateFooterBtns(); syncBlockToMessage(); checkAllResolved();
+              if (applied.length) toastr.success(t`[LB] ${applied.length} changes applied.`, EXT_DISPLAY);
+              applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';
           } catch (e) {
               toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
               applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';

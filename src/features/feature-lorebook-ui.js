@@ -169,11 +169,12 @@ export async function applyLBChanges(changes, afterMsgId = null) {
     console.log(`[${EXT_DISPLAY}] applyLBChanges: processing ${changes.length} change(s)`, JSON.parse(JSON.stringify(changes)));
     const bookCache = {};
     const successfulChanges =[];
+    const changeBooks = new Map();
 
     for (const change of changes) {
         let { bookName, data, origEntry } = await resolveLBChangeTarget(change);
 
-        if (change.worldName && change.action !== 'delete') {
+        if (change.worldName && change.action === 'add') {
             const activeBooks = getActiveLorebookNames();
             
             if (!activeBooks.includes(change.worldName)) {
@@ -196,6 +197,14 @@ export async function applyLBChanges(changes, afterMsgId = null) {
             toastr.error(t`[LB] Could not resolve book name for change: "${change.name || change.uid || '?'}"`, EXT_DISPLAY, { timeOut: 10000 });
             continue;
         }
+        if (data._embedded) {
+            toastr.warning(translate('Cannot save embedded character books directly.'), EXT_DISPLAY);
+            continue;
+        }
+        // Work on a copy so a failed save cannot mutate SillyTavern's loaded book.
+        data = bookCache[bookName] || structuredClone(data);
+        if (origEntry) origEntry = Object.values(data.entries).find(entry => String(entry.uid) === String(origEntry.uid));
+        changeBooks.set(change, bookName);
 
         if (change.action === 'add' && data) {
             const exists = Object.values(data.entries).find(e => e.comment && e.comment.toLowerCase() === (change.name || '').toLowerCase());
@@ -320,21 +329,26 @@ export async function applyLBChanges(changes, afterMsgId = null) {
 
     if (changes.length > 0 && !Object.keys(bookCache).length) {
         toastr.warning(translate('[LB] No changes were applied — see browser console (F12) for details'), EXT_DISPLAY, { timeOut: 10000 });
-        return;
+        return [];
     }
 
+    const savedBooks = new Set();
     for (const [name, data] of Object.entries(bookCache)) {
         try {
             await saveWorldInfoBook(name, data);
+            savedBooks.add(name);
         } catch (e) {
+            delete wiCache[name];
             toastr.error(t`[LB] Save failed for "${name}": ${e.message}`, EXT_DISPLAY, { timeOut: 12000 });
         }
     }
 
-    if (successfulChanges.length > 0) {
-        recordStat(SM.lb, successfulChanges.length);
-        logLBHistoryChanges(successfulChanges, 'Accepted', afterMsgId);
+    const appliedChanges = successfulChanges.filter(change => savedBooks.has(changeBooks.get(change)));
+    if (appliedChanges.length > 0) {
+        recordStat(SM.lb, appliedChanges.length);
+        logLBHistoryChanges(appliedChanges, 'Accepted', afterMsgId);
     }
+    return appliedChanges;
 }
 
 export function renderProposalCard(changes, msgEl) {
@@ -477,18 +491,24 @@ export function renderProposalCard(changes, msgEl) {
             }
         };
 
+        let validationVersion = 0;
         const _validateBookEntry = async (bookName) => {
+            const version = ++validationVersion;
             worldTrigger.classList.add('loading');
             const checkChange = { ...editableChanges[ci], worldName: bookName };
             if (bookName !== editableChanges[ci].worldName) delete checkChange.uid;
             
             const resolved = await resolveLBChangeTarget(checkChange, true);
+            // A slower response for the previous book must not pin its ID into
+            // the newly selected book, where the same ID can mean another entry.
+            if (version !== validationVersion || bookName !== (editableChanges[ci].worldName || '')) return;
             worldTrigger.classList.remove('loading');
 
             const found = !!resolved.origEntry;
             if (found) {
                 const orig = resolved.origEntry;
                 const n = orig.comment || `Entry #${orig.uid}`;
+                editableChanges[ci].uid = orig.uid;
                 editableChanges[ci].originalName = n;
                 if (!editableChanges[ci].name) editableChanges[ci].name = n;
                 
@@ -542,6 +562,7 @@ export function renderProposalCard(changes, msgEl) {
         };
 
         const selectBook = async (name) => {
+            if (name !== editableChanges[ci].worldName) delete editableChanges[ci].uid;
             _selectedBook = name;
             editableChanges[ci].worldName = name;
             worldTriggerText.textContent = `in ${getDisplayName(name)}`;
@@ -611,7 +632,8 @@ export function renderProposalCard(changes, msgEl) {
             closeEditPanel();
             applyItemBtn.disabled = true; applyItemBtn.textContent = '…';
             try {
-                await applyLBChanges([editableChanges[ci]], card.dataset.for);
+                const applied = await applyLBChanges([editableChanges[ci]], card.dataset.for);
+                if (!applied.includes(editableChanges[ci])) throw new Error('Change was not saved. Check the target book and entry.');
                 itemStates[ci] = 'applied'; item.classList.add('scp-lb-item-applied');
                 itemBtns.querySelectorAll('button').forEach(b => { b.disabled = true; });
                 updateCountBadge(); updateFooterBtns(); syncBlockToMessage(); checkAllResolved();
@@ -791,10 +813,11 @@ export function renderProposalCard(changes, msgEl) {
         if (!pending.length) return;
         applyAllBtn.disabled = true; applyAllBtn.textContent = 'Applying…';
         try {
-            await applyLBChanges(pending, card.dataset.for);
-            itemStates.forEach((s, i) => { if (s === 'pending') { itemStates[i] = 'applied'; itemEls[i].classList.add('scp-lb-item-applied'); itemEls[i].querySelectorAll('button').forEach(b => { b.disabled = true; }); } });
-            updateCountBadge(); updateFooterBtns(); checkAllResolved();
-            toastr.success(t`[LB] ${pending.length} changes applied.`, EXT_DISPLAY);
+            const applied = await applyLBChanges(pending, card.dataset.for);
+            itemStates.forEach((s, i) => { if (s === 'pending' && applied.includes(editableChanges[i])) { itemStates[i] = 'applied'; itemEls[i].classList.add('scp-lb-item-applied'); itemEls[i].querySelectorAll('button').forEach(b => { b.disabled = true; }); } });
+            updateCountBadge(); updateFooterBtns(); syncBlockToMessage(); checkAllResolved();
+            if (applied.length) toastr.success(t`[LB] ${applied.length} changes applied.`, EXT_DISPLAY);
+            applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';
         } catch (e) {
             toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
             applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';

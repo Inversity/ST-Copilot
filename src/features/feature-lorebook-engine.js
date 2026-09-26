@@ -591,74 +591,41 @@ export async function bindNewLorebookToCharacter(bookName) {
 
 export async function resolveLBChangeTarget(change, strictBook = false) {
     let bookName = change.worldName || '';
-    let targetUid = change.uid;
-
-    const fuzzyWorld = bookName.toLowerCase();
-    const fuzzyName = (change.originalName || change.name || '').toLowerCase();
-    
-    if (fuzzyName && !strictBook) {
-        const activeMatch = lastActiveEntries.find(le => {
-            const wMatch = !fuzzyWorld || le.displayName.toLowerCase() === fuzzyWorld || le.bookName.toLowerCase() === fuzzyWorld;
-            const nMatch = le.entryName.toLowerCase() === fuzzyName || le.entryName.toLowerCase().includes(fuzzyName) || fuzzyName.includes(le.entryName.toLowerCase());
-            return wMatch && nMatch;
-        });
-        if (activeMatch) {
-            if (targetUid == null) targetUid = activeMatch.uid;
-            bookName = activeMatch.bookName;
-        }
-    }
+    const targetName = (change.originalName || change.name || '').trim().toLowerCase();
+    const hasUid = change.uid !== undefined && change.uid !== null;
 
     if (bookName === getDisplayName(EMBEDDED_BOOK_KEY)) bookName = EMBEDDED_BOOK_KEY;
 
-    let data = await fetchWorldInfoBook(bookName);
-    if (!data && bookName && !strictBook) {
-        const allActive = getActiveLorebookNames();
-        const match = allActive.find(n => n.toLowerCase() === fuzzyWorld || n.toLowerCase().includes(fuzzyWorld) || fuzzyWorld.includes(n.toLowerCase()));
-        if (match) {
-            bookName = match;
-            data = await fetchWorldInfoBook(bookName);
+    const findEntry = (data) => {
+        const entries = Object.values(data?.entries || {});
+        // IDs are authoritative and book-local. Never fall back to a name when
+        // an explicit ID is missing; name may also be the requested NEW title.
+        const matches = hasUid
+            ? entries.filter(entry => String(entry.uid) === String(change.uid))
+            : entries.filter(entry => targetName && (entry.comment || 'Entry #' + entry.uid).trim().toLowerCase() === targetName);
+        return matches.length === 1 ? matches[0] : null;
+    };
+
+    if (bookName) {
+        const data = await fetchWorldInfoBook(bookName);
+        return { bookName, data, origEntry: findEntry(data) };
+    }
+
+    // Without a book, only an unambiguous exact name can identify the target.
+    // Never reinterpret an ID in a different book or guess using substrings.
+    if (strictBook || hasUid || !targetName || change.action === 'add') {
+        return { bookName, data: null, origEntry: null };
+    }
+    const matches = [];
+    for (const name of getActiveLorebookNames()) {
+        const data = await fetchWorldInfoBook(name);
+        for (const entry of Object.values(data?.entries || {})) {
+            if ((entry.comment || 'Entry #' + entry.uid).trim().toLowerCase() === targetName) {
+                matches.push({ bookName: name, data, origEntry: entry });
+            }
         }
     }
-
-    let origEntry = null;
-    if (data && data.entries) {
-        origEntry = Object.values(data.entries).find(en => {
-            if (targetUid != null && String(en.uid) === String(targetUid)) return true;
-            if (!fuzzyName) return false;
-            const cStr = (en.comment || `Entry #${en.uid}`).trim().toLowerCase();
-            if (cStr === fuzzyName) return true;
-            return cStr.includes(fuzzyName) || fuzzyName.includes(cStr);
-        });
-    }
-
-    if (!origEntry && /^\d+$/.test(fuzzyName) && data && data.entries[fuzzyName]) {
-        origEntry = data.entries[fuzzyName];
-    }
-
-    if (!origEntry && fuzzyName && !strictBook) {
-        for (const name of getActiveLorebookNames()) {
-            if (name === bookName) continue;
-            const bd = await fetchWorldInfoBook(name);
-            if (!bd) continue;
-            origEntry = Object.values(bd.entries).find(en => {
-                const c = (en.comment || `Entry #${en.uid}`).trim().toLowerCase();
-                return c === fuzzyName || c.includes(fuzzyName) || fuzzyName.includes(c);
-            });
-            if (origEntry) { bookName = name; data = bd; break; }
-        }
-    }
-
-    if (!data) {
-        console.warn(`[${EXT_DISPLAY}] resolveLBChangeTarget: no book data found`, {
-            change, resolvedBookName: bookName, activeBooks: getActiveLorebookNames(), cacheKeys: Object.keys(wiCache)
-        });
-    } else if (!origEntry && change.action !== 'add') {
-        console.warn(`[${EXT_DISPLAY}] resolveLBChangeTarget: entry not found`, {
-            fuzzyName, fuzzyWorld, targetUid,
-            entries: Object.values(data.entries || {}).map(e => ({ uid: e.uid, comment: e.comment, key: e.key?.slice(0, 3) }))
-        });
-    }
-    return { bookName, data, origEntry };
+    return matches.length === 1 ? matches[0] : { bookName, data: null, origEntry: null };
 }
 
 export async function expandOutletsAsync(text, depth = 0) {
