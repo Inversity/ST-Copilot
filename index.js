@@ -10416,8 +10416,13 @@ ${tc.result !== undefined ? `<div class="scp-tool-call-section-label" style="mar
       
       const ta = document.getElementById('scp-sp-tools-prompt');
       if (ta) {
-          ta.value = s.toolsSystemPrompt || ''; 
-          ta.addEventListener('input', () => { getSettings().toolsSystemPrompt = ta.value; saveSettings(); });
+          // Empty setting means "use the built-in default", so show that text like the other
+          // prompt editors do, and store '' again while the box still matches it.
+          ta.value = s.toolsSystemPrompt || DEFAULT_TOOLS_PROMPT;
+          ta.addEventListener('input', () => {
+              getSettings().toolsSystemPrompt = ta.value.trim() === DEFAULT_TOOLS_PROMPT.trim() ? '' : ta.value;
+              saveSettings();
+          });
       }
       
       document.getElementById('scp-sp-tools-reset')?.addEventListener('click', () => {
