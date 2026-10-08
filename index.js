@@ -1549,6 +1549,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           localHistoryLimit: 50,
           connectionSource: 'default',
           connectionProfileId: '',
+          modelOverride: '',
           customUrl: 'http://localhost:5000/v1',
           customKey: '',
           customModel: '',
@@ -9131,7 +9132,9 @@ ${scopeHtml}
 
       // ── Connection ────────────────────────────────────────────────────────────
       { key: 'connectionSource',  stId: 'scp-conn-source',  spId: 'scp-sp-conn-source',  type: 'select', profileKey: true, onChange: _applyConnectionSourceVisibility },
-      { key: 'connectionProfileId', stId: 'scp-conn-profile', spId: 'scp-sp-conn-profile', type: 'select', profileKey: true },
+      { key: 'connectionProfileId', stId: 'scp-conn-profile', spId: 'scp-sp-conn-profile', type: 'select', profileKey: true, onChange: () => refreshModelOverrideField(false) },
+      // Sent as overridePayload.model, so one ST connection profile can serve several models.
+      { key: 'modelOverride', spId: 'scp-sp-model-override', type: 'input', toVal: v => String(v || '').trim(), profileKey: true },
       { key: 'customUrl',   stId: 'scp-custom-url',   spId: 'scp-sp-custom-url',   type: 'input', profileKey: true },
       { key: 'customKey',   stId: 'scp-custom-key',   spId: 'scp-sp-custom-key',   type: 'input', profileKey: true },
       { key: 'customModel', stId: 'scp-custom-model', spId: 'scp-sp-custom-model', type: 'input', profileKey: true },
@@ -9587,6 +9590,50 @@ ${scopeHtml}
 
   // ─── Settings Engine ──────────────────────────────────────────────────────────
 
+  function _selectedConnectionProfile() {
+      const ctx = SillyTavern.getContext();
+      const id = getSettings().connectionProfileId;
+      const profiles = ctx.extensionSettings?.connectionManager?.profiles || [];
+      return profiles.find(p => p.id === id || p.name === id) || null;
+  }
+
+  // Placeholder shows the profile's own model; with `fetchList`, fills the suggestions from the
+  // provider through ST's status endpoint (the same call ST makes for its model dropdown).
+  async function refreshModelOverrideField(fetchList) {
+      const input = document.getElementById('scp-sp-model-override');
+      const list = document.getElementById('scp-sp-model-list');
+      if (!input) return;
+      const prof = _selectedConnectionProfile();
+      input.placeholder = prof?.model ? t`Profile default: ${prof.model}` : translate('Profile default');
+      if (!fetchList || !list) return;
+      if (!prof || prof.mode !== 'cc') {
+          toastr.info(translate('Model lists are available for Chat Completion profiles only. Type a model name instead.'), EXT_DISPLAY);
+          return;
+      }
+      const ctx = SillyTavern.getContext();
+      const body = { chat_completion_source: prof.api };
+      if (prof.api === 'custom') body.custom_url = prof['api-url'];
+      try {
+          const res = await fetch('/api/backends/chat-completions/status', {
+              method: 'POST',
+              headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+          });
+          const data = res.ok ? await res.json() : null;
+          const ids = Array.isArray(data?.data) ? data.data.map(m => m?.id || m?.name || (typeof m === 'string' ? m : '')).filter(Boolean) : [];
+          list.innerHTML = '';
+          for (const id of [...new Set(ids)].sort()) {
+              const opt = document.createElement('option');
+              opt.value = id;
+              list.appendChild(opt);
+          }
+          if (ids.length) toastr.success(t`Loaded ${ids.length} models from ${prof.api}.`, EXT_DISPLAY);
+          else toastr.warning(t`${prof.api} returned no model list. Type a model name instead.`, EXT_DISPLAY);
+      } catch (e) {
+          toastr.error(t`Could not load models: ${e.message}`, EXT_DISPLAY);
+      }
+  }
+
   function _applyConnectionSourceVisibility(val) {
       [['scp-profile-group', 'scp-custom-profile-group'],
        ['scp-sp-global-profile-group', 'scp-sp-custom-profile-group']].forEach(([pId, cId]) => {
@@ -9890,6 +9937,7 @@ ${scopeHtml}
       const overlay = document.getElementById('scp-settings-overlay'); if (!overlay) return;
       Promise.resolve().then(function () { return uiWindow; }).then(m => m.applyCustomTheme(getSettings().customTheme || THEME_PRESETS.default));
       syncSPFromSettings(); buildThemeEditor(document.getElementById('scp-sp-theme-section')); _updateDirtyDots();
+      refreshModelOverrideField(false);
       Promise.resolve().then(function () { return uiWidgets; }).then(mod => {
           mod.buildSoundSettingsUI(document.getElementById('scp-sp-sound-settings'));
           buildQPSettingsUI(document.getElementById('scp-sp-qp-container'));
@@ -10098,6 +10146,7 @@ ${scopeHtml}
           }
           loadProfile(sel.value); syncSPFromSettings(); updateSettingsUI(); updateSPBindingSection();
       });
+      document.getElementById('scp-sp-model-refresh')?.addEventListener('click', () => refreshModelOverrideField(true));
       document.getElementById('scp-sp-profile-save')?.addEventListener('click', async () => {
           const sel = document.getElementById('scp-sp-profile-select'); let name = sel?.value;
           if (!name) { name = await showCustomDialog({ type: 'prompt', title: 'Save Configuration', message: 'Profile name:', placeholder: 'My Config' }); if (!name?.trim()) return; name = name.trim(); }
@@ -10434,6 +10483,7 @@ ${scopeHtml}
     isThemeDirty: isThemeDirty,
     loadProfile: loadProfile,
     openSettingsPanel: openSettingsPanel,
+    refreshModelOverrideField: refreshModelOverrideField,
     refreshProfilesDropdown: refreshProfilesDropdown,
     refreshSPProfilesDropdown: refreshSPProfilesDropdown,
     saveProfile: saveProfile,
@@ -15103,6 +15153,12 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           state.genMeta.model = prof?.model || null;
       }
 
+      // Model override (Specific Profile source only): ST spreads overridePayload over the
+      // profile's request, so provider, key, URL and preset still come from the profile.
+      const modelOverride = settings.connectionSource === 'profile' ? String(settings.modelOverride || '').trim() : '';
+      const modelOverridePayload = modelOverride ? { model: modelOverride } : {};
+      if (modelOverride) state.genMeta.model = modelOverride;
+
       let asyncGeneratorFn;
       const origFetch = window.fetch;
       
@@ -15150,7 +15206,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                   signal: abort.signal,
                   extractData: false,
                   includePreset: true
-              });
+              }, modelOverridePayload);
           } else {
               const mainApi = window.main_api || ctx.main_api;
               if (mainApi === 'openai' && ctx.ChatCompletionService) {
@@ -15183,7 +15239,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                           signal: abort.signal,
                           extractData: false,
                           includePreset: true
-                      });
+                      }, modelOverridePayload);
                   } else {
                       const mainApi = window.main_api || ctx.main_api;
                       if (mainApi === 'openai' && ctx.ChatCompletionService) {

@@ -583,6 +583,12 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
         state.genMeta.model = prof?.model || null;
     }
 
+    // Model override (Specific Profile source only): ST spreads overridePayload over the
+    // profile's request, so provider, key, URL and preset still come from the profile.
+    const modelOverride = settings.connectionSource === 'profile' ? String(settings.modelOverride || '').trim() : '';
+    const modelOverridePayload = modelOverride ? { model: modelOverride } : {};
+    if (modelOverride) state.genMeta.model = modelOverride;
+
     let asyncGeneratorFn;
     const origFetch = window.fetch;
     
@@ -630,7 +636,7 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
                 signal: abort.signal,
                 extractData: false,
                 includePreset: true
-            });
+            }, modelOverridePayload);
         } else {
             const mainApi = window.main_api || ctx.main_api;
             if (mainApi === 'openai' && ctx.ChatCompletionService) {
@@ -663,7 +669,7 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
                         signal: abort.signal,
                         extractData: false,
                         includePreset: true
-                    });
+                    }, modelOverridePayload);
                 } else {
                     const mainApi = window.main_api || ctx.main_api;
                     if (mainApi === 'openai' && ctx.ChatCompletionService) {

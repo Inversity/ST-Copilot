@@ -12,7 +12,8 @@
         </div>
       </div>
       <div class="scp-sp-tabs" style="justify-content: center; width: 100%;">
-        <button class="scp-sp-tab active" data-sptab="global" data-i18n="Global">Global</button>
+        <button class="scp-sp-tab active" data-sptab="global" data-i18n="AI">AI</button>
+        <button class="scp-sp-tab" data-sptab="interface" data-i18n="Interface">Interface</button>
         <button class="scp-sp-tab" data-sptab="prompts" data-i18n="Quick Prompts">Quick Prompts</button>
         <button class="scp-sp-tab" data-sptab="session">
           <span data-i18n="Session">Session</span>
@@ -32,58 +33,9 @@
       <!-- ══ GLOBAL TAB ══ -->
       <div class="scp-sp-tab-pane" id="scp-sp-pane-global">
 
-        <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-sliders"></i> <span data-i18n="General">General</span></div>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-enabled"><span data-i18n="Enable ST-Copilot">Enable ST-Copilot</span></label>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-icon-persistent"><span data-i18n="Always show floating icon">Always show floating icon</span></label>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-wobble-window"><span><span data-i18n="Wobbly window drag">Wobbly window drag</span> <span class="scp-sp-hint" data-i18n="(jelly physics on move)">(jelly physics on move)</span></span></label>
-          <label class="scp-sp-check" title="Disables heavy visual effects like blur, advanced shadows, and 3D animations to save CPU on low-end devices." data-i18n="[title]Disables heavy visual effects like blur, advanced shadows, and 3D animations to save CPU on low-end devices."><input type="checkbox" id="scp-sp-perf-mode"><span data-i18n="Low Performance Mode (Save CPU)">Low Performance Mode (Save CPU)</span></label>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-changelog-auto"><span data-i18n="Show changelog on update">Show changelog on update</span></label>
-          <button class="scp-action-btn" id="scp-sp-open-changelog" style="margin-top:4px;align-self:flex-start">${I.starFill}<span data-i18n="What's New">What's New</span></button>
-          <div class="scp-sp-field" style="margin-top:8px">
-            <label class="scp-sp-label" data-i18n="Window Opacity">Window Opacity</label>
-            <div class="scp-sp-row">
-              <input type="range" class="scp-slider" id="scp-sp-opacity-slider" min="20" max="100" style="flex:1">
-              <span id="scp-sp-opacity-val" style="min-width:32px;text-align:right;font-size:11px;color:var(--scp-accent)">95%</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-keyboard"></i> <span data-i18n="Shortcuts">Shortcuts</span></div>
-          <div class="scp-sp-row" style="gap:8px;margin-bottom:6px">
-            <label class="scp-sp-check" style="flex:0 0 120px"><input type="checkbox" id="scp-sp-hotkey-enabled"><span data-i18n="Toggle Window">Toggle Window</span></label>
-            <input type="text" class="scp-sp-input" id="scp-sp-hotkey" placeholder="Alt+Shift+C" style="flex:1">
-          </div>
-          <div class="scp-sp-row" style="gap:8px;margin-bottom:6px">
-            <label class="scp-sp-check" style="flex:0 0 120px"><input type="checkbox" id="scp-sp-search-hotkey-enabled"><span data-i18n="Chat Search">Chat Search</span></label>
-            <input type="text" class="scp-sp-input" id="scp-sp-search-hotkey" placeholder="Ctrl+F" style="flex:1">
-          </div>
-          <div class="scp-sp-row" style="gap:8px">
-            <label class="scp-sp-check" style="flex:0 0 120px"><input type="checkbox" id="scp-sp-ghost-hotkey-enabled"><span data-i18n="Ghost Mode">Ghost Mode</span></label>
-            <input type="text" class="scp-sp-input" id="scp-sp-ghost-hotkey" placeholder="Alt+Shift+G" style="flex:1">
-          </div>
-        </div>
-
-        <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-volume-high"></i> <span data-i18n="Completion Sound">Completion Sound</span></div>
-          <div id="scp-sp-sound-settings"></div>
-          <label class="scp-sp-check" style="margin-top:6px"><input type="checkbox" id="scp-sp-sound-unfocused"><span data-i18n="Only play when window is not focused">Only play when window is not focused</span></label>
-        </div>
-
-        <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-ghost"></i> <span data-i18n="Ghost Mode">Ghost Mode</span></div>
-          <div class="scp-sp-field">
-            <label class="scp-sp-label"><span data-i18n="Ghost Opacity">Ghost Opacity</span> <span class="scp-sp-hint" data-i18n="(window becomes transparent + click-through)">(window becomes transparent + click-through)</span></label>
-            <div class="scp-sp-row">
-              <input type="range" class="scp-slider" id="scp-sp-ghost-opacity" min="15" max="50" style="flex:1">
-              <span id="scp-sp-ghost-opacity-val" style="min-width:32px;text-align:right;font-size:11px;color:var(--scp-accent)">15%</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="scp-sp-group">
+        <div class="scp-sp-group scp-sp-profile-header">
           <div class="scp-sp-group-title"><i class="fa-solid fa-bookmark"></i> <span data-i18n="Configuration Profiles">Configuration Profiles</span></div>
+          <div class="scp-sp-hint scp-sp-profile-scope" data-i18n="Everything in this AI tab belongs to the selected profile. Changes apply right away; click save to store them in the profile.">Everything in this AI tab belongs to the selected profile. Changes apply right away; click save to store them in the profile.</div>
           <div class="scp-profile-bar">
             <select id="scp-sp-profile-select"></select>
             <button class="scp-profile-icon-btn" id="scp-sp-profile-save" title="Save to profile" data-i18n="[title]Save to profile"><i class="fa-solid fa-floppy-disk"></i></button>
@@ -111,6 +63,12 @@
             <select class="scp-sp-select" id="scp-sp-conn-profile">
               <option value="" data-i18n="-- Select Profile --">-- Select Profile --</option>
             </select>
+            <label class="scp-sp-label" style="margin-top:6px"><span data-i18n="Model">Model</span> <span class="scp-sp-hint" data-i18n="(blank = the connection profile's model)">(blank = the connection profile's model)</span></label>
+            <div class="scp-sp-row" style="gap:6px">
+              <input type="text" class="scp-sp-input" id="scp-sp-model-override" list="scp-sp-model-list" autocomplete="off" style="flex:1">
+              <button class="scp-profile-icon-btn" id="scp-sp-model-refresh" title="Load the provider's model list" data-i18n="[title]Load the provider's model list"><i class="fa-solid fa-rotate"></i></button>
+            </div>
+            <datalist id="scp-sp-model-list"></datalist>
           </div>
           <div id="scp-sp-custom-profile-group" style="display:none; margin-top:6px">
             <div class="scp-sp-field" style="margin-bottom:4px">
@@ -229,6 +187,61 @@
           </div>
         </div>
 
+      </div>
+
+      <!-- ══ INTERFACE TAB ══ -->
+      <div class="scp-sp-tab-pane" id="scp-sp-pane-interface" style="display:none">
+
+        <div class="scp-sp-group">
+          <div class="scp-sp-group-title"><i class="fa-solid fa-sliders"></i> <span data-i18n="General">General</span></div>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-enabled"><span data-i18n="Enable ST-Copilot">Enable ST-Copilot</span></label>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-icon-persistent"><span data-i18n="Always show floating icon">Always show floating icon</span></label>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-wobble-window"><span><span data-i18n="Wobbly window drag">Wobbly window drag</span> <span class="scp-sp-hint" data-i18n="(jelly physics on move)">(jelly physics on move)</span></span></label>
+          <label class="scp-sp-check" title="Disables heavy visual effects like blur, advanced shadows, and 3D animations to save CPU on low-end devices." data-i18n="[title]Disables heavy visual effects like blur, advanced shadows, and 3D animations to save CPU on low-end devices."><input type="checkbox" id="scp-sp-perf-mode"><span data-i18n="Low Performance Mode (Save CPU)">Low Performance Mode (Save CPU)</span></label>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-changelog-auto"><span data-i18n="Show changelog on update">Show changelog on update</span></label>
+          <button class="scp-action-btn" id="scp-sp-open-changelog" style="margin-top:4px;align-self:flex-start">${I.starFill}<span data-i18n="What's New">What's New</span></button>
+          <div class="scp-sp-field" style="margin-top:8px">
+            <label class="scp-sp-label" data-i18n="Window Opacity">Window Opacity</label>
+            <div class="scp-sp-row">
+              <input type="range" class="scp-slider" id="scp-sp-opacity-slider" min="20" max="100" style="flex:1">
+              <span id="scp-sp-opacity-val" style="min-width:32px;text-align:right;font-size:11px;color:var(--scp-accent)">95%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="scp-sp-group">
+          <div class="scp-sp-group-title"><i class="fa-solid fa-keyboard"></i> <span data-i18n="Shortcuts">Shortcuts</span></div>
+          <div class="scp-sp-row" style="gap:8px;margin-bottom:6px">
+            <label class="scp-sp-check" style="flex:0 0 120px"><input type="checkbox" id="scp-sp-hotkey-enabled"><span data-i18n="Toggle Window">Toggle Window</span></label>
+            <input type="text" class="scp-sp-input" id="scp-sp-hotkey" placeholder="Alt+Shift+C" style="flex:1">
+          </div>
+          <div class="scp-sp-row" style="gap:8px;margin-bottom:6px">
+            <label class="scp-sp-check" style="flex:0 0 120px"><input type="checkbox" id="scp-sp-search-hotkey-enabled"><span data-i18n="Chat Search">Chat Search</span></label>
+            <input type="text" class="scp-sp-input" id="scp-sp-search-hotkey" placeholder="Ctrl+F" style="flex:1">
+          </div>
+          <div class="scp-sp-row" style="gap:8px">
+            <label class="scp-sp-check" style="flex:0 0 120px"><input type="checkbox" id="scp-sp-ghost-hotkey-enabled"><span data-i18n="Ghost Mode">Ghost Mode</span></label>
+            <input type="text" class="scp-sp-input" id="scp-sp-ghost-hotkey" placeholder="Alt+Shift+G" style="flex:1">
+          </div>
+        </div>
+
+        <div class="scp-sp-group">
+          <div class="scp-sp-group-title"><i class="fa-solid fa-volume-high"></i> <span data-i18n="Completion Sound">Completion Sound</span></div>
+          <div id="scp-sp-sound-settings"></div>
+          <label class="scp-sp-check" style="margin-top:6px"><input type="checkbox" id="scp-sp-sound-unfocused"><span data-i18n="Only play when window is not focused">Only play when window is not focused</span></label>
+        </div>
+
+        <div class="scp-sp-group">
+          <div class="scp-sp-group-title"><i class="fa-solid fa-ghost"></i> <span data-i18n="Ghost Mode">Ghost Mode</span></div>
+          <div class="scp-sp-field">
+            <label class="scp-sp-label"><span data-i18n="Ghost Opacity">Ghost Opacity</span> <span class="scp-sp-hint" data-i18n="(window becomes transparent + click-through)">(window becomes transparent + click-through)</span></label>
+            <div class="scp-sp-row">
+              <input type="range" class="scp-slider" id="scp-sp-ghost-opacity" min="15" max="50" style="flex:1">
+              <span id="scp-sp-ghost-opacity-val" style="min-width:32px;text-align:right;font-size:11px;color:var(--scp-accent)">15%</span>
+            </div>
+          </div>
+        </div>
+
         <div class="scp-sp-group">
           <div class="scp-sp-group-title"><i class="fa-solid fa-ellipsis"></i> <span data-i18n="Other">Other</span></div>
 
@@ -260,6 +273,7 @@
             </select>
           </div>
         </div>
+
         <div class="scp-sp-group">
           <div class="scp-sp-group-title"><i class="fa-solid fa-palette"></i> <span data-i18n="Interface Theme">Interface Theme</span></div>
           <div id="scp-sp-theme-section"></div>

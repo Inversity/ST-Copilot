@@ -30,6 +30,7 @@ export function getSettings() {
         localHistoryLimit: 50,
         connectionSource: 'default',
         connectionProfileId: '',
+        modelOverride: '',
         customUrl: 'http://localhost:5000/v1',
         customKey: '',
         customModel: '',
