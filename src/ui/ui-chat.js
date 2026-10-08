@@ -1354,10 +1354,14 @@ export function handleEdit(wrapEl, msg) {
         recordStat(SM.edit);
         restoreMessageDOM(newText);
         _updateMsgTokenCount(wrapEl, newText, true);
-        
-        truncateAfter(session, msg.id);
-        removeMsgElAfter(msg.id);
-        if (msg.role === 'user' && apiMod) await apiMod.runGenerate(session, newText, false);
+
+        // Only "Save & Resend" on the user's own message rewinds the conversation. Saving a
+        // Copilot reply (or a swipe) edits it in place; it used to delete everything after it.
+        if (msg.role === 'user') {
+            truncateAfter(session, msg.id);
+            removeMsgElAfter(msg.id);
+            if (apiMod) await apiMod.runGenerate(session, newText, false);
+        }
     });
 }
 
