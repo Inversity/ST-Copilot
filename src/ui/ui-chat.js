@@ -47,7 +47,14 @@ const _runStreamJob = () => {
     _streamRafId = null;
     const job = _streamJob;
     _streamJob = null;
-    if (job) job();
+    if (!job) return;
+    // A render that throws would otherwise freeze the visible text silently while the
+    // stream keeps arriving; make it visible in the console and the debug log.
+    try { job(); }
+    catch (e) {
+        console.error(`[${EXT_DISPLAY}] Stream render failed:`, e);
+        _dbgAdd('STREAM_RENDER_ERROR', { error: e?.message || String(e), stack: String(e?.stack || '').slice(0, 600) });
+    }
 };
 
 /** Queue a render, replacing any render still waiting for the next frame. */
@@ -484,6 +491,10 @@ export function renderStreamingReasoning(msgEl, reasoningText, ms, done) {
     }
     block.style.display = '';
     block.querySelector('.scp-reasoning-summary').textContent = reasoningSummaryText(ms, done);
+    // Re-render the body only when the reasoning text changed: once reasoning is done it
+    // stays the same for the rest of the reply, and re-parsing it every frame is wasted work.
+    if (block._renderedText === reasoningText) return;
+    block._renderedText = reasoningText;
     const contentEl = block.querySelector('.scp-reasoning-content');
     contentEl.innerHTML = renderMarkdown(extractToolCallPlaceholders(reasoningText, 0).text);
     postProcessHTMLBlocks(contentEl, true);
