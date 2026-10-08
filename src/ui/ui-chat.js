@@ -554,19 +554,38 @@ export function _renderMsgBodyContent(msgEl, msg) {
 
     const contentEl = msgEl.querySelector('.scp-msg-content');
     
+    // Rebuilt on every render (it used to stack a second copy of the badges each time).
+    msgEl.querySelectorAll('.scp-msg-attachments').forEach(el => el.remove());
     if (msg.attachments && msg.attachments.length > 0) {
         const attWrap = document.createElement('div');
         attWrap.className = 'scp-msg-attachments';
-        msg.attachments.forEach(att => {
+        msg.attachments.forEach((att, i) => {
             const badge = document.createElement('div');
             badge.className = 'scp-msg-att-badge';
             if (att.isImage) {
-                badge.innerHTML = `<img src="${att.dataUrl}"> <span>${escHtml(att.name)}</span>`;
+                badge.innerHTML = `<img src="${escHtml(att.dataUrl || '')}"> <span>${escHtml(att.name)}</span>`;
                 badge.onclick = () => _openImageLightbox(att);
             } else {
                 badge.innerHTML = `<i class="fa-solid fa-file"></i> <span>${escHtml(att.name)}</span>`;
                 badge.onclick = () => _openTextLightbox(att);
             }
+            // Remove the file from this message; it stops being sent with every later request.
+            const rm = document.createElement('button');
+            rm.className = 'scp-msg-att-remove';
+            rm.innerHTML = I.x;
+            rm.title = t`Remove ${att.name} from this message`;
+            rm.addEventListener('click', e => {
+                e.stopPropagation();
+                if (state.generating) return;
+                const live = getCurrentSession()?.messages.find(m => m.id === msg.id) || msg;
+                live.attachments = (live.attachments || []).filter((_, j) => j !== i);
+                if (live !== msg) msg.attachments = live.attachments;
+                _dbgAdd('ATTACHMENT_REMOVED', { msgId: msg.id, name: att.name, remaining: live.attachments.length });
+                saveSessionsToMetadata();
+                _renderMsgBodyContent(msgEl, live);
+                updateMsgCount(getCurrentSession());
+            });
+            badge.appendChild(rm);
             attWrap.appendChild(badge);
         });
         body.insertBefore(attWrap, body.firstChild);

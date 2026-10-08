@@ -533,6 +533,13 @@
     object-fit: cover;
     border-radius: 3px;
 }
+.scp-msg-att-remove {
+    background: none; border: none; padding: 0 0 0 2px; margin-left: 2px;
+    color: var(--scp-text-muted); cursor: pointer; display: flex; align-items: center;
+    opacity: 0.6; transition: opacity 0.12s, color 0.12s;
+}
+.scp-msg-att-remove svg { width: 11px; height: 11px; }
+.scp-msg-att-remove:hover { opacity: 1; color: var(--scp-danger, #ff5c5c); }
 
 .scp-edit-ta {
     width: 100%; background: var(--scp-input-bg); border: 1px solid var(--scp-accent-dim);

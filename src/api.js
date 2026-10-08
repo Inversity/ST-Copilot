@@ -401,6 +401,26 @@ export function createReasoningClock(now = () => performance.now()) {
     };
 }
 
+// Debug-log heartbeat while streaming (every 5s): sizes and the tail of the reply so far. A
+// "frozen" reply then shows whether text was still arriving, the model was still reasoning,
+// or it was writing a tool call or edit block that is hidden until it completes.
+function createStreamProgressLog() {
+    let chunks = 0;
+    let lastAt = performance.now();
+    return (text, reasoning) => {
+        chunks++;
+        const now = performance.now();
+        if (now - lastAt < 5000) return;
+        lastAt = now;
+        _dbgAdd('STREAM_PROGRESS', {
+            chunks,
+            textLen: String(text || '').length,
+            reasoningLen: String(reasoning || '').length,
+            textTail: String(text || '').slice(-160),
+        });
+    };
+}
+
 // { model, profile } of the generation that just finished, for the reply/swipe it produced.
 export function getGenStamp() {
     const meta = { ...(state.genMeta || {}) };
@@ -515,6 +535,7 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
         let text = '';
         let reasoning = null;
         const reasoningClock = createReasoningClock();
+        const logProgress = createStreamProgressLog();
 
         try {
             const url = (settings.customUrl || 'http://localhost:5000/v1').replace(/\/+$/, '') + '/chat/completions';
@@ -563,6 +584,7 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
                                 const ext = deepExtract(data);
                                 if (ext.t) text += ext.t;
                                 if (ext.r) reasoning = (reasoning || '') + ext.r;
+                                logProgress(text, reasoning);
                                 if (typeof onChunk === 'function') {
                                     const rc = reasoningClock(reasoning, text);
                                     onChunk(text, reasoning, rc.ms, rc.done);
@@ -767,6 +789,7 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
     let text = '';
     let reasoning = null;
     const reasoningClock = createReasoningClock();
+    const logProgress = createStreamProgressLog();
 
     const isGen = typeof asyncGeneratorFn === 'function' ||
         (asyncGeneratorFn != null && typeof asyncGeneratorFn[Symbol.asyncIterator] === 'function') ||
@@ -809,6 +832,7 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
             const newReasoning = ext.r;
 
             if (newReasoning) reasoning = newReasoning;
+            logProgress(text, reasoning);
 
             if (typeof onChunk === 'function') {
                 const rc = reasoningClock(reasoning, text);
