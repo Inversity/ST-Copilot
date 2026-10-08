@@ -4,10 +4,10 @@ import { getSettings, getEffectiveSettings, saveSettings, getCurrentSession, sav
 import { _dbgAdd } from './utils/util-debug.js';
 import { escHtml } from './utils/util-dom.js';
 import { _ensureWrapped } from './utils/util-text.js';
-import { getCharInfo, getUserPersona, getStRoleplayPrompts } from './utils/util-st.js';
+import { getCharInfo, getUserPersona, getStRoleplayPrompts, validateModelOverride } from './utils/util-st.js';
 import { recordStat, SM } from './features/feature-stats.js';
 import { _mergeContent } from './features/feature-attachments.js';
-import { translate } from './utils/util-i18n.js';
+import { t, translate } from './utils/util-i18n.js';
 
 import { _getAspectEvolutiaCharFields, _getAspectEvolutiaPersonaFields } from './integrations/integ-evolutia.js';
 import { _getSummaryceptionSummary } from './integrations/integ-summaryception.js';
@@ -620,7 +620,18 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
 
     // Model override (Specific Profile source only): ST spreads overridePayload over the
     // profile's request, so provider, key, URL and preset still come from the profile.
-    const modelOverride = settings.connectionSource === 'profile' ? String(settings.modelOverride || '').trim() : '';
+    // It is dropped if the profile's provider changed since it was picked.
+    let modelOverride = '';
+    if (settings.connectionSource === 'profile' && String(settings.modelOverride || '').trim()) {
+        const stored = getSettings();
+        const prof = profiles.find(p => p.id === profileId);
+        const before = stored.modelOverride;
+        modelOverride = validateModelOverride(stored, prof);
+        if (before && !modelOverride) {
+            saveSettings();
+            toastr.info(t`Model override "${before}" was cleared: the connection profile now uses a different provider. Using the profile's model.`, EXT_DISPLAY, { timeOut: 8000 });
+        }
+    }
     const modelOverridePayload = modelOverride ? { model: modelOverride } : {};
     if (modelOverride) state.genMeta.model = modelOverride;
 

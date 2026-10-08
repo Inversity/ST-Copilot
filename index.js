@@ -3148,6 +3148,30 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       }).filter(Boolean);
   }
 
+  // Which provider a connection profile talks to. A model override is only valid for the
+  // provider it was picked for (custom endpoints are told apart by URL).
+  function connectionProviderKey(profile) {
+      if (!profile) return '';
+      return profile.api === 'custom' ? `custom|${profile['api-url'] || ''}` : String(profile.api || '');
+  }
+
+  // Drops the model override when the connection profile's provider changed since it was set
+  // (e.g. the profile was switched to another provider in ST). Returns the override still valid.
+  function validateModelOverride(settings, profile) {
+      const override = String(settings.modelOverride || '').trim();
+      if (!override || !profile) return override;
+      const key = connectionProviderKey(profile);
+      if (!settings.modelOverrideFor) {
+          // Set before overrides remembered their provider: adopt the current one.
+          settings.modelOverrideFor = key;
+          return override;
+      }
+      if (settings.modelOverrideFor === key) return override;
+      settings.modelOverride = '';
+      settings.modelOverrideFor = '';
+      return '';
+  }
+
   // ST's Prompt Manager runs with the 'global' order strategy; this is the id of that order.
   const ST_GLOBAL_PROMPT_ORDER_ID = '100001';
 
@@ -9728,7 +9752,10 @@ ${scopeHtml}
       { key: 'connectionProfileId', stId: 'scp-conn-profile', spId: 'scp-sp-conn-profile', type: 'select', profileKey: true, onChange: () => refreshModelOverrideField(false) },
       { key: 'promptEditAIEnabled', spId: 'scp-sp-prompt-edit-enabled', type: 'checkbox', updCtx: true, profileKey: true },
       // Sent as overridePayload.model, so one ST connection profile can serve several models.
-      { key: 'modelOverride', spId: 'scp-sp-model-override', type: 'input', toVal: v => String(v || '').trim(), profileKey: true },
+      { key: 'modelOverride', spId: 'scp-sp-model-override', type: 'input', toVal: v => String(v || '').trim(), profileKey: true,
+        onChange: (val, s) => { s.modelOverrideFor = val ? connectionProviderKey(_selectedConnectionProfile()) : ''; saveSettings(); } },
+      // The provider the override was picked for; no element, saved with the profile.
+      { key: 'modelOverrideFor', type: 'input', profileKey: true },
       { key: 'customUrl',   stId: 'scp-custom-url',   spId: 'scp-sp-custom-url',   type: 'input', profileKey: true },
       { key: 'customKey',   stId: 'scp-custom-key',   spId: 'scp-sp-custom-key',   type: 'input', profileKey: true },
       { key: 'customModel', stId: 'scp-custom-model', spId: 'scp-sp-custom-model', type: 'input', profileKey: true },
@@ -10189,13 +10216,16 @@ ${scopeHtml}
   let _modelList = [];
   let _modelListProfile = null;
   let _modelActive = -1;
+  let _modelTyped = false;
 
   function _renderModelDropdown() {
       const input = document.getElementById('scp-sp-model-override');
       const dd = document.getElementById('scp-sp-model-list');
       if (!input || !dd) return;
-      const q = input.value.trim().toLowerCase();
-      const matches = _modelList.filter(m => !q || m.toLowerCase().includes(q)).slice(0, 200);
+      // Filter only by what the user typed since opening; the field normally already holds the
+      // current model, and filtering by that showed a one-item list.
+      const q = _modelTyped ? input.value.trim().toLowerCase() : '';
+      const matches = _modelList.filter(m => !q || m.toLowerCase().includes(q)).slice(0, 500);
       if (!matches.length) { dd.style.display = 'none'; return; }
       _modelActive = Math.min(_modelActive, matches.length - 1);
       dd.innerHTML = '';
@@ -10226,8 +10256,8 @@ ${scopeHtml}
       const dd = document.getElementById('scp-sp-model-list');
       if (!input || !dd || input.dataset.comboReady) return;
       input.dataset.comboReady = '1';
-      input.addEventListener('focus', () => { if (_modelList.length) _renderModelDropdown(); });
-      input.addEventListener('input', e => { if (e.isTrusted && _modelList.length) { _modelActive = -1; _renderModelDropdown(); } });
+      input.addEventListener('focus', () => { _modelTyped = false; if (_modelList.length) _renderModelDropdown(); });
+      input.addEventListener('input', e => { if (e.isTrusted && _modelList.length) { _modelTyped = true; _modelActive = -1; _renderModelDropdown(); } });
       input.addEventListener('blur', () => setTimeout(() => { dd.style.display = 'none'; }, 120));
       input.addEventListener('keydown', e => {
           if (dd.style.display === 'none') return;
@@ -10261,6 +10291,13 @@ ${scopeHtml}
       if (!input) return;
       const prof = _selectedConnectionProfile();
       input.placeholder = prof?.model ? t`Profile default: ${prof.model}` : translate('Profile default');
+      const s = getSettings();
+      const before = s.modelOverride;
+      if (before && !validateModelOverride(s, prof)) {
+          saveSettings();
+          input.value = '';
+          toastr.info(t`Model override "${before}" was cleared: the connection profile now uses a different provider.`, EXT_DISPLAY, { timeOut: 8000 });
+      }
       // Keep a loaded list until the connection profile changes; it belongs to that provider.
       if (!fetchList) {
           if (prof?.id !== _modelListProfile) _modelList = [];
@@ -10286,6 +10323,7 @@ ${scopeHtml}
           _modelList = [...new Set(ids)].sort();
           _modelListProfile = prof.id;
           _setupModelCombo();
+          _modelTyped = false;
           if (_modelList.length) { input.focus(); _renderModelDropdown(); }
           if (ids.length) toastr.success(t`Loaded ${ids.length} models from ${prof.api}.`, EXT_DISPLAY);
           else toastr.warning(t`${prof.api} returned no model list. Type a model name instead.`, EXT_DISPLAY);
@@ -12936,10 +12974,14 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           recordStat(SM.edit);
           restoreMessageDOM(newText);
           _updateMsgTokenCount(wrapEl, newText, true);
-          
-          truncateAfter(session, msg.id);
-          removeMsgElAfter(msg.id);
-          if (msg.role === 'user' && apiMod) await apiMod.runGenerate(session, newText, false);
+
+          // Only "Save & Resend" on the user's own message rewinds the conversation. Saving a
+          // Copilot reply (or a swipe) edits it in place; it used to delete everything after it.
+          if (msg.role === 'user') {
+              truncateAfter(session, msg.id);
+              removeMsgElAfter(msg.id);
+              if (apiMod) await apiMod.runGenerate(session, newText, false);
+          }
       });
   }
 
@@ -15916,7 +15958,18 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
       // Model override (Specific Profile source only): ST spreads overridePayload over the
       // profile's request, so provider, key, URL and preset still come from the profile.
-      const modelOverride = settings.connectionSource === 'profile' ? String(settings.modelOverride || '').trim() : '';
+      // It is dropped if the profile's provider changed since it was picked.
+      let modelOverride = '';
+      if (settings.connectionSource === 'profile' && String(settings.modelOverride || '').trim()) {
+          const stored = getSettings();
+          const prof = profiles.find(p => p.id === profileId);
+          const before = stored.modelOverride;
+          modelOverride = validateModelOverride(stored, prof);
+          if (before && !modelOverride) {
+              saveSettings();
+              toastr.info(t`Model override "${before}" was cleared: the connection profile now uses a different provider. Using the profile's model.`, EXT_DISPLAY, { timeOut: 8000 });
+          }
+      }
       const modelOverridePayload = modelOverride ? { model: modelOverride } : {};
       if (modelOverride) state.genMeta.model = modelOverride;
 

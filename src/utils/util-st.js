@@ -17,6 +17,30 @@ export function getTagsForCharacter(char) {
     }).filter(Boolean);
 }
 
+// Which provider a connection profile talks to. A model override is only valid for the
+// provider it was picked for (custom endpoints are told apart by URL).
+export function connectionProviderKey(profile) {
+    if (!profile) return '';
+    return profile.api === 'custom' ? `custom|${profile['api-url'] || ''}` : String(profile.api || '');
+}
+
+// Drops the model override when the connection profile's provider changed since it was set
+// (e.g. the profile was switched to another provider in ST). Returns the override still valid.
+export function validateModelOverride(settings, profile) {
+    const override = String(settings.modelOverride || '').trim();
+    if (!override || !profile) return override;
+    const key = connectionProviderKey(profile);
+    if (!settings.modelOverrideFor) {
+        // Set before overrides remembered their provider: adopt the current one.
+        settings.modelOverrideFor = key;
+        return override;
+    }
+    if (settings.modelOverrideFor === key) return override;
+    settings.modelOverride = '';
+    settings.modelOverrideFor = '';
+    return '';
+}
+
 // ST's Prompt Manager runs with the 'global' order strategy; this is the id of that order.
 export const ST_GLOBAL_PROMPT_ORDER_ID = '100001';
 
