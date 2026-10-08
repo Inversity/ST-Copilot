@@ -14903,6 +14903,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           let reasoning = null;
           let reasoningStartMs = null;
           let reasoningDone = false;
+          let finalReasoningMs = null;
 
           try {
               const url = (settings.customUrl || 'http://localhost:5000/v1').replace(/\/+$/, '') + '/chat/completions';
@@ -14953,12 +14954,13 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                                       if (reasoningStartMs === null) reasoningStartMs = performance.now();
                                       reasoning = (reasoning || '') + ext.r;
                                   }
+                                  // Frozen in a local: `data` is a new object per SSE line.
                                   if (text && !reasoningDone && reasoning) {
                                       reasoningDone = true;
-                                      data._finalReasoningMs = performance.now() - reasoningStartMs;
+                                      finalReasoningMs = performance.now() - reasoningStartMs;
                                   }
                                   if (typeof onChunk === 'function') {
-                                      const rMs = reasoningDone && data._finalReasoningMs ? data._finalReasoningMs : (reasoningStartMs !== null ? performance.now() - reasoningStartMs : null);
+                                      const rMs = reasoningDone ? finalReasoningMs : (reasoningStartMs !== null ? performance.now() - reasoningStartMs : null);
                                       onChunk(text, reasoning, rMs, reasoningDone);
                                   }
                               } catch (e) {}
@@ -15150,6 +15152,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           (asyncGeneratorFn != null && typeof asyncGeneratorFn.next === 'function');
 
       let lastValue = null;
+      let finalReasoningMs = null;
 
       if (!isGen) {
           const value = asyncGeneratorFn;
@@ -15189,14 +15192,16 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                   if (reasoningStartMs === null) reasoningStartMs = performance.now();
                   reasoning = newReasoning;
               }
+              // Freeze the reasoning time when output text starts. It used to be stored on the
+              // chunk object, which is replaced by the next chunk, so the timer kept counting.
               if (text && !reasoningDone && reasoning) {
                   reasoningDone = true;
-                  lastValue._finalReasoningMs = performance.now() - reasoningStartMs;
+                  finalReasoningMs = performance.now() - reasoningStartMs;
               }
 
               if (typeof onChunk === 'function') {
-                  const reasoningMs = reasoningDone && lastValue?._finalReasoningMs 
-                      ? lastValue._finalReasoningMs 
+                  const reasoningMs = reasoningDone
+                      ? finalReasoningMs
                       : (reasoningStartMs !== null ? performance.now() - reasoningStartMs : null);
                   onChunk(text, reasoning, reasoningMs, reasoningDone);
               }
