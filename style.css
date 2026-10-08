@@ -5076,6 +5076,27 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
 .scp-char-ag-del:hover { color: var(--scp-danger, #ff5c5c); border-color: rgba(255,92,92,0.4); background: rgba(255,92,92,0.1); }
 .scp-char-ag-empty { font-size: 11px; color: var(--scp-text-muted); font-style: italic; }
 .scp-char-ag-add { align-self: flex-start; margin-top: 8px; }
+
+/* ── Prompt Manager (reuses the Character Manager layout) ── */
+.scp-pm-preset { font-size: 11px; color: var(--scp-text-muted); margin-left: 10px; }
+.scp-pm-overlay .scp-char-header-right { display: flex; align-items: center; gap: 8px; }
+.scp-pm-row { gap: 8px; }
+.scp-pm-row .scp-char-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scp-pm-row.scp-pm-disabled .scp-char-row-name { opacity: 0.45; text-decoration: line-through; }
+.scp-pm-row.scp-pm-marker .scp-char-row-name { font-style: italic; color: var(--scp-text-muted); }
+.scp-pm-badge {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0;
+    padding: 1px 5px; border-radius: 4px; border: 1px solid var(--scp-accent-dim); color: var(--scp-accent);
+}
+.scp-pm-badge.scp-pm-badge-slot { border-color: rgba(255,255,255,0.15); color: var(--scp-text-muted); }
+.scp-pm-pane { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; height: 100%; box-sizing: border-box; }
+.scp-pm-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.scp-pm-top .scp-pm-name { flex: 1; min-width: 160px; }
+.scp-pm-top .scp-pm-role { width: auto; }
+.scp-pm-content { flex: 1; min-height: 300px; resize: none; font-family: monospace; font-size: 12px; line-height: 1.5; }
+.scp-pm-title-row { display: flex; align-items: center; gap: 8px; }
+.scp-pm-title { font-size: 15px; font-weight: 600; color: var(--scp-text); }
+.scp-pm-note { font-size: 12px; color: var(--scp-text-muted); line-height: 1.5; }
 .scp-char-field-input, .scp-char-field-textarea {
     width: 100%; box-sizing: border-box;
     background: var(--scp-input-bg); border: var(--scp-border);

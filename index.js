@@ -13622,7 +13622,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           iconEl, 
           document.getElementById('scp-lb-overlay'), 
           document.getElementById('scp-char-overlay'),
-          document.getElementById('scp-diff-modal'), 
+          document.getElementById('scp-pm-overlay'),
+          document.getElementById('scp-diff-modal'),
           document.getElementById('scp-settings-overlay'), 
           document.getElementById('scp-picker-overlay')
       ].filter(Boolean);
@@ -14632,6 +14633,288 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       overlay.addEventListener('mousedown', e => { _mouseDownTarget = e.target; });
       overlay.addEventListener('click', e => { if (e.target === overlay && _mouseDownTarget === overlay) closeCharacterManager(); });
       document.getElementById('scp-char-close')?.addEventListener('click', () => closeCharacterManager());
+  }
+
+  // Reads and writes the prompts SillyTavern sends for roleplay, the same objects ST's own
+  // Prompt Manager edits. Chat Completion: oai_settings.prompts in the global prompt order.
+  // Text Completion: the Advanced Formatting system prompt.
+
+  function _cc(ctx) {
+      const cc = ctx.chatCompletionSettings || {};
+      const order = (cc.prompt_order || []).find(o => String(o.character_id) === ST_GLOBAL_PROMPT_ORDER_ID)?.order || [];
+      return { cc, prompts: cc.prompts || [], order };
+  }
+
+  // { mode: 'cc'|'tc', presetName, entries: [{ id, name, role, content, marker, enabled }] }
+  // Chat Completion entries follow ST's order, including disabled prompts and markers.
+  function getPromptManagerState() {
+      const ctx = SillyTavern.getContext();
+      if (ctx.mainApi === 'openai') {
+          const { cc, prompts, order } = _cc(ctx);
+          const entries = order
+              .map(o => {
+                  const p = prompts.find(x => x.identifier === o.identifier);
+                  if (!p) return null;
+                  return {
+                      id: p.identifier,
+                      name: p.name || p.identifier,
+                      role: p.role || 'system',
+                      content: p.content ?? '',
+                      marker: !!p.marker,
+                      enabled: !!o.enabled,
+                  };
+              })
+              .filter(Boolean);
+          return { mode: 'cc', presetName: cc.preset_settings_openai || 'Default', entries };
+      }
+      const sp = ctx.powerUserSettings?.sysprompt || {};
+      return {
+          mode: 'tc',
+          presetName: sp.name || '',
+          entries: [{ id: 'sysprompt', name: sp.name || 'System Prompt', role: 'system', content: sp.content ?? '', marker: false, enabled: !!sp.enabled }],
+      };
+  }
+
+  // changes: { [id]: { content?, name?, role?, enabled? } }. Writes into ST's live settings
+  // objects and saves settings.json, like ST's Prompt Manager. Markers keep their content
+  // (ST fills them in); only their enabled flag can change. Returns the ids applied.
+  function applyPromptChanges(changes) {
+      const ctx = SillyTavern.getContext();
+      const applied = [];
+      if (ctx.mainApi === 'openai') {
+          const { prompts, order } = _cc(ctx);
+          for (const [id, ch] of Object.entries(changes || {})) {
+              const p = prompts.find(x => x.identifier === id);
+              if (!p) continue;
+              if (!p.marker) {
+                  if (typeof ch.content === 'string') p.content = ch.content;
+                  if (typeof ch.name === 'string' && ch.name.trim()) p.name = ch.name.trim();
+                  if (['system', 'user', 'assistant'].includes(ch.role)) p.role = ch.role;
+              }
+              if (typeof ch.enabled === 'boolean') {
+                  const o = order.find(x => x.identifier === id);
+                  if (o) o.enabled = ch.enabled;
+              }
+              applied.push(id);
+          }
+      } else {
+          const sp = ctx.powerUserSettings?.sysprompt;
+          const ch = changes?.sysprompt;
+          if (sp && ch) {
+              if (typeof ch.content === 'string') sp.content = ch.content;
+              if (typeof ch.enabled === 'boolean') sp.enabled = ch.enabled;
+              applied.push('sysprompt');
+          }
+      }
+      if (applied.length && typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
+      return applied;
+  }
+
+  // Same as ST's "Update current preset": writes the current settings into the preset file.
+  async function updateCurrentPreset() {
+      const ctx = SillyTavern.getContext();
+      const pm = typeof ctx.getPresetManager === 'function' ? ctx.getPresetManager(ctx.mainApi === 'openai' ? 'openai' : 'sysprompt') : null;
+      if (!pm || typeof pm.updatePreset !== 'function') throw new Error('Preset manager not available');
+      await pm.updatePreset();
+  }
+
+  // Full-screen editor for the prompts SillyTavern sends for roleplay (Chat Completion
+  // Prompt Manager, or the Text Completion system prompt). Edits go into ST's live settings
+  // and settings.json, exactly like ST's own Prompt Manager; "Update preset file" also
+  // writes them into the preset, like ST's "Update current preset".
+
+  let _selectedId = null;
+  let _dirty = null;       // pending { content, name, role } for the selected prompt, or null
+  let _saveFn = null;
+
+  async function _confirmDiscard() {
+      if (!_dirty) return true;
+      return showCustomDialog({
+          type: 'confirm',
+          title: translate('Unsaved Changes'),
+          message: translate('Discard the unsaved changes to this prompt?'),
+      });
+  }
+
+  function _roleBadge(entry) {
+      if (entry.marker) return `<span class="scp-pm-badge scp-pm-badge-slot">${translate('slot')}</span>`;
+      return `<span class="scp-pm-badge">${escHtml(entry.role)}</span>`;
+  }
+
+  function _renderList() {
+      const listEl = document.getElementById('scp-pm-list');
+      const presetEl = document.getElementById('scp-pm-preset');
+      if (!listEl) return;
+      const state = getPromptManagerState();
+      if (presetEl) presetEl.textContent = state.presetName ? (state.mode === 'cc' ? t`Preset: ${state.presetName}` : t`System prompt: ${state.presetName}`) : '';
+      listEl.innerHTML = '';
+
+      for (const entry of state.entries) {
+          const row = document.createElement('div');
+          row.className = `scp-char-row scp-pm-row${entry.enabled ? '' : ' scp-pm-disabled'}${entry.marker ? ' scp-pm-marker' : ''}`;
+          row.dataset.id = entry.id;
+          row.classList.toggle('selected', entry.id === _selectedId);
+
+          const name = document.createElement('span');
+          name.className = 'scp-char-row-name';
+          name.textContent = entry.name;
+          row.appendChild(name);
+          row.insertAdjacentHTML('beforeend', _roleBadge(entry));
+
+          // Same on/off as ST's Prompt Manager toggle; applies immediately.
+          const cb = document.createElement('div');
+          cb.className = `scp-char-row-cb${entry.enabled ? ' checked' : ''}`;
+          cb.title = translate('Send this prompt');
+          cb.addEventListener('click', e => {
+              e.stopPropagation();
+              applyPromptChanges({ [entry.id]: { enabled: !entry.enabled } });
+              _renderList();
+          });
+          row.appendChild(cb);
+
+          row.addEventListener('click', async () => {
+              if (entry.id === _selectedId) return;
+              if (!(await _confirmDiscard())) return;
+              _selectedId = entry.id;
+              _dirty = null;
+              _renderList();
+              _renderDetail();
+          });
+          listEl.appendChild(row);
+      }
+
+      if (!state.entries.length) {
+          listEl.innerHTML = `<div class="scp-char-list-empty">${translate('No prompts found for the current API.')}</div>`;
+      }
+  }
+
+  function _renderDetail() {
+      const main = document.getElementById('scp-pm-main');
+      if (!main) return;
+      const entry = getPromptManagerState().entries.find(e => e.id === _selectedId);
+      main.innerHTML = '';
+      _dirty = null;
+      _saveFn = null;
+      if (!entry) {
+          main.innerHTML = `<div class="scp-char-empty-state"><div class="scp-empty-icon"><i class="fa-solid fa-scroll"></i></div><div>${translate('Select a prompt to edit')}</div></div>`;
+          return;
+      }
+
+      const pane = document.createElement('div');
+      pane.className = 'scp-char-pane scp-pm-pane';
+
+      if (entry.marker) {
+          pane.innerHTML = `
+            <div class="scp-pm-title-row"><span class="scp-pm-title">${escHtml(entry.name)}</span>${_roleBadge(entry)}</div>
+            <div class="scp-pm-note">${translate('This is a slot SillyTavern fills in at send time (card fields, chat history, lorebook entries). Its content is not editable here; use the checkbox in the list to turn it on or off.')}</div>`;
+          main.appendChild(pane);
+          return;
+      }
+
+      const top = document.createElement('div');
+      top.className = 'scp-pm-top';
+      top.innerHTML = `
+        <input type="text" class="scp-char-field-input scp-pm-name" ${entry.id === 'sysprompt' ? 'disabled' : ''}>
+        <select class="scp-sp-select scp-pm-role" ${entry.id === 'sysprompt' ? 'disabled' : ''}>
+            <option value="system">system</option><option value="user">user</option><option value="assistant">assistant</option>
+        </select>
+        <span class="scp-char-field-tokens scp-pm-tokens"></span>
+        <button class="scp-action-btn scp-char-banner-save-btn scp-pm-save" disabled style="opacity:.4">${I.check}<span>${translate('Save')}</span></button>
+        <button class="scp-action-btn scp-pm-revert" disabled style="opacity:.4">${I.x}<span>${translate('Revert')}</span></button>`;
+      pane.appendChild(top);
+
+      const ta = document.createElement('textarea');
+      ta.className = 'scp-char-field-textarea scp-pm-content';
+      ta.spellcheck = false;
+      pane.appendChild(ta);
+      main.appendChild(pane);
+
+      const nameEl = top.querySelector('.scp-pm-name');
+      const roleEl = top.querySelector('.scp-pm-role');
+      const tokEl = top.querySelector('.scp-pm-tokens');
+      const saveBtn = top.querySelector('.scp-pm-save');
+      const revertBtn = top.querySelector('.scp-pm-revert');
+      nameEl.value = entry.name;
+      roleEl.value = entry.role;
+      ta.value = entry.content;
+
+      const countTokens = async text => {
+          try {
+              const n = await (await Promise.resolve().then(function () { return api; })).estimateTokens(text);
+              if (tokEl.isConnected) tokEl.textContent = `[~${n} tkns]`;
+          } catch (_) { /* token count is cosmetic */ }
+      };
+      countTokens(entry.content);
+
+      let tokTimer = null;
+      const onEdit = () => {
+          const changed = ta.value !== entry.content || nameEl.value !== entry.name || roleEl.value !== entry.role;
+          _dirty = changed ? { content: ta.value, name: nameEl.value, role: roleEl.value } : null;
+          for (const b of [saveBtn, revertBtn]) { b.disabled = !changed; b.style.opacity = changed ? '1' : '0.4'; }
+          clearTimeout(tokTimer);
+          tokTimer = setTimeout(() => countTokens(ta.value), 600);
+      };
+      ta.addEventListener('input', onEdit);
+      nameEl.addEventListener('input', onEdit);
+      roleEl.addEventListener('change', onEdit);
+
+      _saveFn = () => {
+          if (!_dirty) return true;
+          applyPromptChanges({ [entry.id]: _dirty });
+          _dirty = null;
+          toastr.success(translate('Prompt saved to SillyTavern settings. Use "Update preset file" to also store it in the preset.'), EXT_DISPLAY, { timeOut: 6000 });
+          _renderList();
+          _renderDetail();
+          return true;
+      };
+      saveBtn.addEventListener('click', () => _saveFn());
+      revertBtn.addEventListener('click', () => { _dirty = null; _renderDetail(); });
+  }
+
+  function openPromptManager() {
+      const overlay = document.getElementById('scp-pm-overlay');
+      if (!overlay) return;
+      if (overlay.parentElement !== document.body) document.body.appendChild(overlay);
+      applyCustomTheme(getSettings().customTheme || THEME_PRESETS.default);
+      const entries = getPromptManagerState().entries;
+      if (!entries.some(e => e.id === _selectedId)) _selectedId = entries.find(e => !e.marker)?.id || null;
+      _renderList();
+      _renderDetail();
+      overlay.style.display = 'flex';
+      bringWindowToFront();
+  }
+
+  async function closePromptManager() {
+      const overlay = document.getElementById('scp-pm-overlay');
+      if (!overlay) return;
+      if (!(await _confirmDiscard())) return;
+      _dirty = null;
+      overlay.style.display = 'none';
+  }
+
+  function setupPromptManagerListeners() {
+      const overlay = document.getElementById('scp-pm-overlay');
+      if (!overlay) return;
+      let downTarget = null;
+      overlay.addEventListener('mousedown', e => { downTarget = e.target; });
+      overlay.addEventListener('click', e => { if (e.target === overlay && downTarget === overlay) closePromptManager(); });
+      document.getElementById('scp-pm-close')?.addEventListener('click', () => closePromptManager());
+      document.getElementById('scp-pm-update-preset')?.addEventListener('click', async () => {
+          if (_dirty && _saveFn) _saveFn();
+          const { presetName } = getPromptManagerState();
+          const ok = await showCustomDialog({
+              type: 'confirm',
+              title: translate('Update preset file'),
+              message: t`Write the current SillyTavern settings into the preset "${presetName}"? This is the same as SillyTavern's "Update current preset" and includes any other unsaved preset changes.`,
+          });
+          if (!ok) return;
+          try {
+              await updateCurrentPreset();
+              toastr.success(t`Preset "${presetName}" updated.`, EXT_DISPLAY);
+          } catch (e) {
+              toastr.error(t`Could not update the preset: ${e.message}`, EXT_DISPLAY);
+          }
+      });
   }
 
   function _getSummaryceptionSummary() {
@@ -17154,7 +17437,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               console.error(`[${EXT_DISPLAY}] Couldn't load HTML: ${templateName}.html`);
           }
       };
-      const templates = ['window', 'lorebook_manager', 'character_manager', 'settings_overlay', 'chat_picker'];
+      const templates = ['window', 'lorebook_manager', 'character_manager', 'prompt_manager', 'settings_overlay', 'chat_picker'];
       await Promise.all(templates.map(loadAndInject));
 
       const iconEl = document.getElementById(ICON_ID);
@@ -17260,6 +17543,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                                 document.getElementById('scp-settings-overlay')?.contains(e.target) ||
                                 document.getElementById('scp-lb-overlay')?.contains(e.target) ||
                                 document.getElementById('scp-char-overlay')?.contains(e.target) ||
+                                document.getElementById('scp-pm-overlay')?.contains(e.target) ||
                                 document.getElementById('scp-picker-overlay')?.contains(e.target) ||
                                 document.getElementById('scp-diff-modal')?.contains(e.target);
           state.copilotActive = !!clickedInside;
@@ -17428,6 +17712,11 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           document.getElementById('scp-menu-panel')?.classList.remove('open');
           document.getElementById('scp-menu-trigger')?.classList.remove('active');
           openCharacterManager();
+      });
+      document.getElementById('scp-menu-pm-item')?.addEventListener('click', () => {
+          document.getElementById('scp-menu-panel')?.classList.remove('open');
+          document.getElementById('scp-menu-trigger')?.classList.remove('active');
+          openPromptManager();
       });
 
       document.getElementById('scp-search-btn')?.addEventListener('click', () => { state.searchOpen ? closeSearch() : openSearch(); });
@@ -17613,6 +17902,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       setupSettingsPanelListeners(); 
       setupLorebookManagerListeners(); 
       setupCharacterManagerListeners();
+      setupPromptManagerListeners();
       setupExternalWIChangeListener();
       setupChatPickerListeners(); 
       setupChangelogListeners();
@@ -17716,6 +18006,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           document.getElementById('scp-settings-overlay'), 
           document.getElementById('scp-lb-overlay'), 
           document.getElementById('scp-char-overlay'),
+          document.getElementById('scp-pm-overlay'),
           document.getElementById('scp-picker-overlay')
       ].filter(Boolean).forEach(el => {
           el.addEventListener('mousedown', preventSpinBug);

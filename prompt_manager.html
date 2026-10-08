@@ -1,0 +1,27 @@
+<div id="scp-pm-overlay" class="scp-char-overlay scp-pm-overlay" style="display:none">
+    <div class="scp-char-panel">
+        <div class="scp-char-header">
+            <div class="scp-char-header-left">
+                <span class="scp-char-title-icon"><i class="fa-solid fa-scroll"></i></span>
+                <span class="scp-char-title" data-i18n="Prompt Manager">Prompt Manager</span>
+                <span class="scp-pm-preset" id="scp-pm-preset"></span>
+            </div>
+            <div class="scp-char-header-right">
+                <button class="scp-action-btn" id="scp-pm-update-preset" title="Write the current settings into the preset file, like SillyTavern's &quot;Update current preset&quot;" data-i18n="[title]Write the current settings into the preset file, like SillyTavern's &quot;Update current preset&quot;"><i class="fa-solid fa-floppy-disk"></i><span data-i18n="Update preset file">Update preset file</span></button>
+                <button class="scp-hbtn scp-hbtn-close" id="scp-pm-close">${I.x}</button>
+            </div>
+        </div>
+        <div class="scp-char-body">
+            <div class="scp-char-sidebar">
+                <div class="scp-char-sidebar-header" data-i18n="Prompts (send order)">Prompts (send order)</div>
+                <div class="scp-char-list" id="scp-pm-list"></div>
+            </div>
+            <div class="scp-char-main" id="scp-pm-main">
+                <div class="scp-char-empty-state">
+                    <div class="scp-empty-icon"><i class="fa-solid fa-scroll"></i></div>
+                    <div data-i18n="Select a prompt to edit">Select a prompt to edit</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -393,7 +393,8 @@ export function applyCustomTheme(theme) {
         iconEl, 
         document.getElementById('scp-lb-overlay'), 
         document.getElementById('scp-char-overlay'),
-        document.getElementById('scp-diff-modal'), 
+        document.getElementById('scp-pm-overlay'),
+        document.getElementById('scp-diff-modal'),
         document.getElementById('scp-settings-overlay'), 
         document.getElementById('scp-picker-overlay')
     ].filter(Boolean);
