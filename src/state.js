@@ -8,6 +8,8 @@ export const state = {
     genMeta: null,
     // Final request bodies as they left (newest first, max 5), for the Context modal's Last sent tab.
     requestLog: [],
+    // Idle watch of the stream in flight ({ touch, stop }), see startStreamIdleWatch in api.js.
+    streamIdle: null,
     searchQuery: '',
     searchMatches: [],
     searchIdx: -1,

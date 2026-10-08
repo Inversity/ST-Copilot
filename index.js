@@ -907,6 +907,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       genMeta: null,
       // Final request bodies as they left (newest first, max 5), for the Context modal's Last sent tab.
       requestLog: [],
+      // Idle watch of the stream in flight ({ touch, stop }), see startStreamIdleWatch in api.js.
+      streamIdle: null,
       searchQuery: '',
       searchMatches: [],
       searchIdx: -1,
@@ -15843,6 +15845,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       let lastAt = performance.now();
       return (text, reasoning) => {
           chunks++;
+          state.streamIdle?.touch();
           const now = performance.now();
           if (now - lastAt < 5000) return;
           lastAt = now;
@@ -15852,6 +15855,39 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               reasoningLen: String(reasoning || '').length,
               textTail: String(text || '').slice(-160),
           });
+      };
+  }
+
+  // Shows silence in the status bar. Some models (Opus at high effort through the Claude
+  // subscription proxy) think for minutes between streamed chunks, and with nothing on screen
+  // that looked frozen. After 10s without data the bar says so; every 30s it is logged.
+  const IDLE_NOTICE_SECS = 10;
+  function startStreamIdleWatch() {
+      const textEl = () => document.getElementById('scp-thinking-text');
+      const original = textEl()?.textContent ?? null;
+      let last = performance.now();
+      let showing = false;
+      let lastLoggedAt = 0;
+      const restore = () => {
+          if (!showing) return;
+          showing = false;
+          const el = textEl();
+          if (el && original !== null) el.textContent = original;
+      };
+      const timer = setInterval(() => {
+          const secs = Math.floor((performance.now() - last) / 1000);
+          if (secs < IDLE_NOTICE_SECS) return;
+          const el = textEl();
+          if (el) el.textContent = t`Model still working · no output for ${secs}s`;
+          showing = true;
+          if (secs - lastLoggedAt >= 30) {
+              lastLoggedAt = secs;
+              _dbgAdd('STREAM_IDLE', { secs });
+          }
+      }, 1000);
+      return {
+          touch() { last = performance.now(); lastLoggedAt = 0; restore(); },
+          stop() { clearInterval(timer); restore(); },
       };
   }
 
@@ -15868,6 +15904,17 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
   }
 
   async function callGenerate(session, settings, pendingText, onChunk) {
+      const idle = startStreamIdleWatch();
+      state.streamIdle = idle;
+      try {
+          return await _callGenerate(session, settings, pendingText, onChunk);
+      } finally {
+          idle.stop();
+          if (state.streamIdle === idle) state.streamIdle = null;
+      }
+  }
+
+  async function _callGenerate(session, settings, pendingText, onChunk) {
       const ctx = SillyTavern.getContext();
       const messages = await assembleMessages(session, settings, pendingText);
       const maxTokens = parseInt(settings.maxTokens) || 8200;
