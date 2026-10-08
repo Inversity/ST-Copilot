@@ -517,11 +517,10 @@ export function openCharacterManager() {
     const overlay = document.getElementById('scp-char-overlay');
     if (!overlay) return;
 
-    // Move panel inside copilot window for inline display
-    const win = document.getElementById('scp-window');
-    if (win && overlay.parentElement !== win) {
-        win.appendChild(overlay);
-    }
+    // Full-screen modal on <body>, like the Lorebook Manager. Inside #scp-window it was
+    // positioned and clipped by the window (its backdrop-filter makes it the containing
+    // block for fixed children), while its CSS sizes it to the viewport.
+    if (overlay.parentElement !== document.body) document.body.appendChild(overlay);
 
     applyCustomTheme(getSettings().customTheme || THEME_PRESETS.default);
     _renderCharList();

@@ -5189,3 +5189,11 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
 .st-copilot-settings [style*="color: #888"] {
     color: var(--SmartThemeBodyColor) !important;
 }
+
+/* ── Third-party tooltips ────────────────────────────────────────
+   bringWindowToFront lifts Copilot to z-index 2147483000+, so the
+   SillyTavern-Tooltips extension (z-index 40000) drew underneath the
+   window. Tooltips are pointer-events: none, so topmost is safe. */
+.sttt--tooltip {
+    z-index: 2147483647 !important;
+}
