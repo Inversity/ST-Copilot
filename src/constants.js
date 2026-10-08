@@ -287,6 +287,19 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     // ─── Changelog Data ──────────────────────────────────────────────────────────
 export const CHANGELOG = [
     {
+        version: '3.0.0',
+        date: '10/8/2026',
+        announce: true,
+        notes: [
+            '<strong>Fork release</strong>: continues ST-Copilot at github.com/Inversity/ST-Copilot. Merges the prompt, session and lorebook fixes from the Cheesedozer and keepsanity forks and the streaming fix from upstream PR #19. Full list in CHANGELOG.md.',
+            '<strong>Card edits that work</strong>: get_char_info numbers alternate greetings and returns stored text (macros unexpanded). Anchors fail safe: an anchor that is missing or matches twice changes nothing.',
+            '<strong>Prompt Manager</strong>: menu &gt; Prompt Manager. Edit and toggle your preset\'s prompts. Optional AI prompt edits (Settings &gt; AI) with a diff for each change.',
+            '<strong>Chat</strong>: model label per reply and swipe; delete a single swipe; reasoning stays visible while streaming, its timer stops when the reply starts, and it can be edited. Saving an edited reply no longer deletes later messages.',
+            '<strong>Settings</strong>: AI and Interface tabs. Model override per configuration profile, with the provider\'s model list. Windows resize and remember their size.',
+            '<strong>Context view</strong>: every part of the payload named, your roleplay prompt listed prompt by prompt, token estimates, attachments visible, and a Last sent tab with the real request.',
+        ],
+    },
+    {
         version: '2.9.1',
         date: '9/23/2026',
         announce: true,

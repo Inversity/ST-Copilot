@@ -1,6 +1,12 @@
 # 🤖 ST-Copilot
 ![Banner](Assets/Github/Banner.png)
 
+> **This is a maintained fork.** It continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker from 2.9.0, and merges the fixes from the [Cheesedozer](https://github.com/Cheesedozer/ST-Copilot) and [keepsanity](https://github.com/keepsanity/ST-Copilot) forks and upstream PR #19. Highlights of 3.0.0: reliable card edits (fail-safe anchors, numbered alternate greetings), a Prompt Manager with optional AI edits, per-swipe model labels, a model override, and a Context view that shows exactly what is sent. See [CHANGELOG.md](CHANGELOG.md).
+>
+> **Install:** SillyTavern > Extensions > Install extension > `https://github.com/Inversity/ST-Copilot`. If you already have upstream ST-Copilot installed, uninstall it first; your settings are kept.
+>
+> **Develop:** edit `src/`, then `npm run build` (Rollup bundles `index.js`, which is what SillyTavern loads and must be committed) and `npm test`.
+
 [![SillyTavern Extension](https://img.shields.io/badge/SillyTavern-Extension-blue.svg)](https://docs.sillytavern.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 

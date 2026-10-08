@@ -5,8 +5,8 @@
     "optional": [],
     "js": "index.js",
     "css": "style.css",
-    "author": "QQ-Corporation",
-    "version": "2.9.1",
-    "homePage": "https://github.com/Supker/ST-Copilot",
+    "author": "Inversity (fork of ST-Copilot by QQ-Corporation)",
+    "version": "3.0.0",
+    "homePage": "https://github.com/Inversity/ST-Copilot",
     "auto_update": true
 }
