@@ -80,6 +80,7 @@ export function getSettings() {
         forceStreaming: 'auto',
         applyRegexToContext: true,
         charEditAIEnabled: true,
+        promptEditAIEnabled: false,
         charEditPrompt: '',
         charEditFields: {
             tags: true, description: true, personality: true,

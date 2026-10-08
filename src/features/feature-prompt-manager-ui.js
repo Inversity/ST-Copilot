@@ -1,9 +1,13 @@
 import { EXT_DISPLAY, I, THEME_PRESETS } from '../constants.js';
-import { getSettings } from '../session.js';
+import { getSettings, getCurrentSession, saveSessionsToMetadata } from '../session.js';
 import { applyCustomTheme, bringWindowToFront } from '../ui/ui-window.js';
 import { showCustomDialog, escHtml } from '../utils/util-dom.js';
+import { openTextDiffModal } from '../utils/util-diff.js';
 import { t, translate } from '../utils/util-i18n.js';
-import { getPromptManagerState, applyPromptChanges, updateCurrentPreset } from './feature-prompt-engine.js';
+import {
+    getPromptManagerState, applyPromptChanges, updateCurrentPreset,
+    previewPromptChange, applyPromptChange, stripPromptChangesBlock, reconstructPromptChangesBlock,
+} from './feature-prompt-engine.js';
 
 // Full-screen editor for the prompts SillyTavern sends for roleplay (Chat Completion
 // Prompt Manager, or the Text Completion system prompt). Edits go into ST's live settings
@@ -156,6 +160,153 @@ function _renderDetail() {
     };
     saveBtn.addEventListener('click', () => _saveFn());
     revertBtn.addEventListener('click', () => { _dirty = null; _renderDetail(); });
+}
+
+// ─── Proposal card for AI-proposed prompt edits ─────────────────────────────
+
+const ACTION_LABELS = { replace: '✎ Replace', overwrite: '↺ Overwrite', append: '⬇ Append', prepend: '⬆ Prepend', toggle: '⏻ Toggle' };
+
+// Keeps only still-pending changes in the message, so a re-render can't resurrect an
+// applied or rejected one. When none are left, the block becomes a one-line tally that
+// also tells the model next turn what happened.
+function _syncProposalMessage(msgId, changes, states) {
+    const session = getCurrentSession();
+    const msg = session?.messages.find(m => m.id === msgId);
+    if (!msg) return;
+    const pending = changes.filter((_, i) => states[i] === 'pending');
+    const base = stripPromptChangesBlock(msg.content);
+    if (pending.length) {
+        msg.content = `${base}\n\n${reconstructPromptChangesBlock(pending)}`;
+    } else {
+        const tally = msg._promptEditTally || { applied: 0, rejected: 0 };
+        msg.content = `${base}\n\n*Prompt edits: ${tally.applied} applied, ${tally.rejected} rejected.*`;
+    }
+    if (msg.swipes) msg.swipes[msg.swipeIndex || 0] = { ...msg.swipes[msg.swipeIndex || 0], content: msg.content };
+    saveSessionsToMetadata();
+}
+
+function _refreshManagerIfOpen() {
+    const overlay = document.getElementById('scp-pm-overlay');
+    if (overlay && overlay.style.display !== 'none' && !_dirty) { _renderList(); _renderDetail(); }
+}
+
+export function renderPromptProposalCard(changes, msgEl) {
+    const msgId = msgEl.dataset.id;
+    msgEl.querySelectorAll('.scp-pm-proposal-card').forEach(c => c.remove());
+    const states = changes.map(() => 'pending');
+
+    const card = document.createElement('div');
+    card.className = 'scp-lb-proposal-card scp-pm-proposal-card';
+    card.dataset.for = msgId;
+    card.style.margin = '8px 0 0 0';
+
+    const header = document.createElement('div');
+    header.className = 'scp-lb-proposal-header';
+    const count = document.createElement('span');
+    count.className = 'scp-lb-proposal-count';
+    const updateCount = () => { count.textContent = t`${states.filter(s => s === 'pending').length} pending`; };
+    const headerLeft = document.createElement('div');
+    headerLeft.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0';
+    headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-accent);display:flex"><i class="fa-solid fa-scroll"></i></span><span class="scp-lb-proposal-title">${escHtml(translate('Proposed Prompt Edits'))}</span>`;
+    headerLeft.appendChild(count);
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'scp-lb-proposal-dismiss';
+    dismissBtn.innerHTML = I.x;
+    dismissBtn.title = translate('Reject all remaining');
+    header.appendChild(headerLeft);
+    header.appendChild(dismissBtn);
+    card.appendChild(header);
+
+    const list = document.createElement('div');
+    list.className = 'scp-lb-proposal-list';
+    card.appendChild(list);
+
+    const tally = () => {
+        const msg = getCurrentSession()?.messages.find(m => m.id === msgId);
+        if (msg && !msg._promptEditTally) msg._promptEditTally = { applied: 0, rejected: 0 };
+        return msg?._promptEditTally || { applied: 0, rejected: 0 };
+    };
+    const finish = (i, state, itemEl) => {
+        states[i] = state;
+        tally()[state] += 1;
+        itemEl.classList.add(state === 'applied' ? 'scp-lb-item-applied' : 'scp-lb-item-rejected');
+        itemEl.querySelectorAll('button').forEach(b => { b.disabled = true; });
+        _syncProposalMessage(msgId, changes, states);
+        updateCount();
+        if (!states.includes('pending')) setTimeout(() => card.remove(), 600);
+    };
+
+    const items = changes.map((change, i) => {
+        const pv = previewPromptChange(change);
+        const item = document.createElement('div');
+        item.className = 'scp-lb-proposal-item scp-lb-proposal-edit';
+        const hdr = document.createElement('div');
+        hdr.className = 'scp-lb-proposal-item-header';
+        const meta = document.createElement('div');
+        meta.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap;min-width:0';
+        const what = change.action === 'toggle' ? ` → ${change.enabled ? 'on' : 'off'}` : '';
+        meta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(ACTION_LABELS[change.action] || change.action)}</span><span class="scp-lb-proposal-name">${escHtml((pv.entry?.name || change.id) + what)}</span>`;
+        if (!pv.ok) {
+            item.style.borderLeftColor = 'var(--scp-danger)';
+            const warn = document.createElement('div');
+            warn.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;flex-basis:100%';
+            warn.textContent = `⚠ ${pv.reason}`;
+            meta.appendChild(warn);
+        }
+
+        const btns = document.createElement('div');
+        btns.className = 'scp-lb-proposal-item-btns';
+        if (pv.ok && change.action !== 'toggle') {
+            const diffBtn = document.createElement('button');
+            diffBtn.className = 'scp-lb-proposal-diff-btn';
+            diffBtn.title = translate('View diff');
+            diffBtn.innerHTML = I.diff;
+            diffBtn.addEventListener('click', e => {
+                e.stopPropagation();
+                const now = previewPromptChange(change);
+                if (now.ok) openTextDiffModal(t`Diff: ${now.entry.name}`, now.before, now.after);
+            });
+            btns.appendChild(diffBtn);
+        }
+        const applyBtn = document.createElement('button');
+        applyBtn.className = 'scp-lb-proposal-item-apply';
+        applyBtn.textContent = '✓';
+        applyBtn.title = pv.ok ? translate('Apply') : pv.reason;
+        applyBtn.disabled = !pv.ok;
+        applyBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            if (states[i] !== 'pending') return;
+            // Re-checked at click time: an earlier accepted edit may have changed the text.
+            const r = applyPromptChange(change);
+            if (!r.ok) { toastr.warning(r.reason, EXT_DISPLAY); return; }
+            finish(i, 'applied', item);
+            _refreshManagerIfOpen();
+        });
+        const rejectBtn = document.createElement('button');
+        rejectBtn.className = 'scp-lb-proposal-item-reject';
+        rejectBtn.textContent = '✕';
+        rejectBtn.title = translate('Reject');
+        rejectBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            if (states[i] === 'pending') finish(i, 'rejected', item);
+        });
+        btns.appendChild(applyBtn);
+        btns.appendChild(rejectBtn);
+        hdr.appendChild(meta);
+        hdr.appendChild(btns);
+        item.appendChild(hdr);
+        list.appendChild(item);
+        return item;
+    });
+
+    dismissBtn.addEventListener('click', () => {
+        states.forEach((s, i) => { if (s === 'pending') finish(i, 'rejected', items[i]); });
+    });
+
+    updateCount();
+    const bodyEl = msgEl.querySelector('.scp-msg-body');
+    if (bodyEl) bodyEl.insertBefore(card, bodyEl.querySelector('.scp-swipe-bar'));
+    else msgEl.after(card);
 }
 
 export function openPromptManager() {

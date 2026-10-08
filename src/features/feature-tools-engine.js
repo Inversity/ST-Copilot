@@ -3,6 +3,7 @@ import { getSettings } from '../session.js';
 import { _ensureWrapped } from '../utils/util-text.js';
 import { getCharInfo, getTagsForCharacter } from '../utils/util-st.js';
 import { fetchWorldInfoBook, getDisplayName, getActiveLorebookNames, wiEntriesToArray } from './feature-lorebook-engine.js';
+import { getPromptsForTool } from './feature-prompt-engine.js';
 
 export function getEnabledTools() {
     const s = getSettings();
@@ -200,6 +201,9 @@ export async function executeTool(toolName, toolInput) {
                 }
             }
             return result;
+        }
+        case 'get_prompts': {
+            return getPromptsForTool(toolInput?.ids);
         }
         case 'get_chat_stats': {
             const msgs = ctx.chat || [];

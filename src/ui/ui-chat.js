@@ -14,6 +14,8 @@ import { renderCharProposalCard, renderCharCreationCard } from '../features/feat
 import { applySearchReplaceToField } from '../utils/util-text.js';
 import { parseChatChangesFromText, stripChatChangesBlock } from '../features/feature-chatedit-engine.js';
 import { renderChatProposalCard } from '../features/feature-chatedit-ui.js';
+import { parsePromptChangesFromText, stripPromptChangesBlock, PROMPT_CHANGES_BLOCK } from '../features/feature-prompt-engine.js';
+import { renderPromptProposalCard } from '../features/feature-prompt-manager-ui.js';
 import { stripMemoryBlock } from '../features/feature-memory.js';
 import { parseToolCallsFromText } from '../features/feature-tools-engine.js';
 import { postProcessToolCalls } from '../features/feature-tools-ui.js';
@@ -564,7 +566,9 @@ export function _renderMsgBodyContent(msgEl, msg) {
         const charChanges = parseCharChangesFromText(msg.content);
         const charCreation = parseCharCreationFromText(msg.content);
         const chatChanges = parseChatChangesFromText(msg.content);
-        const needsStrip = lbChanges?.length || charChanges?.length || charCreation || chatChanges?.length;
+        const promptChanges = msg.role !== 'user' ? parsePromptChangesFromText(msg.content) : null;
+        const hasPromptBlock = msg.role !== 'user' && msg.content?.includes('```' + PROMPT_CHANGES_BLOCK);
+        const needsStrip = lbChanges?.length || charChanges?.length || charCreation || chatChanges?.length || hasPromptBlock;
 
         if (needsStrip) {
             let stripped = displayText;
@@ -572,14 +576,16 @@ export function _renderMsgBodyContent(msgEl, msg) {
             if (charChanges?.length) stripped = stripCharChangesBlock(stripped);
             if (charCreation) stripped = stripCharCreationBlock(stripped);
             if (chatChanges?.length) stripped = stripChatChangesBlock(stripped);
-            
+            if (hasPromptBlock) stripped = stripPromptChangesBlock(stripped);
+
             contentEl.innerHTML = renderMarkdown(getDisplayContent(stripped, settings).content);
             postProcessHTMLBlocks(contentEl);
-            
+
             if (lbChanges?.length) renderProposalCard(lbChanges, msgEl);
             if (charChanges?.length) renderCharProposalCard(charChanges, msgEl);
             if (charCreation) renderCharCreationCard(charCreation, msgEl);
             if (chatChanges?.length) renderChatProposalCard(chatChanges, msgEl);
+            if (promptChanges?.length) renderPromptProposalCard(promptChanges, msgEl);
         } else {
             contentEl.innerHTML = renderMarkdown(getDisplayContent(displayText, settings).content);
             postProcessHTMLBlocks(contentEl);

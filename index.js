@@ -792,6 +792,20 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               },
           },
           {
+              id: 'get_prompts',
+              name: 'get_prompts',
+              label: 'Get Roleplay Prompts',
+              icon: 'fa-scroll',
+              description: "Read the user's SillyTavern roleplay prompts (Prompt Manager of the active preset), as stored. Without ids: a list of { id, name, role, enabled, slot, chars }. With ids: those prompts' full content, for reading or as exact edit anchors.",
+              settingKey: 'toolsEnabled_get_prompts',
+              schema: {
+                  type: 'object',
+                  properties: {
+                      ids: { type: 'array', items: { type: 'string' }, description: 'Prompt ids (or names) to read in full. Omit to list all prompts.' },
+                  },
+              },
+          },
+          {
               id: 'get_chat_stats',
               name: 'get_chat_stats',
               label: 'Get Chat Statistics',
@@ -1601,6 +1615,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           forceStreaming: 'auto',
           applyRegexToContext: true,
           charEditAIEnabled: true,
+          promptEditAIEnabled: false,
           charEditPrompt: '',
           charEditFields: {
               tags: true, description: true, personality: true,
@@ -8083,6 +8098,579 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       bringWindowToFront();
   }
 
+  const PROMPT_CHANGES_BLOCK = 'prompt-changes';
+
+  // Reads and writes the prompts SillyTavern sends for roleplay, the same objects ST's own
+  // Prompt Manager edits. Chat Completion: oai_settings.prompts in the global prompt order.
+  // Text Completion: the Advanced Formatting system prompt.
+
+  function _cc(ctx) {
+      const cc = ctx.chatCompletionSettings || {};
+      const order = (cc.prompt_order || []).find(o => String(o.character_id) === ST_GLOBAL_PROMPT_ORDER_ID)?.order || [];
+      return { cc, prompts: cc.prompts || [], order };
+  }
+
+  // { mode: 'cc'|'tc', presetName, entries: [{ id, name, role, content, marker, enabled }] }
+  // Chat Completion entries follow ST's order, including disabled prompts and markers.
+  function getPromptManagerState() {
+      const ctx = SillyTavern.getContext();
+      if (ctx.mainApi === 'openai') {
+          const { cc, prompts, order } = _cc(ctx);
+          const entries = order
+              .map(o => {
+                  const p = prompts.find(x => x.identifier === o.identifier);
+                  if (!p) return null;
+                  return {
+                      id: p.identifier,
+                      name: p.name || p.identifier,
+                      role: p.role || 'system',
+                      content: p.content ?? '',
+                      marker: !!p.marker,
+                      enabled: !!o.enabled,
+                  };
+              })
+              .filter(Boolean);
+          return { mode: 'cc', presetName: cc.preset_settings_openai || 'Default', entries };
+      }
+      const sp = ctx.powerUserSettings?.sysprompt || {};
+      return {
+          mode: 'tc',
+          presetName: sp.name || '',
+          entries: [{ id: 'sysprompt', name: sp.name || 'System Prompt', role: 'system', content: sp.content ?? '', marker: false, enabled: !!sp.enabled }],
+      };
+  }
+
+  // changes: { [id]: { content?, name?, role?, enabled? } }. Writes into ST's live settings
+  // objects and saves settings.json, like ST's Prompt Manager. Markers keep their content
+  // (ST fills them in); only their enabled flag can change. Returns the ids applied.
+  function applyPromptChanges(changes) {
+      const ctx = SillyTavern.getContext();
+      const applied = [];
+      if (ctx.mainApi === 'openai') {
+          const { prompts, order } = _cc(ctx);
+          for (const [id, ch] of Object.entries(changes || {})) {
+              const p = prompts.find(x => x.identifier === id);
+              if (!p) continue;
+              if (!p.marker) {
+                  if (typeof ch.content === 'string') p.content = ch.content;
+                  if (typeof ch.name === 'string' && ch.name.trim()) p.name = ch.name.trim();
+                  if (['system', 'user', 'assistant'].includes(ch.role)) p.role = ch.role;
+              }
+              if (typeof ch.enabled === 'boolean') {
+                  const o = order.find(x => x.identifier === id);
+                  if (o) o.enabled = ch.enabled;
+              }
+              applied.push(id);
+          }
+      } else {
+          const sp = ctx.powerUserSettings?.sysprompt;
+          const ch = changes?.sysprompt;
+          if (sp && ch) {
+              if (typeof ch.content === 'string') sp.content = ch.content;
+              if (typeof ch.enabled === 'boolean') sp.enabled = ch.enabled;
+              applied.push('sysprompt');
+          }
+      }
+      if (applied.length && typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
+      return applied;
+  }
+
+  // ─── AI-proposed edits ──────────────────────────────────────────────────────
+
+  // get_prompts tool: without ids, a listing; with ids, those prompts' stored content.
+  function getPromptsForTool(ids) {
+      const { mode, presetName, entries } = getPromptManagerState();
+      const want = Array.isArray(ids) && ids.length ? new Set(ids.map(String)) : null;
+      if (!want) {
+          return {
+              mode, preset: presetName,
+              prompts: entries.map(e => ({ id: e.id, name: e.name, role: e.role, enabled: e.enabled, slot: e.marker, chars: e.marker ? 0 : String(e.content || '').length })),
+              note: 'Call again with ids to read content. Slots are filled by SillyTavern and cannot be edited, only toggled.',
+          };
+      }
+      const found = entries.filter(e => want.has(e.id) || want.has(e.name));
+      return {
+          prompts: found.map(e => ({ id: e.id, name: e.name, role: e.role, enabled: e.enabled, slot: e.marker, content: e.marker ? null : e.content })),
+          missing: [...want].filter(w => !found.some(e => e.id === w || e.name === w)),
+      };
+  }
+
+  const _ATTR_RE = /([\w-]+)\s*=\s*"([^"]*)"/g;
+  function _attrs(s) {
+      const out = {};
+      for (const m of String(s || '').matchAll(_ATTR_RE)) out[m[1]] = m[2];
+      return out;
+  }
+
+  // Finished ```prompt-changes block only; an unterminated one is still streaming.
+  function _extractBlock(text) {
+      const m = String(text || '').match(new RegExp('```' + PROMPT_CHANGES_BLOCK + '[^\\n]*\\n([\\s\\S]*?)```'));
+      return m ? m[1] : null;
+  }
+
+  // [{ action: 'replace'|'overwrite'|'append'|'prepend'|'toggle', id, patches?, value?, enabled? }]
+  function parsePromptChangesFromText(text) {
+      const raw = _extractBlock(text);
+      if (!raw) return null;
+      const changes = [];
+      const tagRe = /<(replace|overwrite|append|prepend)\b([^>]*)>([\s\S]*?)<\/\1>/g;
+      for (const m of raw.matchAll(tagRe)) {
+          const [, action, attrStr, body] = m;
+          const id = _attrs(attrStr).id;
+          if (!id) continue;
+          if (action === 'replace') {
+              const patches = parseAnchorPatches(body);
+              // A replace without a usable patch must not turn into an overwrite.
+              if (patches.length) changes.push({ action, id, patches });
+          } else {
+              changes.push({ action, id, value: body.replace(/^\r?\n/, '').replace(/\r?\n$/, '') });
+          }
+      }
+      for (const m of raw.matchAll(/<toggle\b([^>]*?)\/?>/g)) {
+          const a = _attrs(m[1]);
+          if (a.id && (a.enabled === 'true' || a.enabled === 'false')) changes.push({ action: 'toggle', id: a.id, enabled: a.enabled === 'true' });
+      }
+      return changes.length ? changes : null;
+  }
+
+  function stripPromptChangesBlock(text) {
+      return String(text || '')
+          .replace(new RegExp('```' + PROMPT_CHANGES_BLOCK + '[\\s\\S]*?```', 'g'), '')
+          .replace(new RegExp('```' + PROMPT_CHANGES_BLOCK + '[\\s\\S]*$'), '')
+          .trim();
+  }
+
+  // Rebuilds a block from the still-pending changes, so a re-render shows only those.
+  function reconstructPromptChangesBlock(changes) {
+      const body = changes.map(c => {
+          if (c.action === 'toggle') return `<toggle id="${c.id}" enabled="${c.enabled}"/>`;
+          if (c.action === 'replace') {
+              const patches = c.patches.map(p => `<<<<<<< ANCHOR\n${p.search}\n=======\n${p.replace}\n>>>>>>> REPLACE`).join('\n');
+              return `<replace id="${c.id}">\n${patches}\n</replace>`;
+          }
+          return `<${c.action} id="${c.id}">\n${c.value}\n</${c.action}>`;
+      }).join('\n');
+      return '```' + PROMPT_CHANGES_BLOCK + '\n' + body + '\n```';
+  }
+
+  // What a change would produce against the prompt as it is now. Fails safe: an anchor that
+  // doesn't match (or matches twice) returns ok: false and changes nothing.
+  function previewPromptChange(change) {
+      const entry = getPromptManagerState().entries.find(e => e.id === change.id || e.name === change.id);
+      if (!entry) return { ok: false, reason: `No prompt with id "${change.id}"` };
+      if (change.action === 'toggle') return { ok: true, entry, before: entry.content, after: entry.content, enabled: change.enabled };
+      if (entry.marker) return { ok: false, entry, reason: `"${entry.name}" is a slot; its content can't be edited` };
+      const before = String(entry.content || '');
+      let after = before;
+      if (change.action === 'overwrite') after = change.value;
+      else if (change.action === 'append') after = before ? `${before}\n\n${change.value}` : change.value;
+      else if (change.action === 'prepend') after = before ? `${change.value}\n\n${before}` : change.value;
+      else if (change.action === 'replace') {
+          for (const p of change.patches) {
+              const r = applySearchReplaceToField(after, p.search, p.replace);
+              if (!r.matched) {
+                  return { ok: false, entry, reason: r.reason === 'ambiguous'
+                      ? `Anchor matches more than one place: "${p.search.slice(0, 50)}"`
+                      : `Anchor not found: "${p.search.slice(0, 50)}"` };
+              }
+              after = r.result;
+          }
+      }
+      return { ok: true, entry, before, after };
+  }
+
+  function applyPromptChange(change) {
+      const pv = previewPromptChange(change);
+      if (!pv.ok) return pv;
+      const id = pv.entry.id;
+      applyPromptChanges(change.action === 'toggle' ? { [id]: { enabled: change.enabled } } : { [id]: { content: pv.after } });
+      return pv;
+  }
+
+  const DEFAULT_PROMPT_EDIT_DIRECTIVE = `<prompt_editing>
+You can edit the user's SillyTavern roleplay prompts (the Prompt Manager prompts of the active preset). Read them first with the get_prompts tool: call it without ids for the list, then with ids for the content you need. Never edit a prompt you have not read in this turn; an accepted edit changes the text.
+
+To propose changes, end your reply with one block:
+\`\`\`${PROMPT_CHANGES_BLOCK}
+<replace id="PROMPT_ID">
+<<<<<<< ANCHOR
+exact current text to find (or "first words || last words" for a long span)
+=======
+replacement text
+>>>>>>> REPLACE
+</replace>
+<append id="PROMPT_ID">text added at the end</append>
+<prepend id="PROMPT_ID">text added at the start</prepend>
+<overwrite id="PROMPT_ID">entire new content</overwrite>
+<toggle id="PROMPT_ID" enabled="false"/>
+\`\`\`
+
+Rules:
+- id is the prompt id from get_prompts (e.g. "main" or a long generated id), copied exactly.
+- Prefer replace. Its anchor must be copied verbatim from the current content and must match exactly one place; otherwise the edit is refused and nothing changes. Use overwrite only for a full rewrite.
+- Keep macros such as {{char}} and {{user}} exactly as they appear.
+- Slots (chatHistory, charDescription, ...) can only be toggled.
+- The user reviews every change before it is applied.
+</prompt_editing>`;
+
+  function buildPromptEditAIInstructions(settings) {
+      return settings?.promptEditAIEnabled ? DEFAULT_PROMPT_EDIT_DIRECTIVE : '';
+  }
+
+  // Same as ST's "Update current preset": writes the current settings into the preset file.
+  async function updateCurrentPreset() {
+      const ctx = SillyTavern.getContext();
+      const pm = typeof ctx.getPresetManager === 'function' ? ctx.getPresetManager(ctx.mainApi === 'openai' ? 'openai' : 'sysprompt') : null;
+      if (!pm || typeof pm.updatePreset !== 'function') throw new Error('Preset manager not available');
+      await pm.updatePreset();
+  }
+
+  // Full-screen editor for the prompts SillyTavern sends for roleplay (Chat Completion
+  // Prompt Manager, or the Text Completion system prompt). Edits go into ST's live settings
+  // and settings.json, exactly like ST's own Prompt Manager; "Update preset file" also
+  // writes them into the preset, like ST's "Update current preset".
+
+  let _selectedId = null;
+  let _dirty = null;       // pending { content, name, role } for the selected prompt, or null
+  let _saveFn = null;
+
+  async function _confirmDiscard() {
+      if (!_dirty) return true;
+      return showCustomDialog({
+          type: 'confirm',
+          title: translate('Unsaved Changes'),
+          message: translate('Discard the unsaved changes to this prompt?'),
+      });
+  }
+
+  function _roleBadge(entry) {
+      if (entry.marker) return `<span class="scp-pm-badge scp-pm-badge-slot">${translate('slot')}</span>`;
+      return `<span class="scp-pm-badge">${escHtml(entry.role)}</span>`;
+  }
+
+  function _renderList() {
+      const listEl = document.getElementById('scp-pm-list');
+      const presetEl = document.getElementById('scp-pm-preset');
+      if (!listEl) return;
+      const state = getPromptManagerState();
+      if (presetEl) presetEl.textContent = state.presetName ? (state.mode === 'cc' ? t`Preset: ${state.presetName}` : t`System prompt: ${state.presetName}`) : '';
+      listEl.innerHTML = '';
+
+      for (const entry of state.entries) {
+          const row = document.createElement('div');
+          row.className = `scp-char-row scp-pm-row${entry.enabled ? '' : ' scp-pm-disabled'}${entry.marker ? ' scp-pm-marker' : ''}`;
+          row.dataset.id = entry.id;
+          row.classList.toggle('selected', entry.id === _selectedId);
+
+          const name = document.createElement('span');
+          name.className = 'scp-char-row-name';
+          name.textContent = entry.name;
+          row.appendChild(name);
+          row.insertAdjacentHTML('beforeend', _roleBadge(entry));
+
+          // Same on/off as ST's Prompt Manager toggle; applies immediately.
+          const cb = document.createElement('div');
+          cb.className = `scp-char-row-cb${entry.enabled ? ' checked' : ''}`;
+          cb.title = translate('Send this prompt');
+          cb.addEventListener('click', e => {
+              e.stopPropagation();
+              applyPromptChanges({ [entry.id]: { enabled: !entry.enabled } });
+              _renderList();
+          });
+          row.appendChild(cb);
+
+          row.addEventListener('click', async () => {
+              if (entry.id === _selectedId) return;
+              if (!(await _confirmDiscard())) return;
+              _selectedId = entry.id;
+              _dirty = null;
+              _renderList();
+              _renderDetail();
+          });
+          listEl.appendChild(row);
+      }
+
+      if (!state.entries.length) {
+          listEl.innerHTML = `<div class="scp-char-list-empty">${translate('No prompts found for the current API.')}</div>`;
+      }
+  }
+
+  function _renderDetail() {
+      const main = document.getElementById('scp-pm-main');
+      if (!main) return;
+      const entry = getPromptManagerState().entries.find(e => e.id === _selectedId);
+      main.innerHTML = '';
+      _dirty = null;
+      _saveFn = null;
+      if (!entry) {
+          main.innerHTML = `<div class="scp-char-empty-state"><div class="scp-empty-icon"><i class="fa-solid fa-scroll"></i></div><div>${translate('Select a prompt to edit')}</div></div>`;
+          return;
+      }
+
+      const pane = document.createElement('div');
+      pane.className = 'scp-char-pane scp-pm-pane';
+
+      if (entry.marker) {
+          pane.innerHTML = `
+            <div class="scp-pm-title-row"><span class="scp-pm-title">${escHtml(entry.name)}</span>${_roleBadge(entry)}</div>
+            <div class="scp-pm-note">${translate('This is a slot SillyTavern fills in at send time (card fields, chat history, lorebook entries). Its content is not editable here; use the checkbox in the list to turn it on or off.')}</div>`;
+          main.appendChild(pane);
+          return;
+      }
+
+      const top = document.createElement('div');
+      top.className = 'scp-pm-top';
+      top.innerHTML = `
+        <input type="text" class="scp-char-field-input scp-pm-name" ${entry.id === 'sysprompt' ? 'disabled' : ''}>
+        <select class="scp-sp-select scp-pm-role" ${entry.id === 'sysprompt' ? 'disabled' : ''}>
+            <option value="system">system</option><option value="user">user</option><option value="assistant">assistant</option>
+        </select>
+        <span class="scp-char-field-tokens scp-pm-tokens"></span>
+        <button class="scp-action-btn scp-char-banner-save-btn scp-pm-save" disabled style="opacity:.4">${I.check}<span>${translate('Save')}</span></button>
+        <button class="scp-action-btn scp-pm-revert" disabled style="opacity:.4">${I.x}<span>${translate('Revert')}</span></button>`;
+      pane.appendChild(top);
+
+      const ta = document.createElement('textarea');
+      ta.className = 'scp-char-field-textarea scp-pm-content';
+      ta.spellcheck = false;
+      pane.appendChild(ta);
+      main.appendChild(pane);
+
+      const nameEl = top.querySelector('.scp-pm-name');
+      const roleEl = top.querySelector('.scp-pm-role');
+      const tokEl = top.querySelector('.scp-pm-tokens');
+      const saveBtn = top.querySelector('.scp-pm-save');
+      const revertBtn = top.querySelector('.scp-pm-revert');
+      nameEl.value = entry.name;
+      roleEl.value = entry.role;
+      ta.value = entry.content;
+
+      const countTokens = async text => {
+          try {
+              const n = await (await Promise.resolve().then(function () { return api; })).estimateTokens(text);
+              if (tokEl.isConnected) tokEl.textContent = `[~${n} tkns]`;
+          } catch (_) { /* token count is cosmetic */ }
+      };
+      countTokens(entry.content);
+
+      let tokTimer = null;
+      const onEdit = () => {
+          const changed = ta.value !== entry.content || nameEl.value !== entry.name || roleEl.value !== entry.role;
+          _dirty = changed ? { content: ta.value, name: nameEl.value, role: roleEl.value } : null;
+          for (const b of [saveBtn, revertBtn]) { b.disabled = !changed; b.style.opacity = changed ? '1' : '0.4'; }
+          clearTimeout(tokTimer);
+          tokTimer = setTimeout(() => countTokens(ta.value), 600);
+      };
+      ta.addEventListener('input', onEdit);
+      nameEl.addEventListener('input', onEdit);
+      roleEl.addEventListener('change', onEdit);
+
+      _saveFn = () => {
+          if (!_dirty) return true;
+          applyPromptChanges({ [entry.id]: _dirty });
+          _dirty = null;
+          toastr.success(translate('Prompt saved to SillyTavern settings. Use "Update preset file" to also store it in the preset.'), EXT_DISPLAY, { timeOut: 6000 });
+          _renderList();
+          _renderDetail();
+          return true;
+      };
+      saveBtn.addEventListener('click', () => _saveFn());
+      revertBtn.addEventListener('click', () => { _dirty = null; _renderDetail(); });
+  }
+
+  // ─── Proposal card for AI-proposed prompt edits ─────────────────────────────
+
+  const ACTION_LABELS = { replace: '✎ Replace', overwrite: '↺ Overwrite', append: '⬇ Append', prepend: '⬆ Prepend', toggle: '⏻ Toggle' };
+
+  // Keeps only still-pending changes in the message, so a re-render can't resurrect an
+  // applied or rejected one. When none are left, the block becomes a one-line tally that
+  // also tells the model next turn what happened.
+  function _syncProposalMessage(msgId, changes, states) {
+      const session = getCurrentSession();
+      const msg = session?.messages.find(m => m.id === msgId);
+      if (!msg) return;
+      const pending = changes.filter((_, i) => states[i] === 'pending');
+      const base = stripPromptChangesBlock(msg.content);
+      if (pending.length) {
+          msg.content = `${base}\n\n${reconstructPromptChangesBlock(pending)}`;
+      } else {
+          const tally = msg._promptEditTally || { applied: 0, rejected: 0 };
+          msg.content = `${base}\n\n*Prompt edits: ${tally.applied} applied, ${tally.rejected} rejected.*`;
+      }
+      if (msg.swipes) msg.swipes[msg.swipeIndex || 0] = { ...msg.swipes[msg.swipeIndex || 0], content: msg.content };
+      saveSessionsToMetadata();
+  }
+
+  function _refreshManagerIfOpen() {
+      const overlay = document.getElementById('scp-pm-overlay');
+      if (overlay && overlay.style.display !== 'none' && !_dirty) { _renderList(); _renderDetail(); }
+  }
+
+  function renderPromptProposalCard(changes, msgEl) {
+      const msgId = msgEl.dataset.id;
+      msgEl.querySelectorAll('.scp-pm-proposal-card').forEach(c => c.remove());
+      const states = changes.map(() => 'pending');
+
+      const card = document.createElement('div');
+      card.className = 'scp-lb-proposal-card scp-pm-proposal-card';
+      card.dataset.for = msgId;
+      card.style.margin = '8px 0 0 0';
+
+      const header = document.createElement('div');
+      header.className = 'scp-lb-proposal-header';
+      const count = document.createElement('span');
+      count.className = 'scp-lb-proposal-count';
+      const updateCount = () => { count.textContent = t`${states.filter(s => s === 'pending').length} pending`; };
+      const headerLeft = document.createElement('div');
+      headerLeft.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0';
+      headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-accent);display:flex"><i class="fa-solid fa-scroll"></i></span><span class="scp-lb-proposal-title">${escHtml(translate('Proposed Prompt Edits'))}</span>`;
+      headerLeft.appendChild(count);
+      const dismissBtn = document.createElement('button');
+      dismissBtn.className = 'scp-lb-proposal-dismiss';
+      dismissBtn.innerHTML = I.x;
+      dismissBtn.title = translate('Reject all remaining');
+      header.appendChild(headerLeft);
+      header.appendChild(dismissBtn);
+      card.appendChild(header);
+
+      const list = document.createElement('div');
+      list.className = 'scp-lb-proposal-list';
+      card.appendChild(list);
+
+      const tally = () => {
+          const msg = getCurrentSession()?.messages.find(m => m.id === msgId);
+          if (msg && !msg._promptEditTally) msg._promptEditTally = { applied: 0, rejected: 0 };
+          return msg?._promptEditTally || { applied: 0, rejected: 0 };
+      };
+      const finish = (i, state, itemEl) => {
+          states[i] = state;
+          tally()[state] += 1;
+          itemEl.classList.add(state === 'applied' ? 'scp-lb-item-applied' : 'scp-lb-item-rejected');
+          itemEl.querySelectorAll('button').forEach(b => { b.disabled = true; });
+          _syncProposalMessage(msgId, changes, states);
+          updateCount();
+          if (!states.includes('pending')) setTimeout(() => card.remove(), 600);
+      };
+
+      const items = changes.map((change, i) => {
+          const pv = previewPromptChange(change);
+          const item = document.createElement('div');
+          item.className = 'scp-lb-proposal-item scp-lb-proposal-edit';
+          const hdr = document.createElement('div');
+          hdr.className = 'scp-lb-proposal-item-header';
+          const meta = document.createElement('div');
+          meta.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap;min-width:0';
+          const what = change.action === 'toggle' ? ` → ${change.enabled ? 'on' : 'off'}` : '';
+          meta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(ACTION_LABELS[change.action] || change.action)}</span><span class="scp-lb-proposal-name">${escHtml((pv.entry?.name || change.id) + what)}</span>`;
+          if (!pv.ok) {
+              item.style.borderLeftColor = 'var(--scp-danger)';
+              const warn = document.createElement('div');
+              warn.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;flex-basis:100%';
+              warn.textContent = `⚠ ${pv.reason}`;
+              meta.appendChild(warn);
+          }
+
+          const btns = document.createElement('div');
+          btns.className = 'scp-lb-proposal-item-btns';
+          if (pv.ok && change.action !== 'toggle') {
+              const diffBtn = document.createElement('button');
+              diffBtn.className = 'scp-lb-proposal-diff-btn';
+              diffBtn.title = translate('View diff');
+              diffBtn.innerHTML = I.diff;
+              diffBtn.addEventListener('click', e => {
+                  e.stopPropagation();
+                  const now = previewPromptChange(change);
+                  if (now.ok) openTextDiffModal(t`Diff: ${now.entry.name}`, now.before, now.after);
+              });
+              btns.appendChild(diffBtn);
+          }
+          const applyBtn = document.createElement('button');
+          applyBtn.className = 'scp-lb-proposal-item-apply';
+          applyBtn.textContent = '✓';
+          applyBtn.title = pv.ok ? translate('Apply') : pv.reason;
+          applyBtn.disabled = !pv.ok;
+          applyBtn.addEventListener('click', e => {
+              e.stopPropagation();
+              if (states[i] !== 'pending') return;
+              // Re-checked at click time: an earlier accepted edit may have changed the text.
+              const r = applyPromptChange(change);
+              if (!r.ok) { toastr.warning(r.reason, EXT_DISPLAY); return; }
+              finish(i, 'applied', item);
+              _refreshManagerIfOpen();
+          });
+          const rejectBtn = document.createElement('button');
+          rejectBtn.className = 'scp-lb-proposal-item-reject';
+          rejectBtn.textContent = '✕';
+          rejectBtn.title = translate('Reject');
+          rejectBtn.addEventListener('click', e => {
+              e.stopPropagation();
+              if (states[i] === 'pending') finish(i, 'rejected', item);
+          });
+          btns.appendChild(applyBtn);
+          btns.appendChild(rejectBtn);
+          hdr.appendChild(meta);
+          hdr.appendChild(btns);
+          item.appendChild(hdr);
+          list.appendChild(item);
+          return item;
+      });
+
+      dismissBtn.addEventListener('click', () => {
+          states.forEach((s, i) => { if (s === 'pending') finish(i, 'rejected', items[i]); });
+      });
+
+      updateCount();
+      const bodyEl = msgEl.querySelector('.scp-msg-body');
+      if (bodyEl) bodyEl.insertBefore(card, bodyEl.querySelector('.scp-swipe-bar'));
+      else msgEl.after(card);
+  }
+
+  function openPromptManager() {
+      const overlay = document.getElementById('scp-pm-overlay');
+      if (!overlay) return;
+      if (overlay.parentElement !== document.body) document.body.appendChild(overlay);
+      applyCustomTheme(getSettings().customTheme || THEME_PRESETS.default);
+      const entries = getPromptManagerState().entries;
+      if (!entries.some(e => e.id === _selectedId)) _selectedId = entries.find(e => !e.marker)?.id || null;
+      _renderList();
+      _renderDetail();
+      overlay.style.display = 'flex';
+      bringWindowToFront();
+  }
+
+  async function closePromptManager() {
+      const overlay = document.getElementById('scp-pm-overlay');
+      if (!overlay) return;
+      if (!(await _confirmDiscard())) return;
+      _dirty = null;
+      overlay.style.display = 'none';
+  }
+
+  function setupPromptManagerListeners() {
+      const overlay = document.getElementById('scp-pm-overlay');
+      if (!overlay) return;
+      let downTarget = null;
+      overlay.addEventListener('mousedown', e => { downTarget = e.target; });
+      overlay.addEventListener('click', e => { if (e.target === overlay && downTarget === overlay) closePromptManager(); });
+      document.getElementById('scp-pm-close')?.addEventListener('click', () => closePromptManager());
+      document.getElementById('scp-pm-update-preset')?.addEventListener('click', async () => {
+          if (_dirty && _saveFn) _saveFn();
+          const { presetName } = getPromptManagerState();
+          const ok = await showCustomDialog({
+              type: 'confirm',
+              title: translate('Update preset file'),
+              message: t`Write the current SillyTavern settings into the preset "${presetName}"? This is the same as SillyTavern's "Update current preset" and includes any other unsaved preset changes.`,
+          });
+          if (!ok) return;
+          try {
+              await updateCurrentPreset();
+              toastr.success(t`Preset "${presetName}" updated.`, EXT_DISPLAY);
+          } catch (e) {
+              toastr.error(t`Could not update the preset: ${e.message}`, EXT_DISPLAY);
+          }
+      });
+  }
+
   function genMemoryId() { 
       return 'mem_' + Date.now() + '_' + Math.random().toString(36).slice(2,6); 
   }
@@ -8833,6 +9421,9 @@ ${scopeHtml}
               }
               return result;
           }
+          case 'get_prompts': {
+              return getPromptsForTool(toolInput?.ids);
+          }
           case 'get_chat_stats': {
               const msgs = ctx.chat || [];
               const userMsgs = msgs.filter(m => m.is_user);
@@ -9135,6 +9726,7 @@ ${scopeHtml}
       // ── Connection ────────────────────────────────────────────────────────────
       { key: 'connectionSource',  stId: 'scp-conn-source',  spId: 'scp-sp-conn-source',  type: 'select', profileKey: true, onChange: _applyConnectionSourceVisibility },
       { key: 'connectionProfileId', stId: 'scp-conn-profile', spId: 'scp-sp-conn-profile', type: 'select', profileKey: true, onChange: () => refreshModelOverrideField(false) },
+      { key: 'promptEditAIEnabled', spId: 'scp-sp-prompt-edit-enabled', type: 'checkbox', updCtx: true, profileKey: true },
       // Sent as overridePayload.model, so one ST connection profile can serve several models.
       { key: 'modelOverride', spId: 'scp-sp-model-override', type: 'input', toVal: v => String(v || '').trim(), profileKey: true },
       { key: 'customUrl',   stId: 'scp-custom-url',   spId: 'scp-sp-custom-url',   type: 'input', profileKey: true },
@@ -11556,7 +12148,9 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const charChanges = parseCharChangesFromText(msg.content);
           const charCreation = parseCharCreationFromText(msg.content);
           const chatChanges = parseChatChangesFromText(msg.content);
-          const needsStrip = lbChanges?.length || charChanges?.length || charCreation || chatChanges?.length;
+          const promptChanges = msg.role !== 'user' ? parsePromptChangesFromText(msg.content) : null;
+          const hasPromptBlock = msg.role !== 'user' && msg.content?.includes('```' + PROMPT_CHANGES_BLOCK);
+          const needsStrip = lbChanges?.length || charChanges?.length || charCreation || chatChanges?.length || hasPromptBlock;
 
           if (needsStrip) {
               let stripped = displayText;
@@ -11564,14 +12158,16 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               if (charChanges?.length) stripped = stripCharChangesBlock(stripped);
               if (charCreation) stripped = stripCharCreationBlock(stripped);
               if (chatChanges?.length) stripped = stripChatChangesBlock(stripped);
-              
+              if (hasPromptBlock) stripped = stripPromptChangesBlock(stripped);
+
               contentEl.innerHTML = renderMarkdown(getDisplayContent(stripped, settings).content);
               postProcessHTMLBlocks(contentEl);
-              
+
               if (lbChanges?.length) renderProposalCard(lbChanges, msgEl);
               if (charChanges?.length) renderCharProposalCard(charChanges, msgEl);
               if (charCreation) renderCharCreationCard(charCreation, msgEl);
               if (chatChanges?.length) renderChatProposalCard(chatChanges, msgEl);
+              if (promptChanges?.length) renderPromptProposalCard(promptChanges, msgEl);
           } else {
               contentEl.innerHTML = renderMarkdown(getDisplayContent(displayText, settings).content);
               postProcessHTMLBlocks(contentEl);
@@ -14703,288 +15299,6 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       document.getElementById('scp-char-close')?.addEventListener('click', () => closeCharacterManager());
   }
 
-  // Reads and writes the prompts SillyTavern sends for roleplay, the same objects ST's own
-  // Prompt Manager edits. Chat Completion: oai_settings.prompts in the global prompt order.
-  // Text Completion: the Advanced Formatting system prompt.
-
-  function _cc(ctx) {
-      const cc = ctx.chatCompletionSettings || {};
-      const order = (cc.prompt_order || []).find(o => String(o.character_id) === ST_GLOBAL_PROMPT_ORDER_ID)?.order || [];
-      return { cc, prompts: cc.prompts || [], order };
-  }
-
-  // { mode: 'cc'|'tc', presetName, entries: [{ id, name, role, content, marker, enabled }] }
-  // Chat Completion entries follow ST's order, including disabled prompts and markers.
-  function getPromptManagerState() {
-      const ctx = SillyTavern.getContext();
-      if (ctx.mainApi === 'openai') {
-          const { cc, prompts, order } = _cc(ctx);
-          const entries = order
-              .map(o => {
-                  const p = prompts.find(x => x.identifier === o.identifier);
-                  if (!p) return null;
-                  return {
-                      id: p.identifier,
-                      name: p.name || p.identifier,
-                      role: p.role || 'system',
-                      content: p.content ?? '',
-                      marker: !!p.marker,
-                      enabled: !!o.enabled,
-                  };
-              })
-              .filter(Boolean);
-          return { mode: 'cc', presetName: cc.preset_settings_openai || 'Default', entries };
-      }
-      const sp = ctx.powerUserSettings?.sysprompt || {};
-      return {
-          mode: 'tc',
-          presetName: sp.name || '',
-          entries: [{ id: 'sysprompt', name: sp.name || 'System Prompt', role: 'system', content: sp.content ?? '', marker: false, enabled: !!sp.enabled }],
-      };
-  }
-
-  // changes: { [id]: { content?, name?, role?, enabled? } }. Writes into ST's live settings
-  // objects and saves settings.json, like ST's Prompt Manager. Markers keep their content
-  // (ST fills them in); only their enabled flag can change. Returns the ids applied.
-  function applyPromptChanges(changes) {
-      const ctx = SillyTavern.getContext();
-      const applied = [];
-      if (ctx.mainApi === 'openai') {
-          const { prompts, order } = _cc(ctx);
-          for (const [id, ch] of Object.entries(changes || {})) {
-              const p = prompts.find(x => x.identifier === id);
-              if (!p) continue;
-              if (!p.marker) {
-                  if (typeof ch.content === 'string') p.content = ch.content;
-                  if (typeof ch.name === 'string' && ch.name.trim()) p.name = ch.name.trim();
-                  if (['system', 'user', 'assistant'].includes(ch.role)) p.role = ch.role;
-              }
-              if (typeof ch.enabled === 'boolean') {
-                  const o = order.find(x => x.identifier === id);
-                  if (o) o.enabled = ch.enabled;
-              }
-              applied.push(id);
-          }
-      } else {
-          const sp = ctx.powerUserSettings?.sysprompt;
-          const ch = changes?.sysprompt;
-          if (sp && ch) {
-              if (typeof ch.content === 'string') sp.content = ch.content;
-              if (typeof ch.enabled === 'boolean') sp.enabled = ch.enabled;
-              applied.push('sysprompt');
-          }
-      }
-      if (applied.length && typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
-      return applied;
-  }
-
-  // Same as ST's "Update current preset": writes the current settings into the preset file.
-  async function updateCurrentPreset() {
-      const ctx = SillyTavern.getContext();
-      const pm = typeof ctx.getPresetManager === 'function' ? ctx.getPresetManager(ctx.mainApi === 'openai' ? 'openai' : 'sysprompt') : null;
-      if (!pm || typeof pm.updatePreset !== 'function') throw new Error('Preset manager not available');
-      await pm.updatePreset();
-  }
-
-  // Full-screen editor for the prompts SillyTavern sends for roleplay (Chat Completion
-  // Prompt Manager, or the Text Completion system prompt). Edits go into ST's live settings
-  // and settings.json, exactly like ST's own Prompt Manager; "Update preset file" also
-  // writes them into the preset, like ST's "Update current preset".
-
-  let _selectedId = null;
-  let _dirty = null;       // pending { content, name, role } for the selected prompt, or null
-  let _saveFn = null;
-
-  async function _confirmDiscard() {
-      if (!_dirty) return true;
-      return showCustomDialog({
-          type: 'confirm',
-          title: translate('Unsaved Changes'),
-          message: translate('Discard the unsaved changes to this prompt?'),
-      });
-  }
-
-  function _roleBadge(entry) {
-      if (entry.marker) return `<span class="scp-pm-badge scp-pm-badge-slot">${translate('slot')}</span>`;
-      return `<span class="scp-pm-badge">${escHtml(entry.role)}</span>`;
-  }
-
-  function _renderList() {
-      const listEl = document.getElementById('scp-pm-list');
-      const presetEl = document.getElementById('scp-pm-preset');
-      if (!listEl) return;
-      const state = getPromptManagerState();
-      if (presetEl) presetEl.textContent = state.presetName ? (state.mode === 'cc' ? t`Preset: ${state.presetName}` : t`System prompt: ${state.presetName}`) : '';
-      listEl.innerHTML = '';
-
-      for (const entry of state.entries) {
-          const row = document.createElement('div');
-          row.className = `scp-char-row scp-pm-row${entry.enabled ? '' : ' scp-pm-disabled'}${entry.marker ? ' scp-pm-marker' : ''}`;
-          row.dataset.id = entry.id;
-          row.classList.toggle('selected', entry.id === _selectedId);
-
-          const name = document.createElement('span');
-          name.className = 'scp-char-row-name';
-          name.textContent = entry.name;
-          row.appendChild(name);
-          row.insertAdjacentHTML('beforeend', _roleBadge(entry));
-
-          // Same on/off as ST's Prompt Manager toggle; applies immediately.
-          const cb = document.createElement('div');
-          cb.className = `scp-char-row-cb${entry.enabled ? ' checked' : ''}`;
-          cb.title = translate('Send this prompt');
-          cb.addEventListener('click', e => {
-              e.stopPropagation();
-              applyPromptChanges({ [entry.id]: { enabled: !entry.enabled } });
-              _renderList();
-          });
-          row.appendChild(cb);
-
-          row.addEventListener('click', async () => {
-              if (entry.id === _selectedId) return;
-              if (!(await _confirmDiscard())) return;
-              _selectedId = entry.id;
-              _dirty = null;
-              _renderList();
-              _renderDetail();
-          });
-          listEl.appendChild(row);
-      }
-
-      if (!state.entries.length) {
-          listEl.innerHTML = `<div class="scp-char-list-empty">${translate('No prompts found for the current API.')}</div>`;
-      }
-  }
-
-  function _renderDetail() {
-      const main = document.getElementById('scp-pm-main');
-      if (!main) return;
-      const entry = getPromptManagerState().entries.find(e => e.id === _selectedId);
-      main.innerHTML = '';
-      _dirty = null;
-      _saveFn = null;
-      if (!entry) {
-          main.innerHTML = `<div class="scp-char-empty-state"><div class="scp-empty-icon"><i class="fa-solid fa-scroll"></i></div><div>${translate('Select a prompt to edit')}</div></div>`;
-          return;
-      }
-
-      const pane = document.createElement('div');
-      pane.className = 'scp-char-pane scp-pm-pane';
-
-      if (entry.marker) {
-          pane.innerHTML = `
-            <div class="scp-pm-title-row"><span class="scp-pm-title">${escHtml(entry.name)}</span>${_roleBadge(entry)}</div>
-            <div class="scp-pm-note">${translate('This is a slot SillyTavern fills in at send time (card fields, chat history, lorebook entries). Its content is not editable here; use the checkbox in the list to turn it on or off.')}</div>`;
-          main.appendChild(pane);
-          return;
-      }
-
-      const top = document.createElement('div');
-      top.className = 'scp-pm-top';
-      top.innerHTML = `
-        <input type="text" class="scp-char-field-input scp-pm-name" ${entry.id === 'sysprompt' ? 'disabled' : ''}>
-        <select class="scp-sp-select scp-pm-role" ${entry.id === 'sysprompt' ? 'disabled' : ''}>
-            <option value="system">system</option><option value="user">user</option><option value="assistant">assistant</option>
-        </select>
-        <span class="scp-char-field-tokens scp-pm-tokens"></span>
-        <button class="scp-action-btn scp-char-banner-save-btn scp-pm-save" disabled style="opacity:.4">${I.check}<span>${translate('Save')}</span></button>
-        <button class="scp-action-btn scp-pm-revert" disabled style="opacity:.4">${I.x}<span>${translate('Revert')}</span></button>`;
-      pane.appendChild(top);
-
-      const ta = document.createElement('textarea');
-      ta.className = 'scp-char-field-textarea scp-pm-content';
-      ta.spellcheck = false;
-      pane.appendChild(ta);
-      main.appendChild(pane);
-
-      const nameEl = top.querySelector('.scp-pm-name');
-      const roleEl = top.querySelector('.scp-pm-role');
-      const tokEl = top.querySelector('.scp-pm-tokens');
-      const saveBtn = top.querySelector('.scp-pm-save');
-      const revertBtn = top.querySelector('.scp-pm-revert');
-      nameEl.value = entry.name;
-      roleEl.value = entry.role;
-      ta.value = entry.content;
-
-      const countTokens = async text => {
-          try {
-              const n = await (await Promise.resolve().then(function () { return api; })).estimateTokens(text);
-              if (tokEl.isConnected) tokEl.textContent = `[~${n} tkns]`;
-          } catch (_) { /* token count is cosmetic */ }
-      };
-      countTokens(entry.content);
-
-      let tokTimer = null;
-      const onEdit = () => {
-          const changed = ta.value !== entry.content || nameEl.value !== entry.name || roleEl.value !== entry.role;
-          _dirty = changed ? { content: ta.value, name: nameEl.value, role: roleEl.value } : null;
-          for (const b of [saveBtn, revertBtn]) { b.disabled = !changed; b.style.opacity = changed ? '1' : '0.4'; }
-          clearTimeout(tokTimer);
-          tokTimer = setTimeout(() => countTokens(ta.value), 600);
-      };
-      ta.addEventListener('input', onEdit);
-      nameEl.addEventListener('input', onEdit);
-      roleEl.addEventListener('change', onEdit);
-
-      _saveFn = () => {
-          if (!_dirty) return true;
-          applyPromptChanges({ [entry.id]: _dirty });
-          _dirty = null;
-          toastr.success(translate('Prompt saved to SillyTavern settings. Use "Update preset file" to also store it in the preset.'), EXT_DISPLAY, { timeOut: 6000 });
-          _renderList();
-          _renderDetail();
-          return true;
-      };
-      saveBtn.addEventListener('click', () => _saveFn());
-      revertBtn.addEventListener('click', () => { _dirty = null; _renderDetail(); });
-  }
-
-  function openPromptManager() {
-      const overlay = document.getElementById('scp-pm-overlay');
-      if (!overlay) return;
-      if (overlay.parentElement !== document.body) document.body.appendChild(overlay);
-      applyCustomTheme(getSettings().customTheme || THEME_PRESETS.default);
-      const entries = getPromptManagerState().entries;
-      if (!entries.some(e => e.id === _selectedId)) _selectedId = entries.find(e => !e.marker)?.id || null;
-      _renderList();
-      _renderDetail();
-      overlay.style.display = 'flex';
-      bringWindowToFront();
-  }
-
-  async function closePromptManager() {
-      const overlay = document.getElementById('scp-pm-overlay');
-      if (!overlay) return;
-      if (!(await _confirmDiscard())) return;
-      _dirty = null;
-      overlay.style.display = 'none';
-  }
-
-  function setupPromptManagerListeners() {
-      const overlay = document.getElementById('scp-pm-overlay');
-      if (!overlay) return;
-      let downTarget = null;
-      overlay.addEventListener('mousedown', e => { downTarget = e.target; });
-      overlay.addEventListener('click', e => { if (e.target === overlay && downTarget === overlay) closePromptManager(); });
-      document.getElementById('scp-pm-close')?.addEventListener('click', () => closePromptManager());
-      document.getElementById('scp-pm-update-preset')?.addEventListener('click', async () => {
-          if (_dirty && _saveFn) _saveFn();
-          const { presetName } = getPromptManagerState();
-          const ok = await showCustomDialog({
-              type: 'confirm',
-              title: translate('Update preset file'),
-              message: t`Write the current SillyTavern settings into the preset "${presetName}"? This is the same as SillyTavern's "Update current preset" and includes any other unsaved preset changes.`,
-          });
-          if (!ok) return;
-          try {
-              await updateCurrentPreset();
-              toastr.success(t`Preset "${presetName}" updated.`, EXT_DISPLAY);
-          } catch (e) {
-              toastr.error(t`Could not update the preset: ${e.message}`, EXT_DISPLAY);
-          }
-      });
-  }
-
   function _getSummaryceptionSummary() {
       try {
           const ctx = SillyTavern.getContext();
@@ -15081,10 +15395,11 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const aiInstructions = buildLBAIInstructions(settings).trim();
       const charEditDirective = buildCharEditAIInstructions(settings).trim();
       const chatEditDirective = buildChatEditAIInstructions(settings).trim();
+      const promptEditDirective = buildPromptEditAIInstructions(settings).trim();
       const memoryAIInstr = buildMemoryAIInstructions(settings).trim();
       const toolsBlock = buildToolCallsSystemBlock().trim();
 
-      const modules = [memoryAIInstr, aiInstructions, charEditDirective, chatEditDirective, toolsBlock].filter(Boolean);
+      const modules = [memoryAIInstr, aiInstructions, charEditDirective, chatEditDirective, promptEditDirective, toolsBlock].filter(Boolean);
       if (modules.length > 0) {
           const reminder = `\n\n[Reminder: changes are only applied through the structured blocks described above. Describing a change in plain text does not apply it.]`;
           parts.push(`\n\n<modules>\n${modules.join('\n\n')}${reminder}\n</modules>`);

@@ -69,6 +69,7 @@ const _SETTINGS_DEF = [
     // ── Connection ────────────────────────────────────────────────────────────
     { key: 'connectionSource',  stId: 'scp-conn-source',  spId: 'scp-sp-conn-source',  type: 'select', profileKey: true, onChange: _applyConnectionSourceVisibility },
     { key: 'connectionProfileId', stId: 'scp-conn-profile', spId: 'scp-sp-conn-profile', type: 'select', profileKey: true, onChange: () => refreshModelOverrideField(false) },
+    { key: 'promptEditAIEnabled', spId: 'scp-sp-prompt-edit-enabled', type: 'checkbox', updCtx: true, profileKey: true },
     // Sent as overridePayload.model, so one ST connection profile can serve several models.
     { key: 'modelOverride', spId: 'scp-sp-model-override', type: 'input', toVal: v => String(v || '').trim(), profileKey: true },
     { key: 'customUrl',   stId: 'scp-custom-url',   spId: 'scp-sp-custom-url',   type: 'input', profileKey: true },

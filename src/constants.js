@@ -789,6 +789,20 @@ export const TOOL_DEFINITIONS = [
             },
         },
         {
+            id: 'get_prompts',
+            name: 'get_prompts',
+            label: 'Get Roleplay Prompts',
+            icon: 'fa-scroll',
+            description: "Read the user's SillyTavern roleplay prompts (Prompt Manager of the active preset), as stored. Without ids: a list of { id, name, role, enabled, slot, chars }. With ids: those prompts' full content, for reading or as exact edit anchors.",
+            settingKey: 'toolsEnabled_get_prompts',
+            schema: {
+                type: 'object',
+                properties: {
+                    ids: { type: 'array', items: { type: 'string' }, description: 'Prompt ids (or names) to read in full. Omit to list all prompts.' },
+                },
+            },
+        },
+        {
             id: 'get_chat_stats',
             name: 'get_chat_stats',
             label: 'Get Chat Statistics',

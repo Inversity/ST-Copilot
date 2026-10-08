@@ -16,6 +16,7 @@ import { applyRegexIfEnabled } from './integrations/integ-regex.js';
 import { buildLorebookContextBlock, buildLBAIInstructions, expandOutletsAsync } from './features/feature-lorebook-engine.js';
 import { buildCharacterContextBlock, buildCharEditAIInstructions } from './features/feature-character-engine.js';
 import { buildChatEditAIInstructions } from './features/feature-chatedit-engine.js';
+import { buildPromptEditAIInstructions } from './features/feature-prompt-engine.js';
 import { buildMemoryContextBlock, buildMemoryAIInstructions, processMemoryUpdates, stripMemoryBlock } from './features/feature-memory.js';
 import { buildToolCallsSystemBlock, parseToolCallsFromText, executeTool, getEnabledTools } from './features/feature-tools-engine.js';
 
@@ -98,10 +99,11 @@ export async function buildSystemContent(settings) {
     const aiInstructions = buildLBAIInstructions(settings).trim();
     const charEditDirective = buildCharEditAIInstructions(settings).trim();
     const chatEditDirective = buildChatEditAIInstructions(settings).trim();
+    const promptEditDirective = buildPromptEditAIInstructions(settings).trim();
     const memoryAIInstr = buildMemoryAIInstructions(settings).trim();
     const toolsBlock = buildToolCallsSystemBlock().trim();
 
-    const modules = [memoryAIInstr, aiInstructions, charEditDirective, chatEditDirective, toolsBlock].filter(Boolean);
+    const modules = [memoryAIInstr, aiInstructions, charEditDirective, chatEditDirective, promptEditDirective, toolsBlock].filter(Boolean);
     if (modules.length > 0) {
         const reminder = `\n\n[Reminder: changes are only applied through the structured blocks described above. Describing a change in plain text does not apply it.]`;
         parts.push(`\n\n<modules>\n${modules.join('\n\n')}${reminder}\n</modules>`);
