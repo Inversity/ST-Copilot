@@ -14283,6 +14283,60 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       return row;
   }
 
+  // Alternate greetings: one box per greeting, numbered like ST's editor (#1 = index 1).
+  // onChange(array) when the list differs from the card, onChange(null) when it matches again.
+  function _buildAltGreetingsSection(charRef, onChange) {
+      const section = document.createElement('div');
+      section.className = 'scp-char-section';
+      const h = document.createElement('div');
+      h.className = 'scp-char-section-title';
+      h.textContent = translate('Alternate Greetings');
+      section.appendChild(h);
+
+      const initial = [...(charRef?.data?.alternate_greetings || [])];
+      const current = [...initial];
+      const list = document.createElement('div');
+      list.className = 'scp-char-ag-list';
+      section.appendChild(list);
+
+      const emit = () => onChange(JSON.stringify(current) === JSON.stringify(initial) ? null : [...current]);
+
+      const render = () => {
+          list.innerHTML = '';
+          if (!current.length) {
+              const empty = document.createElement('div');
+              empty.className = 'scp-char-ag-empty';
+              empty.textContent = translate('No alternate greetings.');
+              list.appendChild(empty);
+              return;
+          }
+          current.forEach((text, i) => {
+              const row = _buildFieldRow({ label: t`Greeting #${i + 1}`, multiline: true }, () => text, val => { current[i] = val; emit(); });
+              const del = document.createElement('button');
+              del.className = 'scp-char-ag-del';
+              del.innerHTML = I.trash;
+              del.title = t`Delete greeting #${i + 1}`;
+              del.addEventListener('click', () => { current.splice(i, 1); render(); emit(); });
+              row.querySelector('.scp-char-field-label-row')?.appendChild(del);
+              list.appendChild(row);
+          });
+      };
+
+      const addBtn = document.createElement('button');
+      addBtn.className = 'scp-action-btn scp-char-ag-add';
+      addBtn.innerHTML = `<i class="fa-solid fa-plus"></i><span>${translate('Add greeting')}</span>`;
+      addBtn.addEventListener('click', () => {
+          current.push('');
+          render();
+          emit();
+          list.querySelector('.scp-char-field-row:last-child textarea')?.focus();
+      });
+      section.appendChild(addBtn);
+
+      render();
+      return section;
+  }
+
   // ─── Current Info Tab ─────────────────────────────────────────────────────────
 
   function _buildCurrentInfoTab(entity, saveBtn, revertBtn) {
@@ -14323,6 +14377,14 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           });
           pane.appendChild(section);
       });
+
+      if (!entity.isPersona) {
+          pane.appendChild(_buildAltGreetingsSection(charRef, arr => {
+              if (arr === null) delete dirty.alternate_greetings;
+              else dirty.alternate_greetings = arr;
+              updateBtns();
+          }));
+      }
 
       // Expose save function at module level for close dialog
       _currentSaveFn = async () => {

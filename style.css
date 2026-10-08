@@ -5065,6 +5065,17 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
 .scp-char-field-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .scp-char-field-label { font-size: 11px; font-weight: 600; color: var(--scp-text); }
 .scp-char-field-tokens { font-size: 10px; color: var(--scp-accent); opacity: 0.75; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+/* Alternate greetings: label, token count, then the delete button on the right. */
+.scp-char-ag-list { display: flex; flex-direction: column; gap: 10px; }
+.scp-char-ag-list .scp-char-field-tokens { margin-left: auto; }
+.scp-char-ag-del {
+    background: none; border: 1px solid rgba(255,255,255,0.1); border-radius: 5px;
+    color: var(--scp-text-muted); cursor: pointer; width: 22px; height: 22px; padding: 0;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; align-self: center;
+}
+.scp-char-ag-del:hover { color: var(--scp-danger, #ff5c5c); border-color: rgba(255,92,92,0.4); background: rgba(255,92,92,0.1); }
+.scp-char-ag-empty { font-size: 11px; color: var(--scp-text-muted); font-style: italic; }
+.scp-char-ag-add { align-self: flex-start; margin-top: 8px; }
 .scp-char-field-input, .scp-char-field-textarea {
     width: 100%; box-sizing: border-box;
     background: var(--scp-input-bg); border: var(--scp-border);
