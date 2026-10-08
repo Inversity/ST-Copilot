@@ -383,6 +383,24 @@ export function logOutgoingRequest(url, body) {
     state.requestLog.length = Math.min(state.requestLog.length, 5);
 }
 
+// Reasoning timer for one stream. "Done" needs real reply text and no new reasoning in the
+// same chunk: some providers send a stray newline before the reply, or interleave reasoning
+// with output, and the first version froze the timer at the first byte of text. The time
+// shown runs from the first to the latest reasoning chunk.
+export function createReasoningClock(now = () => performance.now()) {
+    let start = null, last = null, prevLen = 0;
+    return (reasoning, text) => {
+        const len = reasoning ? reasoning.length : 0;
+        const grew = len > prevLen;
+        if (grew) prevLen = len;
+        const t = now();
+        if (grew) { if (start === null) start = t; last = t; }
+        if (start === null) return { ms: null, done: false };
+        const done = !grew && !!String(text || '').trim();
+        return { ms: (done ? last : t) - start, done };
+    };
+}
+
 // { model, profile } of the generation that just finished, for the reply/swipe it produced.
 export function getGenStamp() {
     const meta = { ...(state.genMeta || {}) };
@@ -496,9 +514,7 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
     if (settings.connectionSource === 'custom') {
         let text = '';
         let reasoning = null;
-        let reasoningStartMs = null;
-        let reasoningDone = false;
-        let finalReasoningMs = null;
+        const reasoningClock = createReasoningClock();
 
         try {
             const url = (settings.customUrl || 'http://localhost:5000/v1').replace(/\/+$/, '') + '/chat/completions';
@@ -546,18 +562,10 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
                                 const data = JSON.parse(l.slice(6));
                                 const ext = deepExtract(data);
                                 if (ext.t) text += ext.t;
-                                if (ext.r) {
-                                    if (reasoningStartMs === null) reasoningStartMs = performance.now();
-                                    reasoning = (reasoning || '') + ext.r;
-                                }
-                                // Frozen in a local: `data` is a new object per SSE line.
-                                if (text && !reasoningDone && reasoning) {
-                                    reasoningDone = true;
-                                    finalReasoningMs = performance.now() - reasoningStartMs;
-                                }
+                                if (ext.r) reasoning = (reasoning || '') + ext.r;
                                 if (typeof onChunk === 'function') {
-                                    const rMs = reasoningDone ? finalReasoningMs : (reasoningStartMs !== null ? performance.now() - reasoningStartMs : null);
-                                    onChunk(text, reasoning, rMs, reasoningDone);
+                                    const rc = reasoningClock(reasoning, text);
+                                    onChunk(text, reasoning, rc.ms, rc.done);
                                 }
                             } catch (e) {}
                         }
@@ -758,15 +766,13 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
 
     let text = '';
     let reasoning = null;
-    let reasoningStartMs = null;
-    let reasoningDone = false;
+    const reasoningClock = createReasoningClock();
 
     const isGen = typeof asyncGeneratorFn === 'function' ||
         (asyncGeneratorFn != null && typeof asyncGeneratorFn[Symbol.asyncIterator] === 'function') ||
         (asyncGeneratorFn != null && typeof asyncGeneratorFn.next === 'function');
 
     let lastValue = null;
-    let finalReasoningMs = null;
 
     if (!isGen) {
         const value = asyncGeneratorFn;
@@ -802,22 +808,11 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
             text = ext.t;
             const newReasoning = ext.r;
 
-            if (newReasoning) {
-                if (reasoningStartMs === null) reasoningStartMs = performance.now();
-                reasoning = newReasoning;
-            }
-            // Freeze the reasoning time when output text starts. It used to be stored on the
-            // chunk object, which is replaced by the next chunk, so the timer kept counting.
-            if (text && !reasoningDone && reasoning) {
-                reasoningDone = true;
-                finalReasoningMs = performance.now() - reasoningStartMs;
-            }
+            if (newReasoning) reasoning = newReasoning;
 
             if (typeof onChunk === 'function') {
-                const reasoningMs = reasoningDone
-                    ? finalReasoningMs
-                    : (reasoningStartMs !== null ? performance.now() - reasoningStartMs : null);
-                onChunk(text, reasoning, reasoningMs, reasoningDone);
+                const rc = reasoningClock(reasoning, text);
+                onChunk(text, reasoning, rc.ms, rc.done);
             }
         }
     } catch (e) {
