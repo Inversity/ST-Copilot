@@ -6,6 +6,8 @@ export const state = {
     activeToolCalls: [],
     // Model and connection profile of the generation in flight; stamped onto each reply/swipe.
     genMeta: null,
+    // Final request bodies as they left (newest first, max 5), for the Context modal's Last sent tab.
+    requestLog: [],
     searchQuery: '',
     searchMatches: [],
     searchIdx: -1,

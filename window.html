@@ -125,10 +125,12 @@
         <div class="scp-modal-tabs">
             <button class="scp-modal-tab active" data-tab="formatted" data-i18n="Formatted">Formatted</button>
             <button class="scp-modal-tab" data-tab="json">JSON</button>
+            <button class="scp-modal-tab" data-tab="sent" title="The request bodies that actually went out, after SillyTavern added the model and sampler settings (newest first)" data-i18n="[title]The request bodies that actually went out, after SillyTavern added the model and sampler settings (newest first)"><span data-i18n="Last sent">Last sent</span></button>
         </div>
         <div class="scp-modal-body">
             <pre id="scp-ctx-formatted" class="scp-ctx-pre"></pre>
             <pre id="scp-ctx-json" class="scp-ctx-pre" style="display:none"></pre>
+            <pre id="scp-ctx-sent" class="scp-ctx-pre" style="display:none; overflow:auto; padding:12px; white-space:pre-wrap"></pre>
         </div>
         <div class="scp-modal-footer">
             <button class="scp-action-btn" id="scp-ctx-copy-btn">${I.copy}<span data-i18n="Copy">Copy</span></button>

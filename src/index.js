@@ -451,13 +451,22 @@ function attachWindowListeners() {
             
             const isFormatted = tab.dataset.tab === 'formatted';
             const isJson = tab.dataset.tab === 'json';
-            
+            const isSent = tab.dataset.tab === 'sent';
+
             const fmtEl = document.getElementById('scp-ctx-formatted');
             const jsonEl = document.getElementById('scp-ctx-json');
-            
+            const sentEl = document.getElementById('scp-ctx-sent');
+
             if (fmtEl) fmtEl.style.display = isFormatted ? '' : 'none';
             if (jsonEl) jsonEl.style.display = isJson ? '' : 'none';
-            
+            if (sentEl) sentEl.style.display = isSent ? '' : 'none';
+            if (isSent) {
+                if (sentEl) sentEl.textContent = state.requestLog.length
+                    ? JSON.stringify(state.requestLog, null, 2)
+                    : translate('Nothing sent yet since the page loaded.');
+                return;
+            }
+
             setTimeout(() => {
                 const targetEl = isJson ? jsonEl : document.getElementById('scp-ctx-body');
                 if (targetEl) {
@@ -474,6 +483,8 @@ function attachWindowListeners() {
         const activeTab = document.querySelector('.scp-modal-tab.active');
         if (activeTab?.dataset.tab === 'json') {
             copyText(document.getElementById('scp-ctx-json')?.textContent || '');
+        } else if (activeTab?.dataset.tab === 'sent') {
+            copyText(document.getElementById('scp-ctx-sent')?.textContent || '');
         } else {
             import('./ui/ui-widgets.js').then(m => copyText(apiMod.formatPayloadAsText(m._lastInspectorMessages || [])));
         }

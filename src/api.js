@@ -344,6 +344,25 @@ export async function estimateTokens(text) {
     }
 }
 
+// Matches credential field names; "token" only as a whole word or suffix, so max_tokens stays.
+const _SECRET_KEY_RE = /pass(word)?$|password|secret|(^|_)token$|api[_-]?key|authorization|include_headers/i;
+
+// Copy of a request body with credential-looking fields replaced, safe to show and copy.
+export function redactRequestBody(value) {
+    if (Array.isArray(value)) return value.map(redactRequestBody);
+    if (!value || typeof value !== 'object') return value;
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+        out[k] = _SECRET_KEY_RE.test(k) && v !== '' && v != null ? '[redacted]' : redactRequestBody(v);
+    }
+    return out;
+}
+
+export function logOutgoingRequest(url, body) {
+    state.requestLog.unshift({ at: new Date().toISOString(), url, body: redactRequestBody(body) });
+    state.requestLog.length = Math.min(state.requestLog.length, 5);
+}
+
 // { model, profile } of the generation that just finished, for the reply/swipe it produced.
 export function getGenStamp() {
     const meta = { ...(state.genMeta || {}) };
@@ -471,6 +490,7 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
             };
             const headers = { 'Content-Type': 'application/json' };
             if (settings.customKey) headers['Authorization'] = `Bearer ${settings.customKey}`;
+            logOutgoingRequest(url, payload);
 
             const res = await fetch(url, {
                 method: 'POST',
@@ -624,6 +644,7 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
                 }
                 
                 if (changed) args[1].body = JSON.stringify(reqBody);
+                logOutgoingRequest(requestUrl, reqBody);
             } catch(_) {}
         }
         return origFetch.apply(this, args);

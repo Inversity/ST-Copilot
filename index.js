@@ -868,6 +868,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       activeToolCalls: [],
       // Model and connection profile of the generation in flight; stamped onto each reply/swipe.
       genMeta: null,
+      // Final request bodies as they left (newest first, max 5), for the Context modal's Last sent tab.
+      requestLog: [],
       searchQuery: '',
       searchMatches: [],
       searchIdx: -1,
@@ -15259,6 +15261,25 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       }
   }
 
+  // Matches credential field names; "token" only as a whole word or suffix, so max_tokens stays.
+  const _SECRET_KEY_RE = /pass(word)?$|password|secret|(^|_)token$|api[_-]?key|authorization|include_headers/i;
+
+  // Copy of a request body with credential-looking fields replaced, safe to show and copy.
+  function redactRequestBody(value) {
+      if (Array.isArray(value)) return value.map(redactRequestBody);
+      if (!value || typeof value !== 'object') return value;
+      const out = {};
+      for (const [k, v] of Object.entries(value)) {
+          out[k] = _SECRET_KEY_RE.test(k) && v !== '' && v != null ? '[redacted]' : redactRequestBody(v);
+      }
+      return out;
+  }
+
+  function logOutgoingRequest(url, body) {
+      state.requestLog.unshift({ at: new Date().toISOString(), url, body: redactRequestBody(body) });
+      state.requestLog.length = Math.min(state.requestLog.length, 5);
+  }
+
   // { model, profile } of the generation that just finished, for the reply/swipe it produced.
   function getGenStamp() {
       const meta = { ...(state.genMeta || {}) };
@@ -15386,6 +15407,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               };
               const headers = { 'Content-Type': 'application/json' };
               if (settings.customKey) headers['Authorization'] = `Bearer ${settings.customKey}`;
+              logOutgoingRequest(url, payload);
 
               const res = await fetch(url, {
                   method: 'POST',
@@ -15539,6 +15561,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                   }
                   
                   if (changed) args[1].body = JSON.stringify(reqBody);
+                  logOutgoingRequest(requestUrl, reqBody);
               } catch(_) {}
           }
           return origFetch.apply(this, args);
@@ -16189,6 +16212,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
     formatPayloadAsText: formatPayloadAsText,
     getGenStamp: getGenStamp,
     getMainChatSlice: getMainChatSlice,
+    logOutgoingRequest: logOutgoingRequest,
+    redactRequestBody: redactRequestBody,
     runContinue: runContinue,
     runGenerate: runGenerate
   });
@@ -17823,13 +17848,22 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               
               const isFormatted = tab.dataset.tab === 'formatted';
               const isJson = tab.dataset.tab === 'json';
-              
+              const isSent = tab.dataset.tab === 'sent';
+
               const fmtEl = document.getElementById('scp-ctx-formatted');
               const jsonEl = document.getElementById('scp-ctx-json');
-              
+              const sentEl = document.getElementById('scp-ctx-sent');
+
               if (fmtEl) fmtEl.style.display = isFormatted ? '' : 'none';
               if (jsonEl) jsonEl.style.display = isJson ? '' : 'none';
-              
+              if (sentEl) sentEl.style.display = isSent ? '' : 'none';
+              if (isSent) {
+                  if (sentEl) sentEl.textContent = state.requestLog.length
+                      ? JSON.stringify(state.requestLog, null, 2)
+                      : translate('Nothing sent yet since the page loaded.');
+                  return;
+              }
+
               setTimeout(() => {
                   const targetEl = isJson ? jsonEl : document.getElementById('scp-ctx-body');
                   if (targetEl) {
@@ -17846,6 +17880,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const activeTab = document.querySelector('.scp-modal-tab.active');
           if (activeTab?.dataset.tab === 'json') {
               copyText(document.getElementById('scp-ctx-json')?.textContent || '');
+          } else if (activeTab?.dataset.tab === 'sent') {
+              copyText(document.getElementById('scp-ctx-sent')?.textContent || '');
           } else {
               Promise.resolve().then(function () { return uiWidgets; }).then(m => copyText(formatPayloadAsText(m._lastInspectorMessages || [])));
           }
