@@ -2801,13 +2801,10 @@ details.scp-reasoning-block[open] .scp-reasoning-summary::before { transform: ro
     opacity: 0.65; color: var(--scp-text-muted);
 }
 
-/* AI tab: the configuration profile governs everything below it, so it leads the tab and
-   stays visible while scrolling. */
+/* AI tab: the configuration profile governs everything below it, so it leads the tab.
+   Not sticky: pinned, it floated over the scrolling groups (the panel is translucent). */
 .scp-sp-group.scp-sp-profile-header {
-    position: sticky; top: 0; z-index: 2;
-    background: var(--scp-bg, rgba(18,18,22,0.97));
     border-color: var(--scp-accent-dim);
-    box-shadow: 0 6px 12px rgba(0,0,0,0.35);
 }
 .scp-sp-profile-scope { font-size: 11px; opacity: 0.8; margin-top: -2px; }
 
