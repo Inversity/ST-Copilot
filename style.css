@@ -850,24 +850,6 @@
     gap: 6px;
 }
 
-.st-copilot-settings .inline-drawer-toggle.inline-drawer-header {
-    border-left: 2px solid rgba(119, 119, 119, 0.5) !important;
-    border-radius: 4px !important;
-    padding-left: 10px !important;
-    background: linear-gradient(90deg, rgba(107, 107, 107, 0.185) 0%, transparent 100%) !important;
-    transition: background 0.2s, border-color 0.2s;
-}
-
-
-.st-copilot-settings .inline-drawer-toggle.inline-drawer-header:hover {
-    background: linear-gradient(90deg, rgba(78, 78, 78, 0.493) 0%, transparent 100%) !important;
-    border-left-color: rgba(153, 153, 153, 0.75) !important;
-}
-
-.st-copilot-settings .inline-drawer-toggle.inline-drawer-header b {
-    letter-spacing: 0.02em;
-}
-
 .scp-settings-section {
     border: 1px solid rgba(255,255,255,0.07);
     border-radius: 8px; overflow: hidden; margin-bottom: 6px;
@@ -1055,11 +1037,6 @@
     border-radius: 6px !important;
     margin-bottom: 6px;
     overflow: hidden;
-}
-.scp-settings-drawer .inline-drawer-header {
-    background: rgba(255, 255, 255, 0.02) !important;
-    padding: 8px 12px !important;
-    border-bottom: none !important;
 }
 .scp-settings-drawer .inline-drawer-content {
     padding: 12px !important;
@@ -4249,31 +4226,6 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
 .scp-bg-media.bg-center { object-fit: none; }
 
 /* ── Stream Modes Settings Fix ── */
-.st-copilot-settings .scp-stream-btn {
-    background: rgba(0, 0, 0, 0.3) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    color: var(--SmartThemeBodyColorTextMuted, #888) !important;
-    padding: 6px 14px !important;
-    border-radius: 5px !important;
-    cursor: pointer !important;
-    font-size: 11px !important;
-    font-family: var(--primaryFontFamily, system-ui, sans-serif) !important;
-    transition: all 0.15s ease !important;
-}
-
-.st-copilot-settings .scp-stream-btn:hover {
-    border-color: rgba(255, 255, 255, 0.18) !important;
-    color: var(--SmartThemeBodyColorText, #e2e2e6) !important;
-}
-
-.st-copilot-settings .scp-stream-btn.active {
-    background: rgba(124, 109, 250, 0.12) !important;
-    border-color: rgba(124, 109, 250, 0.5) !important;
-    color: var(--SmartThemeQuoteColor, #a99bfb) !important;
-    font-weight: 600 !important;
-    box-shadow: 0 0 8px rgba(124, 109, 250, 0.15) !important;
-}
-
 /* ═══════════════════════════════════════════════════════════════
    MEMORY SYSTEM
 ═══════════════════════════════════════════════════════════════ */
@@ -4688,19 +4640,6 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
 .scp-tool-ask-submit:hover { background: var(--scp-accent); color: #fff; border-color: var(--scp-accent); }
 
 /* ── Settings Panel (ST Drawer Colors fix) ───────────────────── */
-.st-copilot-settings .inline-drawer-toggle.inline-drawer-header {
-    border-left: 2px solid var(--SmartThemeQuoteColor, rgba(119, 119, 119, 0.5)) !important;
-    border-radius: 4px !important;
-    padding-left: 10px !important;
-    background: transparent !important;
-    transition: background 0.2s, border-color 0.2s;
-    color: var(--SmartThemeBodyColorText, #e2e2e6);
-}
-.st-copilot-settings .inline-drawer-toggle.inline-drawer-header:hover {
-    background: rgba(128, 128, 128, 0.1) !important;
-    border-left-color: var(--SmartThemeMenuColorText, rgba(153, 153, 153, 0.75)) !important;
-}
-
 /* ── Settings Header Fix ── */
 .scp-sp-header {
     display: flex;
@@ -4746,18 +4685,6 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
 }
 
 /* ── Smooth Accordion Arrow Rotation ── */
-.st-copilot-settings .inline-drawer-icon {
-    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
-}
-
-.st-copilot-settings .inline-drawer-icon.up {
-    transform: rotate(180deg) !important;
-}
-
-.st-copilot-settings .inline-drawer-icon.fa-circle-chevron-up::before {
-    content: "\f13a" !important;
-}
-
 /* ═══════════════════════════════════════════════════════════════
    TOOL CALLS STYLES
 ═══════════════════════════════════════════════════════════════ */
@@ -5158,4 +5085,107 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
     border-color: rgba(255, 255, 255, 0.05) !important;
     color: rgba(255, 255, 255, 0.4) !important;
     box-shadow: none;
+}
+/* The extension drawer belongs to the SillyTavern theme, independently of
+   the floating Copilot window's selected theme. Keep these tokens scoped. */
+.st-copilot-settings {
+    --SmartThemeBodyColorText: var(--SmartThemeBodyColor);
+    --SmartThemeBodyColorTextMuted: var(--SmartThemeBodyColor);
+    --scp-text: var(--SmartThemeBodyColor);
+    --scp-text-muted: var(--SmartThemeBodyColor);
+    --scp-accent: var(--SmartThemeBodyColor);
+    --scp-accent-dim: var(--SmartThemeBorderColor);
+    --scp-accent-bg: color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
+    --scp-input-bg: var(--SmartThemeBlurTintColor);
+    --scp-border: 1px solid var(--SmartThemeBorderColor);
+    color: var(--SmartThemeBodyColor);
+    font-size: inherit;
+}
+
+.st-copilot-settings .scp-settings-flat-section {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 0;
+    padding: 10px 0;
+    margin-bottom: 4px;
+}
+
+.st-copilot-settings .inline-drawer-header,
+.st-copilot-settings .scp-settings-flat-title {
+    color: var(--SmartThemeBodyColor);
+    font-size: inherit;
+}
+
+.st-copilot-settings .scp-settings-drawer {
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    overflow: visible;
+}
+
+.st-copilot-settings .scp-settings-drawer .inline-drawer-content {
+    padding: 10px 0 !important;
+    border-top: 0 !important;
+}
+
+.st-copilot-settings .scp-profile-bar,
+.st-copilot-settings .scp-binding-row {
+    background: transparent;
+    border-color: var(--SmartThemeBorderColor);
+    flex-wrap: wrap;
+}
+
+.st-copilot-settings .scp-profile-bar select {
+    min-width: 100px;
+    flex: 1 1 100px;
+}
+
+.st-copilot-settings .scp-profile-bar select option,
+.st-copilot-settings .scp-profile-bar select optgroup,
+.st-copilot-settings .scp-theme-var-input {
+    color: var(--SmartThemeBodyColor);
+    background: var(--SmartThemeBlurTintColor);
+    border-color: var(--SmartThemeBorderColor);
+}
+
+.st-copilot-settings .scp-profile-icon-btn,
+.st-copilot-settings .scp-bind-btn,
+.st-copilot-settings .scp-preset-pill,
+.st-copilot-settings .scp-theme-var-reset,
+.st-copilot-settings .scp-stream-btn {
+    color: var(--SmartThemeBodyColor);
+    background: transparent;
+    border: 1px solid var(--SmartThemeBorderColor);
+    font-family: inherit;
+    box-shadow: none;
+}
+
+.st-copilot-settings .scp-stream-btn {
+    padding: 6px 10px;
+}
+
+.st-copilot-settings :is(.scp-profile-icon-btn, .scp-bind-btn, .scp-preset-pill, .scp-theme-var-reset, .scp-stream-btn):hover:not(:disabled),
+.st-copilot-settings .scp-bind-btn.active,
+.st-copilot-settings .scp-stream-btn.active {
+    color: var(--SmartThemeBodyColor);
+    background: var(--scp-accent-bg);
+    border-color: var(--SmartThemeBodyColor);
+    box-shadow: none;
+}
+
+.st-copilot-settings .scp-stream-btn.active,
+.st-copilot-settings .scp-bind-btn.active {
+    font-weight: 700;
+}
+
+.st-copilot-settings :is(button, select, input):focus-visible {
+    outline: 2px solid var(--SmartThemeBodyColor);
+    outline-offset: 2px;
+}
+
+/* Also covers labels generated by the background and sound settings widgets. */
+.st-copilot-settings [style*="color:#888"],
+.st-copilot-settings [style*="color: #888"] {
+    color: var(--SmartThemeBodyColor) !important;
 }

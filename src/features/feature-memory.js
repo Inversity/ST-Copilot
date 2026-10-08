@@ -3,6 +3,7 @@ import { getSettings, saveSettings, getCurrentSession, getBindingKey } from '../
 import { _dbgAdd } from '../utils/util-debug.js';
 import { escHtml, showCustomDialog } from '../utils/util-dom.js';
 import { _ensureWrapped } from '../utils/util-text.js';
+import { translate } from '../utils/util-i18n.js';
 
 export function genMemoryId() { 
     return 'mem_' + Date.now() + '_' + Math.random().toString(36).slice(2,6); 
@@ -279,8 +280,8 @@ export function renderMemoryList() {
                 <button class="scp-memory-item-toggle" title="${mem.disabled ? 'Enable Memory' : 'Disable Memory'}">
                     <i class="fa-solid ${mem.disabled ? 'fa-toggle-off' : 'fa-toggle-on'}"></i>
                 </button>
-                <button class="scp-memory-item-edit" title="Edit"><i class="fa-solid fa-pen"></i></button>
-                <button class="scp-memory-item-del" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                <button class="scp-memory-item-edit" title="Edit" data-i18n="[title]Edit"><i class="fa-solid fa-pen"></i></button>
+                <button class="scp-memory-item-del" title="Delete" data-i18n="[title]Delete"><i class="fa-solid fa-trash"></i></button>
             </div>
         `;
         const valEl = document.createElement('div');
@@ -340,7 +341,7 @@ export function renderMemoryList() {
     };
 
     if (tree.global.length > 0) {
-        const globDet = buildDetails('Global', 'globe', tree.global.map(createMemEl), true);
+        const globDet = buildDetails(translate('Global'), 'globe', tree.global.map(createMemEl), true);
         if (globDet) listEl.appendChild(globDet);
     }
 
@@ -415,17 +416,17 @@ export async function editMemoryDialog(id) {
 
         overlay.innerHTML = `<div class="scp-dialog-box">
 <div class="scp-dialog-title">${isNew ? 'Add Memory' : 'Edit Memory'}</div>
-<div class="scp-dialog-msg">Category / Key:</div>
-<input type="text" class="scp-dialog-input" id="scp-mem-key-inp" placeholder="e.g. Preferences, About Me, Profession..." value="${escHtml(mem?.key || '')}">
-<div class="scp-dialog-msg" style="margin-top:4px">Value:</div>
-<textarea class="scp-dialog-input" id="scp-mem-val-inp" rows="3" placeholder="What to remember..." style="height:auto;resize:vertical;margin-bottom:10px;">${escHtml(mem?.value || '')}</textarea>
-<div class="scp-dialog-msg" style="margin-top:4px">Scope:</div>
+<div class="scp-dialog-msg" data-i18n="Category / Key:">Category / Key:</div>
+<input type="text" class="scp-dialog-input" id="scp-mem-key-inp" placeholder="e.g. Preferences, About Me, Profession..." data-i18n="[placeholder]e.g. Preferences, About Me, Profession..." value="${escHtml(mem?.key || '')}">
+<div class="scp-dialog-msg" style="margin-top:4px" data-i18n="Value:">Value:</div>
+<textarea class="scp-dialog-input" id="scp-mem-val-inp" rows="3" placeholder="What to remember..." data-i18n="[placeholder]What to remember..." style="height:auto;resize:vertical;margin-bottom:10px;">${escHtml(mem?.value || '')}</textarea>
+<div class="scp-dialog-msg" style="margin-top:4px" data-i18n="Scope:">Scope:</div>
 <select class="scp-dialog-input" id="scp-mem-scope-inp" style="margin-bottom:20px;">
 ${scopeHtml}
 </select>
 <div class="scp-dialog-btns">
-<button class="scp-dialog-btn scp-dialog-cancel">Cancel</button>
-<button class="scp-dialog-btn scp-dialog-ok">${isNew ? 'Add' : 'Save'}</button>
+<button class="scp-dialog-btn scp-dialog-cancel" data-i18n="Cancel">Cancel</button>
+<button class="scp-dialog-btn scp-dialog-ok">${isNew ? translate('Add') : translate('Save')}</button>
 </div></div>`;
         document.body.appendChild(overlay);
         const keyInp = overlay.querySelector('#scp-mem-key-inp');
@@ -515,7 +516,7 @@ export function setupMemorySettingsUI() {
             saveSettings();
             const el = document.getElementById('scp-sp-memory-prompt'); if (el) el.value = DEFAULT_MEMORY_PROMPT;
             const stEl = document.getElementById('scp-memory-prompt'); if (stEl) stEl.value = DEFAULT_MEMORY_PROMPT;
-            toastr.success('Prompt reset.', EXT_DISPLAY);
+            toastr.success(translate('Prompt reset.'), EXT_DISPLAY);
         });
     }
 
@@ -534,12 +535,12 @@ export function setupMemorySettingsUI() {
         clearBtn.parentNode.replaceChild(newClearBtn, clearBtn);
         newClearBtn.addEventListener('click', async () => {
             const count = Object.keys(getMemories()).length;
-            if (!count) { toastr.info('No memories to clear.', EXT_DISPLAY); return; }
-            const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Memories', message: `Delete all ${count} stored memories? This cannot be undone.`, delayConfirm: 2 });
+            if (!count) { toastr.info(translate('No memories to clear.'), EXT_DISPLAY); return; }
+            const ok = await showCustomDialog({ type: 'confirm', title: translate('Clear All Memories'), message: `Delete all ${count} stored memories? This cannot be undone.`, delayConfirm: 2 });
             if (!ok) return;
             clearAllMemories();
             renderMemoryList();
-            toastr.success('All memories cleared.', EXT_DISPLAY);
+            toastr.success(translate('All memories cleared.'), EXT_DISPLAY);
         });
     }
 

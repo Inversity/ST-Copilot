@@ -5,25 +5,25 @@
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div class="scp-sp-header-left">
           <span style="color:var(--scp-accent);display:flex">${I.gear}</span>
-          <span class="scp-sp-title">Settings</span>
+          <span class="scp-sp-title" data-i18n="Settings">Settings</span>
         </div>
         <div class="scp-sp-header-right">
           <button class="scp-hbtn scp-hbtn-close" id="scp-sp-close">${I.x}</button>
         </div>
       </div>
       <div class="scp-sp-tabs" style="justify-content: center; width: 100%;">
-        <button class="scp-sp-tab active" data-sptab="global">Global</button>
-        <button class="scp-sp-tab" data-sptab="prompts">Quick Prompts</button>
+        <button class="scp-sp-tab active" data-sptab="global" data-i18n="Global">Global</button>
+        <button class="scp-sp-tab" data-sptab="prompts" data-i18n="Quick Prompts">Quick Prompts</button>
         <button class="scp-sp-tab" data-sptab="session">
-          Session
-          <span class="scp-sp-override-dot" id="scp-sp-override-dot" style="display:none" title="Session overrides active"></span>
+          <span data-i18n="Session">Session</span>
+          <span class="scp-sp-override-dot" id="scp-sp-override-dot" style="display:none" title="Session overrides active" data-i18n="[title]Session overrides active"></span>
         </button>
         <button class="scp-sp-tab" data-sptab="memory">
-          Memory
-          <span class="scp-sp-memory-dot" id="scp-sp-memory-dot" style="display:none" title="Memory active"></span>
+          <span data-i18n="Memory">Memory</span>
+          <span class="scp-sp-memory-dot" id="scp-sp-memory-dot" style="display:none" title="Memory active" data-i18n="[title]Memory active"></span>
         </button>
-        <button class="scp-sp-tab" data-sptab="tools">Tools</button>
-        <button class="scp-sp-tab" data-sptab="stats">Stats</button>
+        <button class="scp-sp-tab" data-sptab="tools" data-i18n="Tools">Tools</button>
+        <button class="scp-sp-tab" data-sptab="stats" data-i18n="Stats">Stats</button>
       </div>
     </div>
 
@@ -33,15 +33,15 @@
       <div class="scp-sp-tab-pane" id="scp-sp-pane-global">
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-sliders"></i> General</div>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-enabled"><span>Enable ST-Copilot</span></label>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-icon-persistent"><span>Always show floating icon</span></label>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-wobble-window"><span>Wobbly window drag <span class="scp-sp-hint">(jelly physics on move)</span></span></label>
-          <label class="scp-sp-check" title="Disables heavy visual effects like blur, advanced shadows, and 3D animations to save CPU on low-end devices."><input type="checkbox" id="scp-sp-perf-mode"><span>Low Performance Mode (Save CPU)</span></label>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-changelog-auto"><span>Show changelog on update</span></label>
-          <button class="scp-action-btn" id="scp-sp-open-changelog" style="margin-top:4px;align-self:flex-start">${I.starFill}<span>What's New</span></button>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-sliders"></i> <span data-i18n="General">General</span></div>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-enabled"><span data-i18n="Enable ST-Copilot">Enable ST-Copilot</span></label>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-icon-persistent"><span data-i18n="Always show floating icon">Always show floating icon</span></label>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-wobble-window"><span><span data-i18n="Wobbly window drag">Wobbly window drag</span> <span class="scp-sp-hint" data-i18n="(jelly physics on move)">(jelly physics on move)</span></span></label>
+          <label class="scp-sp-check" title="Disables heavy visual effects like blur, advanced shadows, and 3D animations to save CPU on low-end devices." data-i18n="[title]Disables heavy visual effects like blur, advanced shadows, and 3D animations to save CPU on low-end devices."><input type="checkbox" id="scp-sp-perf-mode"><span data-i18n="Low Performance Mode (Save CPU)">Low Performance Mode (Save CPU)</span></label>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-changelog-auto"><span data-i18n="Show changelog on update">Show changelog on update</span></label>
+          <button class="scp-action-btn" id="scp-sp-open-changelog" style="margin-top:4px;align-self:flex-start">${I.starFill}<span data-i18n="What's New">What's New</span></button>
           <div class="scp-sp-field" style="margin-top:8px">
-            <label class="scp-sp-label">Window Opacity</label>
+            <label class="scp-sp-label" data-i18n="Window Opacity">Window Opacity</label>
             <div class="scp-sp-row">
               <input type="range" class="scp-slider" id="scp-sp-opacity-slider" min="20" max="100" style="flex:1">
               <span id="scp-sp-opacity-val" style="min-width:32px;text-align:right;font-size:11px;color:var(--scp-accent)">95%</span>
@@ -50,31 +50,31 @@
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-keyboard"></i> Shortcuts</div>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-keyboard"></i> <span data-i18n="Shortcuts">Shortcuts</span></div>
           <div class="scp-sp-row" style="gap:8px;margin-bottom:6px">
-            <label class="scp-sp-check" style="flex:0 0 120px"><input type="checkbox" id="scp-sp-hotkey-enabled"><span>Toggle Window</span></label>
+            <label class="scp-sp-check" style="flex:0 0 120px"><input type="checkbox" id="scp-sp-hotkey-enabled"><span data-i18n="Toggle Window">Toggle Window</span></label>
             <input type="text" class="scp-sp-input" id="scp-sp-hotkey" placeholder="Alt+Shift+C" style="flex:1">
           </div>
           <div class="scp-sp-row" style="gap:8px;margin-bottom:6px">
-            <label class="scp-sp-check" style="flex:0 0 120px"><input type="checkbox" id="scp-sp-search-hotkey-enabled"><span>Chat Search</span></label>
+            <label class="scp-sp-check" style="flex:0 0 120px"><input type="checkbox" id="scp-sp-search-hotkey-enabled"><span data-i18n="Chat Search">Chat Search</span></label>
             <input type="text" class="scp-sp-input" id="scp-sp-search-hotkey" placeholder="Ctrl+F" style="flex:1">
           </div>
           <div class="scp-sp-row" style="gap:8px">
-            <label class="scp-sp-check" style="flex:0 0 120px"><input type="checkbox" id="scp-sp-ghost-hotkey-enabled"><span>Ghost Mode</span></label>
+            <label class="scp-sp-check" style="flex:0 0 120px"><input type="checkbox" id="scp-sp-ghost-hotkey-enabled"><span data-i18n="Ghost Mode">Ghost Mode</span></label>
             <input type="text" class="scp-sp-input" id="scp-sp-ghost-hotkey" placeholder="Alt+Shift+G" style="flex:1">
           </div>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-volume-high"></i> Completion Sound</div>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-volume-high"></i> <span data-i18n="Completion Sound">Completion Sound</span></div>
           <div id="scp-sp-sound-settings"></div>
-          <label class="scp-sp-check" style="margin-top:6px"><input type="checkbox" id="scp-sp-sound-unfocused"><span>Only play when window is not focused</span></label>
+          <label class="scp-sp-check" style="margin-top:6px"><input type="checkbox" id="scp-sp-sound-unfocused"><span data-i18n="Only play when window is not focused">Only play when window is not focused</span></label>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-ghost"></i> Ghost Mode</div>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-ghost"></i> <span data-i18n="Ghost Mode">Ghost Mode</span></div>
           <div class="scp-sp-field">
-            <label class="scp-sp-label">Ghost Opacity <span class="scp-sp-hint">(window becomes transparent + click-through)</span></label>
+            <label class="scp-sp-label"><span data-i18n="Ghost Opacity">Ghost Opacity</span> <span class="scp-sp-hint" data-i18n="(window becomes transparent + click-through)">(window becomes transparent + click-through)</span></label>
             <div class="scp-sp-row">
               <input type="range" class="scp-slider" id="scp-sp-ghost-opacity" min="15" max="50" style="flex:1">
               <span id="scp-sp-ghost-opacity-val" style="min-width:32px;text-align:right;font-size:11px;color:var(--scp-accent)">15%</span>
@@ -83,193 +83,194 @@
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-bookmark"></i> Configuration Profiles</div>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-bookmark"></i> <span data-i18n="Configuration Profiles">Configuration Profiles</span></div>
           <div class="scp-profile-bar">
             <select id="scp-sp-profile-select"></select>
-            <button class="scp-profile-icon-btn" id="scp-sp-profile-save" title="Save to profile"><i class="fa-solid fa-floppy-disk"></i></button>
-            <button class="scp-profile-icon-btn" id="scp-sp-profile-create" title="New profile"><i class="fa-solid fa-plus"></i></button>
-            <button class="scp-profile-icon-btn" id="scp-sp-profile-duplicate" title="Duplicate profile"><i class="fa-solid fa-copy"></i></button>
-            <button class="scp-profile-icon-btn" id="scp-sp-profile-rename" title="Rename"><i class="fa-solid fa-pen"></i></button>
-            <button class="scp-profile-icon-btn danger" id="scp-sp-profile-delete" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            <button class="scp-profile-icon-btn" id="scp-sp-profile-save" title="Save to profile" data-i18n="[title]Save to profile"><i class="fa-solid fa-floppy-disk"></i></button>
+            <button class="scp-profile-icon-btn" id="scp-sp-profile-create" title="New profile" data-i18n="[title]New profile"><i class="fa-solid fa-plus"></i></button>
+            <button class="scp-profile-icon-btn" id="scp-sp-profile-duplicate" title="Duplicate profile" data-i18n="[title]Duplicate profile"><i class="fa-solid fa-copy"></i></button>
+            <button class="scp-profile-icon-btn" id="scp-sp-profile-rename" title="Rename" data-i18n="[title]Rename"><i class="fa-solid fa-pen"></i></button>
+            <button class="scp-profile-icon-btn danger" id="scp-sp-profile-delete" title="Delete" data-i18n="[title]Delete"><i class="fa-solid fa-trash"></i></button>
           </div>
           <div class="scp-binding-row" id="scp-sp-binding-section" style="display:none">
-            <span class="scp-binding-label">Auto-load for:</span>
-            <button class="scp-bind-btn" id="scp-sp-bind-char"><i class="fa-solid fa-user"></i> Character</button>
-            <button class="scp-bind-btn" id="scp-sp-bind-chat"><i class="fa-solid fa-comments"></i> Chat</button>
+            <span class="scp-binding-label" data-i18n="Auto-load for:">Auto-load for:</span>
+            <button class="scp-bind-btn" id="scp-sp-bind-char"><i class="fa-solid fa-user"></i> <span data-i18n="Character">Character</span></button>
+            <button class="scp-bind-btn" id="scp-sp-bind-chat"><i class="fa-solid fa-comments"></i> <span data-i18n="Chat">Chat</span></button>
           </div>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-plug"></i> Connection</div>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-plug"></i> <span data-i18n="Connection">Connection</span></div>
           <select class="scp-sp-select" id="scp-sp-conn-source">
-            <option value="default">Use Current API</option>
-            <option value="profile">Use Specific Profile</option>
-            <option value="custom">Custom Endpoint</option>
+            <option value="default" data-i18n="Use Current API">Use Current API</option>
+            <option value="profile" data-i18n="Use Specific Profile">Use Specific Profile</option>
+            <option value="custom" data-i18n="Custom Endpoint">Custom Endpoint</option>
           </select>
           <div class="scp-sp-field" id="scp-sp-global-profile-group" style="display:none; margin-top:6px">
-            <label class="scp-sp-label">Connection Profile</label>
+            <label class="scp-sp-label" data-i18n="Connection Profile">Connection Profile</label>
             <select class="scp-sp-select" id="scp-sp-conn-profile">
-              <option value="">-- Select Profile --</option>
+              <option value="" data-i18n="-- Select Profile --">-- Select Profile --</option>
             </select>
           </div>
           <div id="scp-sp-custom-profile-group" style="display:none; margin-top:6px">
             <div class="scp-sp-field" style="margin-bottom:4px">
-              <label class="scp-sp-label">Endpoint URL</label>
+              <label class="scp-sp-label" data-i18n="Endpoint URL">Endpoint URL</label>
               <input type="text" class="scp-sp-input" id="scp-sp-custom-url" placeholder="http://localhost:5000/v1">
             </div>
             <div class="scp-sp-field" style="margin-bottom:4px">
-              <label class="scp-sp-label">API Key (optional)</label>
+              <label class="scp-sp-label" data-i18n="API Key (optional)">API Key (optional)</label>
               <input type="password" class="scp-sp-input" id="scp-sp-custom-key" placeholder="sk-...">
             </div>
             <div class="scp-sp-field">
-              <label class="scp-sp-label">Model Name</label>
+              <label class="scp-sp-label" data-i18n="Model Name">Model Name</label>
               <input type="text" class="scp-sp-input" id="scp-sp-custom-model" placeholder="e.g. llama3">
             </div>
           </div>
           <div class="scp-sp-field" style="margin-top:4px">
-            <label class="scp-sp-label">Max Response Tokens</label>
+            <label class="scp-sp-label" data-i18n="Max Response Tokens">Max Response Tokens</label>
             <input type="number" class="scp-sp-input" id="scp-sp-max-tokens" placeholder="2048" min="64" max="32768">
           </div>
           <div class="scp-sp-field" style="margin-top:4px">
-            <label class="scp-sp-label">Streaming</label>
+            <label class="scp-sp-label" data-i18n="Streaming">Streaming</label>
             <div style="display:flex;gap:4px">
-              <button class="scp-action-btn scp-stream-btn" data-stream="auto" id="scp-sp-stream-auto">Auto</button>
-              <button class="scp-action-btn scp-stream-btn" data-stream="on" id="scp-sp-stream-on">Force On</button>
-              <button class="scp-action-btn scp-stream-btn" data-stream="off" id="scp-sp-stream-off">Force Off</button>
+              <button class="scp-action-btn scp-stream-btn" data-stream="auto" id="scp-sp-stream-auto" data-i18n="Auto">Auto</button>
+              <button class="scp-action-btn scp-stream-btn" data-stream="on" id="scp-sp-stream-on" data-i18n="Force On">Force On</button>
+              <button class="scp-action-btn scp-stream-btn" data-stream="off" id="scp-sp-stream-off" data-i18n="Force Off">Force Off</button>
             </div>
           </div>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-box-archive"></i> Context Payload</div>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-include-sysprompt"><span>Include ST System Prompt</span></label>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-include-persona"><span>Include User Persona</span></label>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-auto-expand-macros"><span>Auto-expand macros in user input</span></label>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-include-hidden-msgs"><span>Include hidden messages in context</span></label>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-include-alt-swipes"><span>Include alternate swipes of the last message</span></label>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-box-archive"></i> <span data-i18n="Context Payload">Context Payload</span></div>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-include-sysprompt"><span data-i18n="Include ST System Prompt">Include ST System Prompt</span></label>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-include-persona"><span data-i18n="Include User Persona">Include User Persona</span></label>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-auto-expand-macros"><span data-i18n="Auto-expand macros in user input">Auto-expand macros in user input</span></label>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-include-hidden-msgs"><span data-i18n="Include hidden messages in context">Include hidden messages in context</span></label>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-include-alt-swipes"><span data-i18n="Include alternate swipes of the last message">Include alternate swipes of the last message</span></label>
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px">
-            <div class="scp-sp-label" style="margin-bottom:2px">Character fields sent to AI context</div>
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-tags"><span>Tags</span></label>
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-description"><span>Description</span></label>
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-personality"><span>Personality</span></label>
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-scenario"><span>Scenario</span></label>
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-first-mes"><span>First Message</span></label>
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-mes-example"><span>Example Dialogue</span></label>
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-authors-note"><span>Author's Note</span></label>
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-system-prompt"><span>Main Prompt Override</span></label>
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-post-history"><span>Post-History Instructions</span></label>
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-alt-greetings"><span>Alternate Greetings <span class="scp-sp-hint">(off by default — can be large)</span></span></label>
+            <div class="scp-sp-label" style="margin-bottom:2px" data-i18n="Character fields sent to AI context">Character fields sent to AI context</div>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-tags"><span data-i18n="Tags">Tags</span></label>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-description"><span data-i18n="Description">Description</span></label>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-personality"><span data-i18n="Personality">Personality</span></label>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-scenario"><span data-i18n="Scenario">Scenario</span></label>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-first-mes"><span data-i18n="First Message">First Message</span></label>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-mes-example"><span data-i18n="Example Dialogue">Example Dialogue</span></label>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-authors-note"><span data-i18n="Author's Note">Author's Note</span></label>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-system-prompt"><span data-i18n="Main Prompt Override">Main Prompt Override</span></label>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-post-history"><span data-i18n="Post-History Instructions">Post-History Instructions</span></label>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ce-alt-greetings"><span><span data-i18n="Alternate Greetings">Alternate Greetings</span> <span class="scp-sp-hint" data-i18n="(off by default — can be large)">(off by default — can be large)</span></span></label>
             <div id="scp-sp-ce-alt-greetings-picker" style="display:none;margin-top:4px"></div>
           </div>
           <div class="scp-sp-field" style="margin-top:8px">
-            <label class="scp-sp-label">Main Chat Depth</label>
+            <label class="scp-sp-label" data-i18n="Main Chat Depth">Main Chat Depth</label>
             <div class="scp-sp-row">
               <input type="range" class="scp-slider" id="scp-sp-depth-slider" min="0" max="100" style="flex:1">
               <span class="scp-depth-val" id="scp-sp-depth-val" style="cursor:default">15</span>
             </div>
           </div>
           <div class="scp-sp-field">
-            <label class="scp-sp-label">Session History Limit</label>
+            <label class="scp-sp-label" data-i18n="Session History Limit">Session History Limit</label>
             <input type="number" class="scp-sp-input" id="scp-sp-history-limit" placeholder="50" min="1" max="500">
           </div>
           <div class="scp-sp-field">
-            <label class="scp-sp-label">Reasoning Trim Strings <span class="scp-sp-hint">(one per line)</span></label>
+            <label class="scp-sp-label"><span data-i18n="Reasoning Trim Strings">Reasoning Trim Strings</span> <span class="scp-sp-hint" data-i18n="(one per line)">(one per line)</span></label>
             <textarea class="scp-sp-textarea" id="scp-sp-reasoning-trim" rows="2" placeholder="<think></think>"></textarea>
           </div>
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px">
-            <div class="scp-sp-label" style="margin-bottom:2px">Third-party Extension Support</div>
-            <label class="scp-sp-check" title="Use ST-Regex Extension to apply regex scripts to context"><input type="checkbox" id="scp-sp-apply-regex"><span>Apply Regex to context</span></label>
-            <label class="scp-sp-check" title="Inject the active Summaryception summary into Copilot context and exclude ghosted (summarized) messages"><input type="checkbox" id="scp-sp-include-summaryception"><span>Summaryception integration</span></label>
-            <label class="scp-sp-check" title="Use active Aspect: Evolutia alter ego for character description and user persona"><input type="checkbox" id="scp-sp-use-aspect-evolutia"><span>Aspect: Evolutia integration</span></label>
+            <div class="scp-sp-label" style="margin-bottom:2px" data-i18n="Third-party Extension Support">Third-party Extension Support</div>
+            <label class="scp-sp-check" title="Use ST-Regex Extension to apply regex scripts to context" data-i18n="[title]Use ST-Regex Extension to apply regex scripts to context"><input type="checkbox" id="scp-sp-apply-regex"><span data-i18n="Apply Regex to context">Apply Regex to context</span></label>
+            <label class="scp-sp-check" title="Inject the active Summaryception summary into Copilot context and exclude ghosted (summarized) messages" data-i18n="[title]Inject the active Summaryception summary into Copilot context and exclude ghosted (summarized) messages"><input type="checkbox" id="scp-sp-include-summaryception"><span data-i18n="Summaryception integration">Summaryception integration</span></label>
+            <label class="scp-sp-check" title="Use active Aspect: Evolutia alter ego for character description and user persona" data-i18n="[title]Use active Aspect: Evolutia alter ego for character description and user persona"><input type="checkbox" id="scp-sp-use-aspect-evolutia"><span data-i18n="Aspect: Evolutia integration">Aspect: Evolutia integration</span></label>
           </div>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-message"></i> System Prompt</div>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-message"></i> <span data-i18n="System Prompt">System Prompt</span></div>
           <textarea class="scp-sp-textarea scp-sp-textarea-lg" id="scp-sp-sysprompt" rows="7"></textarea>
-          <button class="scp-action-btn" id="scp-sp-reset-prompt" style="margin-top:6px">${I.refresh}<span>Reset to Default</span></button>
+          <button class="scp-action-btn" id="scp-sp-reset-prompt" style="margin-top:6px">${I.refresh}<span data-i18n="Reset to Default">Reset to Default</span></button>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-user-pen"></i> Character Card AI Edits</div>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-char-edit-enabled"><span>Enable AI character card editing</span></label>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-user-pen"></i> <span data-i18n="Character Card AI Edits">Character Card AI Edits</span></div>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-char-edit-enabled"><span data-i18n="Enable AI character card editing">Enable AI character card editing</span></label>
           <div class="scp-sp-field" style="margin-top:6px">
-            <label class="scp-sp-label">AI Edit Prompt <span class="scp-sp-hint">macros: {{char_edit_fields}}, {{char_edit_format}}, {{char_create_format}}</span></label>
+            <label class="scp-sp-label"><span data-i18n="AI Edit Prompt">AI Edit Prompt</span> <span class="scp-sp-hint"><span data-i18n="macros:">macros:</span> &#123;&#123;char_edit_fields&#125;&#125;, &#123;&#123;char_edit_format&#125;&#125;, &#123;&#123;char_create_format&#125;&#125;</span></label>
             <textarea class="scp-sp-textarea" id="scp-sp-char-edit-prompt" rows="5" style="font-family:monospace;font-size:11px"></textarea>
-            <button class="scp-action-btn" id="scp-sp-reset-char-edit-prompt" style="margin-top:4px">${I.refresh}<span>Reset to Default</span></button>
+            <button class="scp-action-btn" id="scp-sp-reset-char-edit-prompt" style="margin-top:4px">${I.refresh}<span data-i18n="Reset to Default">Reset to Default</span></button>
           </div>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-book"></i> Lorebook AI Edits</div>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-lb-ai-enabled"><span>Enable AI Lorebook Editing</span></label>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-lb-auto-kw"><span>Auto-Keywords <span class="scp-sp-hint">(inject entries matching chat keywords)</span></span></label>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-book"></i> <span data-i18n="Lorebook AI Edits">Lorebook AI Edits</span></div>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-lb-ai-enabled"><span data-i18n="Enable AI Lorebook Editing">Enable AI Lorebook Editing</span></label>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-lb-auto-kw"><span><span data-i18n="Auto-Keywords">Auto-Keywords</span> <span class="scp-sp-hint" data-i18n="(inject entries matching chat keywords)">(inject entries matching chat keywords)</span></span></label>
           <div class="scp-sp-field">
-            <label class="scp-sp-label">Main chat keytriggers scan depth</label>
+            <label class="scp-sp-label" data-i18n="Main chat keytriggers scan depth">Main chat keytriggers scan depth</label>
             <input type="number" class="scp-sp-input" id="scp-sp-lb-st-scan-depth" placeholder="5" min="0" max="200">
           </div>
           <div class="scp-sp-field">
-            <label class="scp-sp-label">Copilot keytriggers scan depth</label>
+            <label class="scp-sp-label" data-i18n="Copilot keytriggers scan depth">Copilot keytriggers scan depth</label>
             <input type="number" class="scp-sp-input" id="scp-sp-lb-copilot-scan-depth" placeholder="6" min="0" max="200">
           </div>
           <div class="scp-sp-field">
-            <label class="scp-sp-label">AI Edit Prompt <span class="scp-sp-hint">macros: {{lorebook_output}}, {{active_lorebooks}}</span></label>
+            <label class="scp-sp-label"><span data-i18n="AI Edit Prompt">AI Edit Prompt</span> <span class="scp-sp-hint"><span data-i18n="macros:">macros:</span> &#123;&#123;lorebook_output&#125;&#125;, &#123;&#123;active_lorebooks&#125;&#125;</span></label>
             <textarea class="scp-sp-textarea" id="scp-sp-lb-manage-prompt" rows="4" style="font-family:monospace;font-size:11px"></textarea>
-            <button class="scp-action-btn" id="scp-sp-reset-lb-prompt" style="margin-top:4px">${I.refresh}<span>Reset to Default</span></button>
+            <button class="scp-action-btn" id="scp-sp-reset-lb-prompt" style="margin-top:4px">${I.refresh}<span data-i18n="Reset to Default">Reset to Default</span></button>
           </div>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-comments"></i> Chat Message AI Edits</div>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-chat-edit-enabled"><span>Enable AI Chat Message Editing</span></label>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-comments"></i> <span data-i18n="Chat Message AI Edits">Chat Message AI Edits</span></div>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-chat-edit-enabled"><span data-i18n="Enable AI Chat Message Editing">Enable AI Chat Message Editing</span></label>
           <div class="scp-sp-field" style="margin-top:6px">
-            <label class="scp-sp-label">AI Edit Prompt <span class="scp-sp-hint">macros: {{chat_edit_format}}, {{active_chat_ids}}</span></label>
+            <label class="scp-sp-label"><span data-i18n="AI Edit Prompt">AI Edit Prompt</span> <span class="scp-sp-hint"><span data-i18n="macros:">macros:</span> &#123;&#123;chat_edit_format&#125;&#125;, &#123;&#123;active_chat_ids&#125;&#125;</span></label>
             <textarea class="scp-sp-textarea" id="scp-sp-chat-edit-prompt" rows="5" style="font-family:monospace;font-size:11px"></textarea>
-            <button class="scp-action-btn" id="scp-sp-reset-chat-edit-prompt" style="margin-top:4px">${I.refresh}<span>Reset to Default</span></button>
+            <button class="scp-action-btn" id="scp-sp-reset-chat-edit-prompt" style="margin-top:4px">${I.refresh}<span data-i18n="Reset to Default">Reset to Default</span></button>
           </div>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-ellipsis"></i> Other</div>
-          
+          <div class="scp-sp-group-title"><i class="fa-solid fa-ellipsis"></i> <span data-i18n="Other">Other</span></div>
+
           <!-- Background -->
           <div class="scp-sp-group">
-            <div class="scp-sp-group-title"><i class="fa-solid fa-image"></i> Window Background</div>
+            <div class="scp-sp-group-title"><i class="fa-solid fa-image"></i> <span data-i18n="Window Background">Window Background</span></div>
             <div id="scp-sp-bg-settings"></div>
           </div>
-          
+
           <!-- Context Message Picker -->
-          <div class="scp-sp-label" style="margin-bottom:4px;color:var(--scp-text)">Context Message Picker</div>
+          <div class="scp-sp-label" style="margin-bottom:4px;color:var(--scp-text)" data-i18n="Context Message Picker">Context Message Picker</div>
           <div class="scp-sp-field">
-            <label class="scp-sp-label">Preview: first N lines</label>
+            <label class="scp-sp-label" data-i18n="Preview: first N lines">Preview: first N lines</label>
             <input type="number" class="scp-sp-input" id="scp-sp-picker-lines" min="1" max="20" placeholder="1">
           </div>
           <div class="scp-sp-field">
-            <label class="scp-sp-label">Preview: last N lines (0 = off)</label>
+            <label class="scp-sp-label" data-i18n="Preview: last N lines (0 = off)">Preview: last N lines (0 = off)</label>
             <input type="number" class="scp-sp-input" id="scp-sp-picker-last-lines" min="0" max="20" placeholder="0">
           </div>
           <div style="height:1px;background:rgba(255,255,255,0.06);margin:8px 0"></div>
-          
+
           <!-- File Attachments -->
-          <div class="scp-sp-label" style="margin-bottom:4px;color:var(--scp-text)">File Attachments</div>
+          <div class="scp-sp-label" style="margin-bottom:4px;color:var(--scp-text)" data-i18n="File Attachments">File Attachments</div>
           <div class="scp-sp-field">
-            <label class="scp-sp-label">Image Analysis Mode</label>
+            <label class="scp-sp-label" data-i18n="Image Analysis Mode">Image Analysis Mode</label>
             <select class="scp-sp-select" id="scp-sp-image-mode">
-              <option value="direct">Direct (send to current API)</option>
-              <option value="caption">Caption (use Image Captioning extension)</option>
+              <option value="direct" data-i18n="Direct (send to current API)">Direct (send to current API)</option>
+              <option value="caption" data-i18n="Caption (use Image Captioning extension)">Caption (use Image Captioning extension)</option>
             </select>
           </div>
         </div>
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-palette"></i> Interface Theme</div>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-palette"></i> <span data-i18n="Interface Theme">Interface Theme</span></div>
           <div id="scp-sp-theme-section"></div>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title" style="color:var(--scp-danger)"><i class="fa-solid fa-triangle-exclamation"></i> Danger Zone</div>
+          <div class="scp-sp-group-title" style="color:var(--scp-danger)"><i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="Danger Zone">Danger Zone</span></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="scp-action-btn scp-sp-danger-btn" id="scp-sp-clear-sessions" style="flex:1">${I.trash}<span>Clear All Sessions</span></button>
-            <button class="scp-action-btn" id="scp-sp-download-debug" style="flex:1" title="Download full debug log as text file"><i class="fa-solid fa-bug"></i><span>Download Debug Log</span></button>
+            <button class="scp-action-btn scp-sp-danger-btn" id="scp-sp-clear-sessions" style="flex:1">${I.trash}<span data-i18n="Clear All Sessions">Clear All Sessions</span></button>
+            <button class="scp-action-btn" id="scp-sp-cleanup-files" style="flex:1"><i class="fa-solid fa-broom"></i><span data-i18n="Clean Up Orphan Files">Clean Up Orphan Files</span></button>
+            <button class="scp-action-btn" id="scp-sp-download-debug" style="flex:1" title="Download full debug log as text file" data-i18n="[title]Download full debug log as text file"><i class="fa-solid fa-bug"></i><span data-i18n="Download Debug Log">Download Debug Log</span></button>
           </div>
         </div>
 
@@ -278,12 +279,12 @@
       <!-- ══ QUICK PROMPTS TAB ══ -->
       <div class="scp-sp-tab-pane" id="scp-sp-pane-prompts" style="display:none">
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-layer-group"></i> Prompt Sets</div>
-          <p style="font-size:11px;color:var(--scp-text-muted);margin:0 0 10px">Save and restore entire collections of quick prompts.</p>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-layer-group"></i> <span data-i18n="Prompt Sets">Prompt Sets</span></div>
+          <p style="font-size:11px;color:var(--scp-text-muted);margin:0 0 10px" data-i18n="Save and restore entire collections of quick prompts.">Save and restore entire collections of quick prompts.</p>
           <div id="scp-sp-qp-set-manager"></div>
         </div>
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-bolt"></i> Current Prompts</div>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-bolt"></i> <span data-i18n="Current Prompts">Current Prompts</span></div>
           <div id="scp-sp-qp-container"></div>
         </div>
       </div>
@@ -293,230 +294,230 @@
 
         <div class="scp-sp-session-banner">
           <span>${I.edit}</span>
-          <span>Overrides global settings for the current session only.</span>
-          <button class="scp-sp-reset-all-btn" id="scp-sp-reset-all-overrides">Reset All</button>
+          <span data-i18n="Overrides global settings for the current session only.">Overrides global settings for the current session only.</span>
+          <button class="scp-sp-reset-all-btn" id="scp-sp-reset-all-overrides" data-i18n="Reset All">Reset All</button>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-plug"></i> Connection</div>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-plug"></i> <span data-i18n="Connection">Connection</span></div>
           <div class="scp-sp-field">
-            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="connectionSource">Connection Source</label>
+            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="connectionSource" data-i18n="Connection Source">Connection Source</label>
             <div class="scp-sp-ov-wrap">
               <select class="scp-sp-select" id="scp-sp-ov-conn-source">
-                <option value="default">Use Current API</option>
-                <option value="profile">Use Specific Profile</option>
-                <option value="custom">Custom Endpoint</option>
+                <option value="default" data-i18n="Use Current API">Use Current API</option>
+                <option value="profile" data-i18n="Use Specific Profile">Use Specific Profile</option>
+                <option value="custom" data-i18n="Custom Endpoint">Custom Endpoint</option>
               </select>
-              <button class="scp-sp-ov-clear" data-ovkey="connectionSource" title="Clear override" disabled>↺</button>
+              <button class="scp-sp-ov-clear" data-ovkey="connectionSource" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
           </div>
           <div class="scp-sp-field" id="scp-sp-ov-profile-group" style="display:none">
-            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="connectionProfileId">Profile</label>
+            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="connectionProfileId" data-i18n="Profile">Profile</label>
             <div class="scp-sp-ov-wrap">
               <select class="scp-sp-select" id="scp-sp-ov-conn-profile">
-                <option value="">-- Select Profile --</option>
+                <option value="" data-i18n="-- Select Profile --">-- Select Profile --</option>
               </select>
-              <button class="scp-sp-ov-clear" data-ovkey="connectionProfileId" title="Clear override" disabled>↺</button>
+              <button class="scp-sp-ov-clear" data-ovkey="connectionProfileId" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
           </div>
           <div id="scp-sp-ov-custom-profile-group" style="display:none; margin-top:4px">
             <div class="scp-sp-field" style="margin-bottom:4px">
-              <label class="scp-sp-ov-label scp-sp-label" data-ovkey="customUrl">Endpoint URL</label>
+              <label class="scp-sp-ov-label scp-sp-label" data-ovkey="customUrl" data-i18n="Endpoint URL">Endpoint URL</label>
               <div class="scp-sp-ov-wrap">
-                <input type="text" class="scp-sp-input" id="scp-sp-ov-custom-url" placeholder="Global default">
-                <button class="scp-sp-ov-clear" data-ovkey="customUrl" title="Clear override" disabled>↺</button>
+                <input type="text" class="scp-sp-input" id="scp-sp-ov-custom-url" placeholder="Global default" data-i18n="[placeholder]Global default">
+                <button class="scp-sp-ov-clear" data-ovkey="customUrl" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
               </div>
             </div>
             <div class="scp-sp-field" style="margin-bottom:4px">
-              <label class="scp-sp-ov-label scp-sp-label" data-ovkey="customKey">API Key</label>
+              <label class="scp-sp-ov-label scp-sp-label" data-ovkey="customKey" data-i18n="API Key">API Key</label>
               <div class="scp-sp-ov-wrap">
-                <input type="password" class="scp-sp-input" id="scp-sp-ov-custom-key" placeholder="Global default">
-                <button class="scp-sp-ov-clear" data-ovkey="customKey" title="Clear override" disabled>↺</button>
+                <input type="password" class="scp-sp-input" id="scp-sp-ov-custom-key" placeholder="Global default" data-i18n="[placeholder]Global default">
+                <button class="scp-sp-ov-clear" data-ovkey="customKey" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
               </div>
             </div>
             <div class="scp-sp-field">
-              <label class="scp-sp-ov-label scp-sp-label" data-ovkey="customModel">Model Name</label>
+              <label class="scp-sp-ov-label scp-sp-label" data-ovkey="customModel" data-i18n="Model Name">Model Name</label>
               <div class="scp-sp-ov-wrap">
-                <input type="text" class="scp-sp-input" id="scp-sp-ov-custom-model" placeholder="Global default">
-                <button class="scp-sp-ov-clear" data-ovkey="customModel" title="Clear override" disabled>↺</button>
+                <input type="text" class="scp-sp-input" id="scp-sp-ov-custom-model" placeholder="Global default" data-i18n="[placeholder]Global default">
+                <button class="scp-sp-ov-clear" data-ovkey="customModel" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
               </div>
             </div>
           </div>
           <div class="scp-sp-field">
-            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="maxTokens">Max Tokens</label>
+            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="maxTokens" data-i18n="Max Tokens">Max Tokens</label>
             <div class="scp-sp-ov-wrap">
-              <input type="number" class="scp-sp-input" id="scp-sp-ov-max-tokens" placeholder="Use global" min="64" max="32768">
-              <button class="scp-sp-ov-clear" data-ovkey="maxTokens" title="Clear override" disabled>↺</button>
+              <input type="number" class="scp-sp-input" id="scp-sp-ov-max-tokens" placeholder="Use global" data-i18n="[placeholder]Use global" min="64" max="32768">
+              <button class="scp-sp-ov-clear" data-ovkey="maxTokens" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
           </div>
           <div class="scp-sp-field">
-            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="forceStreaming">Streaming</label>
+            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="forceStreaming" data-i18n="Streaming">Streaming</label>
             <div class="scp-sp-ov-wrap">
               <div style="display:flex;gap:4px;flex:1">
-                <button class="scp-action-btn scp-stream-btn scp-ov-stream-btn" data-stream="auto" id="scp-sp-ov-stream-auto">Auto</button>
-                <button class="scp-action-btn scp-stream-btn scp-ov-stream-btn" data-stream="on" id="scp-sp-ov-stream-on">Force On</button>
-                <button class="scp-action-btn scp-stream-btn scp-ov-stream-btn" data-stream="off" id="scp-sp-ov-stream-off">Force Off</button>
+                <button class="scp-action-btn scp-stream-btn scp-ov-stream-btn" data-stream="auto" id="scp-sp-ov-stream-auto" data-i18n="Auto">Auto</button>
+                <button class="scp-action-btn scp-stream-btn scp-ov-stream-btn" data-stream="on" id="scp-sp-ov-stream-on" data-i18n="Force On">Force On</button>
+                <button class="scp-action-btn scp-stream-btn scp-ov-stream-btn" data-stream="off" id="scp-sp-ov-stream-off" data-i18n="Force Off">Force Off</button>
               </div>
-              <button class="scp-sp-ov-clear" data-ovkey="forceStreaming" title="Clear override" disabled>↺</button>
+              <button class="scp-sp-ov-clear" data-ovkey="forceStreaming" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
           </div>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-box-archive"></i> Context Payload</div>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-box-archive"></i> <span data-i18n="Context Payload">Context Payload</span></div>
           <div class="scp-sp-ov-check-row">
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-include-sysprompt"><span>Include ST System Prompt</span></label>
-            <button class="scp-sp-ov-clear" data-ovkey="includeSystemPrompt" title="Clear override" disabled>↺</button>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-include-sysprompt"><span data-i18n="Include ST System Prompt">Include ST System Prompt</span></label>
+            <button class="scp-sp-ov-clear" data-ovkey="includeSystemPrompt" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
           </div>
           <div class="scp-sp-ov-check-row">
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-include-persona"><span>Include User Persona</span></label>
-            <button class="scp-sp-ov-clear" data-ovkey="includeUserPersonality" title="Clear override" disabled>↺</button>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-include-persona"><span data-i18n="Include User Persona">Include User Persona</span></label>
+            <button class="scp-sp-ov-clear" data-ovkey="includeUserPersonality" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
           </div>
           <div class="scp-sp-ov-check-row">
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-include-alt-swipes"><span>Include alternate swipes of last message</span></label>
-            <button class="scp-sp-ov-clear" data-ovkey="includeAlternateSwipes" title="Clear override" disabled>↺</button>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-include-alt-swipes"><span data-i18n="Include alternate swipes of last message">Include alternate swipes of last message</span></label>
+            <button class="scp-sp-ov-clear" data-ovkey="includeAlternateSwipes" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
           </div>
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06)">
-            <div class="scp-sp-label" style="margin-bottom:5px">Character fields <span class="scp-sp-hint">(override global)</span></div>
+            <div class="scp-sp-label" style="margin-bottom:5px"><span data-i18n="Character fields">Character fields</span> <span class="scp-sp-hint" data-i18n="(override global)">(override global)</span></div>
             <div class="scp-sp-ov-check-row">
-              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-tags"><span>Tags</span></label>
-              <button class="scp-sp-ov-clear" data-ovkey="charField_tags" title="Clear override" disabled>↺</button>
+              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-tags"><span data-i18n="Tags">Tags</span></label>
+              <button class="scp-sp-ov-clear" data-ovkey="charField_tags" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
             <div class="scp-sp-ov-check-row">
-              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-description"><span>Description</span></label>
-              <button class="scp-sp-ov-clear" data-ovkey="charField_description" title="Clear override" disabled>↺</button>
+              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-description"><span data-i18n="Description">Description</span></label>
+              <button class="scp-sp-ov-clear" data-ovkey="charField_description" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
             <div class="scp-sp-ov-check-row">
-              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-personality"><span>Personality</span></label>
-              <button class="scp-sp-ov-clear" data-ovkey="charField_personality" title="Clear override" disabled>↺</button>
+              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-personality"><span data-i18n="Personality">Personality</span></label>
+              <button class="scp-sp-ov-clear" data-ovkey="charField_personality" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
             <div class="scp-sp-ov-check-row">
-              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-scenario"><span>Scenario</span></label>
-              <button class="scp-sp-ov-clear" data-ovkey="charField_scenario" title="Clear override" disabled>↺</button>
+              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-scenario"><span data-i18n="Scenario">Scenario</span></label>
+              <button class="scp-sp-ov-clear" data-ovkey="charField_scenario" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
             <div class="scp-sp-ov-check-row">
-              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-first-mes"><span>First Message</span></label>
-              <button class="scp-sp-ov-clear" data-ovkey="charField_first_mes" title="Clear override" disabled>↺</button>
+              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-first-mes"><span data-i18n="First Message">First Message</span></label>
+              <button class="scp-sp-ov-clear" data-ovkey="charField_first_mes" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
             <div class="scp-sp-ov-check-row">
-              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-mes-example"><span>Example Dialogue</span></label>
-              <button class="scp-sp-ov-clear" data-ovkey="charField_mes_example" title="Clear override" disabled>↺</button>
+              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-mes-example"><span data-i18n="Example Dialogue">Example Dialogue</span></label>
+              <button class="scp-sp-ov-clear" data-ovkey="charField_mes_example" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
             <div class="scp-sp-ov-check-row">
-              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-authors-note"><span>Author's Note</span></label>
-              <button class="scp-sp-ov-clear" data-ovkey="charField_authors_note" title="Clear override" disabled>↺</button>
+              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-authors-note"><span data-i18n="Author's Note">Author's Note</span></label>
+              <button class="scp-sp-ov-clear" data-ovkey="charField_authors_note" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
             <div class="scp-sp-ov-check-row">
-              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-system-prompt"><span>Main Prompt Override</span></label>
-              <button class="scp-sp-ov-clear" data-ovkey="charField_system_prompt" title="Clear override" disabled>↺</button>
+              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-system-prompt"><span data-i18n="Main Prompt Override">Main Prompt Override</span></label>
+              <button class="scp-sp-ov-clear" data-ovkey="charField_system_prompt" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
             <div class="scp-sp-ov-check-row">
-              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-post-history"><span>Post-History Instructions</span></label>
-              <button class="scp-sp-ov-clear" data-ovkey="charField_post_history_instructions" title="Clear override" disabled>↺</button>
+              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-post-history"><span data-i18n="Post-History Instructions">Post-History Instructions</span></label>
+              <button class="scp-sp-ov-clear" data-ovkey="charField_post_history_instructions" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
             <div class="scp-sp-ov-check-row">
-              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-alt-greetings"><span>Alternate Greetings</span></label>
-              <button class="scp-sp-ov-clear" data-ovkey="charField_alternate_greetings" title="Clear override" disabled>↺</button>
+              <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-ce-alt-greetings"><span data-i18n="Alternate Greetings">Alternate Greetings</span></label>
+              <button class="scp-sp-ov-clear" data-ovkey="charField_alternate_greetings" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
             <div id="scp-sp-ov-ce-alt-greetings-picker" style="display:none;margin-top:4px;padding-left:14px"></div>
 
             <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px">
-              <div class="scp-sp-label" style="margin-bottom:2px">Third-party Extension Support</div>
+              <div class="scp-sp-label" style="margin-bottom:2px" data-i18n="Third-party Extension Support">Third-party Extension Support</div>
               <div class="scp-sp-ov-check-row">
-                <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-apply-regex"><span>Apply Regex to context</span></label>
-                <button class="scp-sp-ov-clear" data-ovkey="applyRegexToContext" title="Clear override" disabled>↺</button>
+                <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-apply-regex"><span data-i18n="Apply Regex to context">Apply Regex to context</span></label>
+                <button class="scp-sp-ov-clear" data-ovkey="applyRegexToContext" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
               </div>
             </div>
         </div>
           <div class="scp-sp-field" style="margin-top:8px">
-            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="contextDepth">Main Chat Depth</label>
+            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="contextDepth" data-i18n="Main Chat Depth">Main Chat Depth</label>
             <div class="scp-sp-ov-wrap">
               <input type="range" class="scp-slider" id="scp-sp-ov-depth-slider" min="0" max="100" style="flex:1">
               <span class="scp-depth-val" id="scp-sp-ov-depth-val" style="cursor:default">15</span>
-              <button class="scp-sp-ov-clear" data-ovkey="contextDepth" title="Clear override" disabled>↺</button>
+              <button class="scp-sp-ov-clear" data-ovkey="contextDepth" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
           </div>
           <div class="scp-sp-field">
-            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="localHistoryLimit">History Limit</label>
+            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="localHistoryLimit" data-i18n="History Limit">History Limit</label>
             <div class="scp-sp-ov-wrap">
-              <input type="number" class="scp-sp-input" id="scp-sp-ov-history-limit" placeholder="Use global" min="1" max="500">
-              <button class="scp-sp-ov-clear" data-ovkey="localHistoryLimit" title="Clear override" disabled>↺</button>
+              <input type="number" class="scp-sp-input" id="scp-sp-ov-history-limit" placeholder="Use global" data-i18n="[placeholder]Use global" min="1" max="500">
+              <button class="scp-sp-ov-clear" data-ovkey="localHistoryLimit" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
           </div>
           <div class="scp-sp-field">
-            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="reasoningTrimStrings">Reasoning Trim</label>
+            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="reasoningTrimStrings" data-i18n="Reasoning Trim">Reasoning Trim</label>
             <div class="scp-sp-ov-wrap scp-sp-ov-wrap-col">
-              <textarea class="scp-sp-textarea" id="scp-sp-ov-reasoning-trim" rows="2" placeholder="Use global"></textarea>
-              <button class="scp-sp-ov-clear" data-ovkey="reasoningTrimStrings" title="Clear override" disabled>↺</button>
+              <textarea class="scp-sp-textarea" id="scp-sp-ov-reasoning-trim" rows="2" placeholder="Use global" data-i18n="[placeholder]Use global"></textarea>
+              <button class="scp-sp-ov-clear" data-ovkey="reasoningTrimStrings" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
             </div>
           </div>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-message"></i> System Prompt</div>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-message"></i> <span data-i18n="System Prompt">System Prompt</span></div>
           <div class="scp-sp-ov-label-row">
-            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="systemPrompt">Prompt</label>
-            <button class="scp-sp-ov-clear" data-ovkey="systemPrompt" title="Clear override" disabled>↺</button>
+            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="systemPrompt" data-i18n="Prompt">Prompt</label>
+            <button class="scp-sp-ov-clear" data-ovkey="systemPrompt" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
           </div>
           <div style="margin-bottom:8px">
-            <div class="scp-sp-label" style="margin-bottom:5px">Presets</div>
+            <div class="scp-sp-label" style="margin-bottom:5px" data-i18n="Presets">Presets</div>
             <div id="scp-sp-prompt-preset-manager"></div>
           </div>
-          <textarea class="scp-sp-textarea scp-sp-textarea-lg" id="scp-sp-ov-sysprompt" placeholder="Using global system prompt…"></textarea>
+          <textarea class="scp-sp-textarea scp-sp-textarea-lg" id="scp-sp-ov-sysprompt" placeholder="Using global system prompt…" data-i18n="[placeholder]Using global system prompt…"></textarea>
         </div>
 
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-user-pen"></i> AI Edits (Prompts)</div>
-          
+          <div class="scp-sp-group-title"><i class="fa-solid fa-user-pen"></i> <span data-i18n="AI Edits (Prompts)">AI Edits (Prompts)</span></div>
+
           <!-- Char Edit -->
           <div class="scp-sp-ov-check-row">
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-char-edit-enabled"><span>Character AI Edits</span></label>
-            <button class="scp-sp-ov-clear" data-ovkey="charEditAIEnabled" title="Clear override" disabled>↺</button>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-char-edit-enabled"><span data-i18n="Character AI Edits">Character AI Edits</span></label>
+            <button class="scp-sp-ov-clear" data-ovkey="charEditAIEnabled" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
           </div>
           <div class="scp-sp-ov-label-row" style="margin-top:4px">
-            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="charEditPrompt">Char Edit Prompt</label>
-            <button class="scp-sp-ov-clear" data-ovkey="charEditPrompt" title="Clear override" disabled>↺</button>
+            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="charEditPrompt" data-i18n="Char Edit Prompt">Char Edit Prompt</label>
+            <button class="scp-sp-ov-clear" data-ovkey="charEditPrompt" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
           </div>
           <div style="margin-bottom:8px">
             <div id="scp-sp-ov-char-preset-manager"></div>
           </div>
-          <textarea class="scp-sp-textarea" id="scp-sp-ov-char-edit-prompt" rows="3" placeholder="Use global..."></textarea>
+          <textarea class="scp-sp-textarea" id="scp-sp-ov-char-edit-prompt" rows="3" placeholder="Use global..." data-i18n="[placeholder]Use global..."></textarea>
 
           <div style="height:1px;background:rgba(255,255,255,0.06);margin:8px 0"></div>
 
           <!-- LB Edit -->
           <div class="scp-sp-ov-check-row">
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-lb-ai-enabled"><span>Lorebook AI Edits</span></label>
-            <button class="scp-sp-ov-clear" data-ovkey="lorebookAIManageEnabled" title="Clear override" disabled>↺</button>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-lb-ai-enabled"><span data-i18n="Lorebook AI Edits">Lorebook AI Edits</span></label>
+            <button class="scp-sp-ov-clear" data-ovkey="lorebookAIManageEnabled" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
           </div>
           <div class="scp-sp-ov-check-row">
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-lb-auto-kw"><span>Auto-Keywords</span></label>
-            <button class="scp-sp-ov-clear" data-ovkey="lorebookAutoKeyword" title="Clear override" disabled>↺</button>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-lb-auto-kw"><span data-i18n="Auto-Keywords">Auto-Keywords</span></label>
+            <button class="scp-sp-ov-clear" data-ovkey="lorebookAutoKeyword" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
           </div>
           <div class="scp-sp-ov-label-row" style="margin-top:4px">
-            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="lorebookManagePrompt">Lorebook Edit Prompt</label>
-            <button class="scp-sp-ov-clear" data-ovkey="lorebookManagePrompt" title="Clear override" disabled>↺</button>
+            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="lorebookManagePrompt" data-i18n="Lorebook Edit Prompt">Lorebook Edit Prompt</label>
+            <button class="scp-sp-ov-clear" data-ovkey="lorebookManagePrompt" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
           </div>
           <div style="margin-bottom:8px">
             <div id="scp-sp-ov-lb-preset-manager"></div>
           </div>
-          <textarea class="scp-sp-textarea" id="scp-sp-ov-lb-manage-prompt" rows="3" placeholder="Use global..."></textarea>
+          <textarea class="scp-sp-textarea" id="scp-sp-ov-lb-manage-prompt" rows="3" placeholder="Use global..." data-i18n="[placeholder]Use global..."></textarea>
 
           <div style="height:1px;background:rgba(255,255,255,0.06);margin:8px 0"></div>
 
           <!-- Chat Edit -->
           <div class="scp-sp-ov-check-row">
-            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-chat-edit-enabled"><span>Chat Message AI Edits</span></label>
-            <button class="scp-sp-ov-clear" data-ovkey="chatEditAIEnabled" title="Clear override" disabled>↺</button>
+            <label class="scp-sp-check"><input type="checkbox" id="scp-sp-ov-chat-edit-enabled"><span data-i18n="Chat Message AI Edits">Chat Message AI Edits</span></label>
+            <button class="scp-sp-ov-clear" data-ovkey="chatEditAIEnabled" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
           </div>
           <div class="scp-sp-ov-label-row" style="margin-top:4px">
-            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="chatEditPrompt">Chat Edit Prompt</label>
-            <button class="scp-sp-ov-clear" data-ovkey="chatEditPrompt" title="Clear override" disabled>↺</button>
+            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="chatEditPrompt" data-i18n="Chat Edit Prompt">Chat Edit Prompt</label>
+            <button class="scp-sp-ov-clear" data-ovkey="chatEditPrompt" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>
           </div>
           <div style="margin-bottom:8px">
             <div id="scp-sp-ov-chat-preset-manager"></div>
           </div>
-          <textarea class="scp-sp-textarea" id="scp-sp-ov-chat-edit-prompt" rows="3" placeholder="Use global..."></textarea>
+          <textarea class="scp-sp-textarea" id="scp-sp-ov-chat-edit-prompt" rows="3" placeholder="Use global..." data-i18n="[placeholder]Use global..."></textarea>
         </div>
 
       </div>
@@ -529,47 +530,47 @@
       <!-- ══ MEMORY TAB ══ -->
       <div class="scp-sp-tab-pane" id="scp-sp-pane-memory" style="display:none">
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-brain"></i> Memory Settings</div>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-memory-enabled"><span>Enable persistent memory</span></label>
-          <label class="scp-sp-check" style="margin-top:4px"><input type="checkbox" id="scp-sp-memory-notify"><span>Show toast notification when memory is saved</span></label>
-          
+          <div class="scp-sp-group-title"><i class="fa-solid fa-brain"></i> <span data-i18n="Memory Settings">Memory Settings</span></div>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-memory-enabled"><span data-i18n="Enable persistent memory">Enable persistent memory</span></label>
+          <label class="scp-sp-check" style="margin-top:4px"><input type="checkbox" id="scp-sp-memory-notify"><span data-i18n="Show toast notification when memory is saved">Show toast notification when memory is saved</span></label>
+
           <div class="scp-sp-field" style="margin-top:8px; border-top:1px solid rgba(255,255,255,.06); padding-top:8px">
-            <label class="scp-sp-label">Memory AI Prompt <span class="scp-sp-hint">macros: {{memory_format}}, {{current_memories}}</span></label>
+            <label class="scp-sp-label"><span data-i18n="Memory AI Prompt">Memory AI Prompt</span> <span class="scp-sp-hint"><span data-i18n="macros:">macros:</span> &#123;&#123;memory_format&#125;&#125;, &#123;&#123;current_memories&#125;&#125;</span></label>
             <textarea class="scp-sp-textarea" id="scp-sp-memory-prompt" rows="5" style="font-family:monospace;font-size:11px"></textarea>
-            <button class="scp-action-btn" id="scp-sp-reset-memory-prompt" style="margin-top:4px">${I.refresh}<span>Reset</span></button>
+            <button class="scp-action-btn" id="scp-sp-reset-memory-prompt" style="margin-top:4px">${I.refresh}<span data-i18n="Reset">Reset</span></button>
           </div>
         </div>
         <div class="scp-sp-group" id="scp-sp-memory-list-group">
           <div class="scp-sp-group-title" style="justify-content:space-between">
-            <span><i class="fa-solid fa-list"></i> Stored Memories</span>
-            <button class="scp-action-btn" id="scp-sp-memory-add-btn" style="padding:2px 8px">${I.plus}<span>Add</span></button>
+            <span><i class="fa-solid fa-list"></i> <span data-i18n="Stored Memories">Stored Memories</span></span>
+            <button class="scp-action-btn" id="scp-sp-memory-add-btn" style="padding:2px 8px">${I.plus}<span data-i18n="Add">Add</span></button>
           </div>
           <div id="scp-sp-memory-list" style="display:flex;flex-direction:column;gap:6px;min-height:20px"></div>
-          <div id="scp-sp-memory-empty" style="font-size:11px;color:var(--scp-text-muted);font-style:italic;text-align:center;padding:10px 0">No memories stored yet.<br><span style="opacity:.6">The AI will add memories automatically, or you can add them manually above.</span></div>
+          <div id="scp-sp-memory-empty" style="font-size:11px;color:var(--scp-text-muted);font-style:italic;text-align:center;padding:10px 0"><span data-i18n="No memories stored yet.">No memories stored yet.</span><br><span style="opacity:.6" data-i18n="The AI will add memories automatically, or you can add them manually above.">The AI will add memories automatically, or you can add them manually above.</span></div>
         </div>
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title" style="color:var(--scp-danger)"><i class="fa-solid fa-triangle-exclamation"></i> Danger Zone</div>
-          <button class="scp-action-btn scp-sp-danger-btn" id="scp-sp-memory-clear-all">${I.trash}<span>Clear All Memories</span></button>
+          <div class="scp-sp-group-title" style="color:var(--scp-danger)"><i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="Danger Zone">Danger Zone</span></div>
+          <button class="scp-action-btn scp-sp-danger-btn" id="scp-sp-memory-clear-all">${I.trash}<span data-i18n="Clear All Memories">Clear All Memories</span></button>
         </div>
       </div>
 
       <!-- ══ TOOLS TAB ══ -->
       <div class="scp-sp-tab-pane" id="scp-sp-pane-tools" style="display:none">
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-screwdriver-wrench"></i> Tool Calls</div>
-          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-tools-enabled"><span>Enable tool calls for Copilot</span></label>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-screwdriver-wrench"></i> <span data-i18n="Tool Calls">Tool Calls</span></div>
+          <label class="scp-sp-check"><input type="checkbox" id="scp-sp-tools-enabled"><span data-i18n="Enable tool calls for Copilot">Enable tool calls for Copilot</span></label>
           <div class="scp-sp-field" style="margin-top:8px">
-            <label class="scp-sp-label">Max tool call rounds per generation</label>
+            <label class="scp-sp-label" data-i18n="Max tool call rounds per generation">Max tool call rounds per generation</label>
             <input type="number" class="scp-sp-input" id="scp-sp-tools-max-rounds" min="1" max="10" placeholder="5" style="width:64px">
           </div>
           <div class="scp-sp-field">
-            <label class="scp-sp-label">Tools System Prompt <span class="scp-sp-hint">macros: {{tools_list}}, {{tool_call_format}}</span></label>
-            <textarea id="scp-sp-tools-prompt" class="scp-sp-textarea scp-sp-textarea-lg" placeholder="Instructions for using tools..."></textarea>
-            <button id="scp-sp-tools-reset" class="scp-action-btn" style="margin-top:6px; align-self:flex-start"><i class="fa-solid fa-arrow-rotate-left"></i> Reset to Default</button>
+            <label class="scp-sp-label"><span data-i18n="Tools System Prompt">Tools System Prompt</span> <span class="scp-sp-hint"><span data-i18n="macros:">macros:</span> &#123;&#123;tools_list&#125;&#125;, &#123;&#123;tool_call_format&#125;&#125;</span></label>
+            <textarea id="scp-sp-tools-prompt" class="scp-sp-textarea scp-sp-textarea-lg" placeholder="Instructions for using tools..." data-i18n="[placeholder]Instructions for using tools..."></textarea>
+            <button id="scp-sp-tools-reset" class="scp-action-btn" style="margin-top:6px; align-self:flex-start"><i class="fa-solid fa-arrow-rotate-left"></i> <span data-i18n="Reset to Default">Reset to Default</span></button>
           </div>
         </div>
         <div class="scp-sp-group">
-          <div class="scp-sp-group-title"><i class="fa-solid fa-toolbox"></i> Available Tools</div>
+          <div class="scp-sp-group-title"><i class="fa-solid fa-toolbox"></i> <span data-i18n="Available Tools">Available Tools</span></div>
           <div id="scp-sp-tools-list" style="display:flex;flex-direction:column;gap:8px"></div>
         </div>
       </div>

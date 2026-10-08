@@ -902,6 +902,37 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       'windowBgUrl','customBackgrounds','memories'
   ]);
 
+  // Resolve against ST's locale at call time; the source English text is the key.
+  function t(strings, ...values) {
+      const ctx = SillyTavern.getContext();
+      if (typeof ctx.t === 'function') return ctx.t(strings, ...values);
+      return strings.reduce((out, s, i) => out + s + (i < values.length ? values[i] : ''), '');
+  }
+
+  function translate(text) {
+      const ctx = SillyTavern.getContext();
+      return typeof ctx.translate === 'function' ? ctx.translate(text) : text;
+  }
+
+  const LOCALE_FILES = ['ko-kr'];
+
+  // Must run before any UI is injected: data-i18n is resolved when elements are inserted.
+  async function loadLocale(extPath) {
+      const ctx = SillyTavern.getContext();
+      const locale = typeof ctx.getCurrentLocale === 'function' ? ctx.getCurrentLocale() : 'en';
+      if (!locale || locale === 'en' || typeof ctx.addLocaleData !== 'function') return;
+      // Browsers may report a bare language ("ko") where ST resolves the locale from navigator.language.
+      const file = LOCALE_FILES.includes(locale) ? locale : LOCALE_FILES.find(f => f.split('-')[0] === locale.split('-')[0]);
+      if (!file) return;
+      try {
+          const res = await fetch(`/scripts/extensions/${extPath}/i18n/${file}.json`);
+          if (!res.ok) return;
+          ctx.addLocaleData(locale, await res.json());
+      } catch (e) {
+          console.warn('[ST-Copilot] Failed to load locale', locale, e);
+      }
+  }
+
   function _dbgStrip(s) {
       const r = {};
       for (const [k, v] of Object.entries(s)) { if (!DBG_SKIP.has(k)) r[k] = v; }
@@ -1052,7 +1083,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       a.download = `st-copilot-debug-${Date.now()}.txt`;
       a.click();
       URL.revokeObjectURL(url);
-      toastr.success('Debug log downloaded.', EXT_DISPLAY);
+      toastr.success(translate('Debug log downloaded.'), EXT_DISPLAY);
   }
 
   var utilDebug = /*#__PURE__*/Object.freeze({
@@ -1332,15 +1363,15 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0;width:1px;height:1px;';
       document.body.appendChild(ta);
       ta.focus(); ta.select();
-      try { document.execCommand('copy'); toastr.success('Copied', EXT_DISPLAY); }
-      catch (e) { toastr.error('Copy failed', EXT_DISPLAY); }
+      try { document.execCommand('copy'); toastr.success(translate('Copied'), EXT_DISPLAY); }
+      catch (e) { toastr.error(translate('Copy failed'), EXT_DISPLAY); }
       ta.remove();
   }
 
   function copyText(text) {
       if (navigator.clipboard && window.isSecureContext) {
           navigator.clipboard.writeText(text)
-              .then(() => toastr.success('Copied', EXT_DISPLAY))
+              .then(() => toastr.success(translate('Copied'), EXT_DISPLAY))
               .catch(() => fallbackCopy(text));
       } else { fallbackCopy(text); }
   }
@@ -1363,7 +1394,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                 ${message ? `<div class="scp-dialog-msg">${escHtml(message)}</div>` : (htmlMessage ? `<div class="scp-dialog-msg">${htmlMessage}</div>` : '')}
                 ${isPrompt ? `<input type="text" class="scp-dialog-input" value="${escHtml(defaultValue)}" placeholder="${escHtml(placeholder)}">` : ''}
                 <div class="scp-dialog-btns">
-                    ${(isPrompt || isConfirm) ? `<button class="scp-dialog-btn scp-dialog-cancel">Cancel</button>` : ''}
+                    ${(isPrompt || isConfirm) ? `<button class="scp-dialog-btn scp-dialog-cancel" data-i18n="Cancel">Cancel</button>` : ''}
                     <button class="scp-dialog-btn scp-dialog-ok${isConfirm ? ' danger' : ''}">${isConfirm ? 'Confirm' : 'OK'}</button>
                 </div>
             </div>`;
@@ -1660,7 +1691,48 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
   let _inMemoryBucket = { activeSessionId: null, sessions: [] };
   let _currentSessionFileId = null;
+  let _fileOnDisk = false;
   const _saveQueue = new Map();
+
+  const SESSION_FILE_RE = /^copilot_sess_.+\.json$/;
+
+  function getCurrentSessionFileId() {
+      return _currentSessionFileId;
+  }
+
+  function _newSessionFileId() {
+      return `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
+  }
+
+  // A lone auto-created "Session 1" with nothing in it is not worth a file.
+  function _bucketHasContent(bucket) {
+      const sessions = bucket?.sessions || [];
+      return sessions.length > 1 || sessions.some(s => s.messages?.length > 0 || (s.overrides && Object.keys(s.overrides).length > 0));
+  }
+
+  function _cancelPendingSave(fileId) {
+      const item = _saveQueue.get(fileId);
+      if (!item) return;
+      clearTimeout(item.timer);
+      _saveQueue.delete(fileId);
+  }
+
+  async function deleteSessionFile(file_id) {
+      const ctx = SillyTavern.getContext();
+      try {
+          const res = await fetch('/api/files/delete', {
+              method: 'POST',
+              headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ path: `user/files/${file_id}` }),
+          });
+          if (res.ok || res.status === 404) return true;
+          _dbgAdd('STORAGE_DELETE_FAILED', { file_id, status: res.status });
+          return false;
+      } catch (e) {
+          _dbgAdd('STORAGE_DELETE_FAILED', { file_id, error: e.message });
+          return false;
+      }
+  }
 
   async function saveSessionFile(file_id, payload, useKeepalive = false) {
       const ctx = SillyTavern.getContext();
@@ -1725,10 +1797,6 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       }
   }
 
-  function _newSessionFileId() {
-      return `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
-  }
-
   // The ST chat id the in-memory bucket belongs to (null when no chat is open).
   let _bucketChatId = null;
   // Incremented on every initChatBucket call; an older call that is still awaiting
@@ -1774,12 +1842,16 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       const { charId } = getBindingKey();
       const superseded = () => gen !== _initGeneration || SillyTavern.getContext().chatMetadata !== chatMeta;
 
+      // A reset deletes the current file, so its pending write must not be flushed back onto disk.
+      if (forceReset && _currentSessionFileId) _cancelPendingSave(_currentSessionFileId);
+
       if (!chatId || !chatMeta) {
-          // No chat open (e.g. the welcome screen). Nothing to attach sessions to.
+          // No chat open (e.g. the welcome screen). Keep sessions in memory only.
           await _flushPendingSaves();
           if (gen !== _initGeneration) return;
           _currentSessionFileId = null;
           _bucketChatId = null;
+          _fileOnDisk = false;
           _inMemoryBucket = { activeSessionId: null, sessions: [] };
           _dbgAdd('STORAGE_NO_CHAT', { charId });
           return;
@@ -1787,14 +1859,20 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
       if (forceReset) {
           const prevMeta = chatMeta.st_copilot || null;
+          await _flushPendingSaves();
+          let prevDeleted = false;
+          if (prevMeta?.file_id && prevMeta.chat_id === chatId) {
+              prevDeleted = await deleteSessionFile(prevMeta.file_id);
+          }
+          if (superseded()) return;
           const freshId = _newSessionFileId();
           chatMeta.st_copilot = { format: 'v4', file_id: freshId, chat_id: chatId };
           _persistChatMetadata(ctx);
           _currentSessionFileId = freshId;
           _bucketChatId = chatId;
+          _fileOnDisk = false;
           _inMemoryBucket = { activeSessionId: null, sessions: [] };
-          await commitBucketChanges(true);
-          _dbgAdd('SESSION_FORCE_RESET', { charId, chatId, prevFileId: prevMeta?.file_id || null, newFileId: freshId });
+          _dbgAdd('SESSION_FORCE_RESET', { charId, chatId, prevFileId: prevMeta?.file_id || null, prevDeleted, newFileId: freshId });
           return;
       }
 
@@ -1814,21 +1892,25 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       let targetFileId = null;
       let payload = null;
       let needsInitialWrite = false;
+      let onDisk = false;
 
       if (meta && meta.file_id && meta.format === 'v4') {
           if (meta.chat_id === chatId) {
               targetFileId = meta.file_id;
               payload = await loadSessionFile(targetFileId);
               if (superseded()) return;
+              onDisk = !!payload;
           } else {
               // The chat was branched or renamed and carried our metadata along: copy the
-              // sessions into a new file so the two chats don't share one.
+              // sessions into a new file so the two chats don't share one. Empty buckets
+              // are not copied (see _bucketHasContent).
               _dbgAdd('STORAGE_CHAT_BRANCH_DETECTED', { oldChatId: meta.chat_id, newChatId: chatId });
               payload = await loadSessionFile(meta.file_id);
               if (superseded()) return;
               targetFileId = _newSessionFileId();
-              if (payload && payload !== false) {
-                  await saveSessionFile(targetFileId, payload);
+              if (payload && _bucketHasContent(payload.bucket)) {
+                  payload = { ...payload, chat_id_reference: chatId };
+                  onDisk = await saveSessionFile(targetFileId, payload);
                   if (superseded()) return;
               }
               chatMeta.st_copilot = { format: 'v4', file_id: targetFileId, chat_id: chatId };
@@ -1865,6 +1947,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           needsInitialWrite = true;
       }
 
+      _fileOnDisk = onDisk;
+
       if (payload === false) {
           _dbgAdd('STORAGE_LOAD_CORRUPTED_RECOVERY', { brokenFileId: targetFileId, charId, chatId });
           const recoveryFileId = _newSessionFileId();
@@ -1874,9 +1958,9 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           _inMemoryBucket = { activeSessionId: null, sessions: [] };
           _currentSessionFileId = recoveryFileId;
           _bucketChatId = chatId;
-          await commitBucketChanges(true);
+          _fileOnDisk = false;
 
-          toastr.error('Copilot session file was corrupted and could not be recovered. Started a fresh session storage for this chat; the broken file was kept on disk for manual recovery.', EXT_DISPLAY, { timeOut: 15000 });
+          toastr.error(translate('Copilot session file was corrupted and could not be recovered. Started a fresh session storage for this chat; the broken file was kept on disk for manual recovery.'), EXT_DISPLAY, { timeOut: 15000 });
           return;
       }
 
@@ -1891,6 +1975,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           _dbgAdd('STORAGE_BUCKET_EMPTY_INIT', { charId, chatId, fileId: targetFileId, hadPayload: !!payload });
       }
 
+      // commitBucketChanges creates the file lazily, so this is a no-op for an empty bucket.
       if (!payload || needsInitialWrite) {
           await commitBucketChanges(true);
       }
@@ -1901,7 +1986,11 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       if (!fileName) return;
 
       const snapshot = JSON.parse(JSON.stringify(_inMemoryBucket));
-      
+
+      // Create the file lazily; once it exists, keep writing so deletions are persisted too.
+      if (!_fileOnDisk && !_bucketHasContent(snapshot)) return;
+      _fileOnDisk = true;
+
       const payloadToSave = {
           _version: 4,
           chat_id_reference: _bucketChatId,
@@ -2114,9 +2203,9 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           a.download = `st-copilot-session-${safeName}.json`;
           a.click();
           URL.revokeObjectURL(url);
-          toastr.success('Session exported.', EXT_DISPLAY);
+          toastr.success(translate('Session exported.'), EXT_DISPLAY);
       } catch (e) {
-          toastr.error(`Export failed: ${e.message}`, EXT_DISPLAY);
+          toastr.error(t`Export failed: ${e.message}`, EXT_DISPLAY);
       }
   }
 
@@ -2129,7 +2218,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               const text = await file.text();
               const data = JSON.parse(text);
               if (!data.session || !data.session.id || !Array.isArray(data.session.messages)) {
-                  toastr.error('Invalid session file.', EXT_DISPLAY); return;
+                  toastr.error(translate('Invalid session file.'), EXT_DISPLAY); return;
               }
               const ok = await showCustomDialog({
                   type: 'confirm',
@@ -2143,10 +2232,10 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               bucket.sessions.push(imported);
               bucket.activeSessionId = imported.id;
               saveSessionsToMetadata();
-              toastr.success(`Session "${escHtml(imported.name)}" imported.`, EXT_DISPLAY);
+              toastr.success(t`Session "${escHtml(imported.name)}" imported.`, EXT_DISPLAY);
               if (onSuccessCallback) onSuccessCallback();
           } catch (e) {
-              toastr.error(`Import failed: ${e.message}`, EXT_DISPLAY);
+              toastr.error(t`Import failed: ${e.message}`, EXT_DISPLAY);
           }
       };
       inp.click();
@@ -2159,16 +2248,16 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           overlay.style.zIndex = '2147483050';
           overlay.innerHTML = `
             <div class="scp-dialog-box">
-                <div class="scp-dialog-title">New Session</div>
-                <div class="scp-dialog-msg">Session name:</div>
+                <div class="scp-dialog-title" data-i18n="New Session">New Session</div>
+                <div class="scp-dialog-msg" data-i18n="Session name:">Session name:</div>
                 <input type="text" class="scp-dialog-input" value="${escHtml(defaultName)}" placeholder="${escHtml(defaultName)}">
                 <label class="scp-sess-tmp-label">
                     <div class="scp-lb-toggle" id="scp-sess-tmp-toggle"><div class="scp-lb-toggle-knob"></div></div>
-                    <span>Temporary — auto-delete when switching</span>
+                    <span data-i18n="Temporary — auto-delete when switching">Temporary — auto-delete when switching</span>
                 </label>
                 <div class="scp-dialog-btns">
-                    <button class="scp-dialog-btn scp-dialog-cancel">Cancel</button>
-                    <button class="scp-dialog-btn scp-dialog-ok">Create</button>
+                    <button class="scp-dialog-btn scp-dialog-cancel" data-i18n="Cancel">Cancel</button>
+                    <button class="scp-dialog-btn scp-dialog-ok" data-i18n="Create">Create</button>
                 </div>
             </div>`;
           document.body.appendChild(overlay);
@@ -2226,12 +2315,14 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
   var session = /*#__PURE__*/Object.freeze({
     __proto__: null,
+    SESSION_FILE_RE: SESSION_FILE_RE,
     addMessage: addMessage,
     clearAllSessionOverrides: clearAllSessionOverrides,
     commitBucketChanges: commitBucketChanges,
     createSession: createSession,
     deleteCurrentSession: deleteCurrentSession,
     deleteMsg: deleteMsg,
+    deleteSessionFile: deleteSessionFile,
     expandMacros: expandMacros,
     exportCurrentSession: exportCurrentSession,
     genId: genId,
@@ -2239,6 +2330,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
     getBindingKey: getBindingKey,
     getChatBucket: getChatBucket,
     getCurrentSession: getCurrentSession,
+    getCurrentSessionFileId: getCurrentSessionFileId,
     getEffectiveSettings: getEffectiveSettings,
     getSessionFavKey: getSessionFavKey,
     getSessionOverrides: getSessionOverrides,
@@ -2385,7 +2477,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
   }
 
   async function saveWorldInfoBook(name, data) {
-      if (data._embedded) { toastr.warning('Cannot save embedded character books directly.', EXT_DISPLAY); return; }
+      if (data._embedded) { toastr.warning(translate('Cannot save embedded character books directly.'), EXT_DISPLAY); return; }
       const ctx = SillyTavern.getContext();
       const payload = { ...data };
       delete payload._ts;
@@ -2799,7 +2891,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   if (typeof ctx.updateWorldInfoList === 'function') await ctx.updateWorldInfoList();
                   else if (typeof window.loadWorldInfoList === 'function') await window.loadWorldInfoList();
               }
-              toastr.success(`Lorebook "${bookName}" created successfully.`, EXT_DISPLAY);
+              toastr.success(t`Lorebook "${bookName}" created successfully.`, EXT_DISPLAY);
           }
 
           delete wiCache[bookName];
@@ -2849,74 +2941,41 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
   async function resolveLBChangeTarget(change, strictBook = false) {
       let bookName = change.worldName || '';
-      let targetUid = change.uid;
-
-      const fuzzyWorld = bookName.toLowerCase();
-      const fuzzyName = (change.originalName || change.name || '').toLowerCase();
-      
-      if (fuzzyName && !strictBook) {
-          const activeMatch = lastActiveEntries.find(le => {
-              const wMatch = !fuzzyWorld || le.displayName.toLowerCase() === fuzzyWorld || le.bookName.toLowerCase() === fuzzyWorld;
-              const nMatch = le.entryName.toLowerCase() === fuzzyName || le.entryName.toLowerCase().includes(fuzzyName) || fuzzyName.includes(le.entryName.toLowerCase());
-              return wMatch && nMatch;
-          });
-          if (activeMatch) {
-              if (targetUid == null) targetUid = activeMatch.uid;
-              bookName = activeMatch.bookName;
-          }
-      }
+      const targetName = (change.originalName || change.name || '').trim().toLowerCase();
+      const hasUid = change.uid !== undefined && change.uid !== null;
 
       if (bookName === getDisplayName(EMBEDDED_BOOK_KEY)) bookName = EMBEDDED_BOOK_KEY;
 
-      let data = await fetchWorldInfoBook(bookName);
-      if (!data && bookName && !strictBook) {
-          const allActive = getActiveLorebookNames();
-          const match = allActive.find(n => n.toLowerCase() === fuzzyWorld || n.toLowerCase().includes(fuzzyWorld) || fuzzyWorld.includes(n.toLowerCase()));
-          if (match) {
-              bookName = match;
-              data = await fetchWorldInfoBook(bookName);
+      const findEntry = (data) => {
+          const entries = Object.values(data?.entries || {});
+          // IDs are authoritative and book-local. Never fall back to a name when
+          // an explicit ID is missing; name may also be the requested NEW title.
+          const matches = hasUid
+              ? entries.filter(entry => String(entry.uid) === String(change.uid))
+              : entries.filter(entry => targetName && (entry.comment || 'Entry #' + entry.uid).trim().toLowerCase() === targetName);
+          return matches.length === 1 ? matches[0] : null;
+      };
+
+      if (bookName) {
+          const data = await fetchWorldInfoBook(bookName);
+          return { bookName, data, origEntry: findEntry(data) };
+      }
+
+      // Without a book, only an unambiguous exact name can identify the target.
+      // Never reinterpret an ID in a different book or guess using substrings.
+      if (strictBook || hasUid || !targetName || change.action === 'add') {
+          return { bookName, data: null, origEntry: null };
+      }
+      const matches = [];
+      for (const name of getActiveLorebookNames()) {
+          const data = await fetchWorldInfoBook(name);
+          for (const entry of Object.values(data?.entries || {})) {
+              if ((entry.comment || 'Entry #' + entry.uid).trim().toLowerCase() === targetName) {
+                  matches.push({ bookName: name, data, origEntry: entry });
+              }
           }
       }
-
-      let origEntry = null;
-      if (data && data.entries) {
-          origEntry = Object.values(data.entries).find(en => {
-              if (targetUid != null && String(en.uid) === String(targetUid)) return true;
-              if (!fuzzyName) return false;
-              const cStr = (en.comment || `Entry #${en.uid}`).trim().toLowerCase();
-              if (cStr === fuzzyName) return true;
-              return cStr.includes(fuzzyName) || fuzzyName.includes(cStr);
-          });
-      }
-
-      if (!origEntry && /^\d+$/.test(fuzzyName) && data && data.entries[fuzzyName]) {
-          origEntry = data.entries[fuzzyName];
-      }
-
-      if (!origEntry && fuzzyName && !strictBook) {
-          for (const name of getActiveLorebookNames()) {
-              if (name === bookName) continue;
-              const bd = await fetchWorldInfoBook(name);
-              if (!bd) continue;
-              origEntry = Object.values(bd.entries).find(en => {
-                  const c = (en.comment || `Entry #${en.uid}`).trim().toLowerCase();
-                  return c === fuzzyName || c.includes(fuzzyName) || fuzzyName.includes(c);
-              });
-              if (origEntry) { bookName = name; data = bd; break; }
-          }
-      }
-
-      if (!data) {
-          console.warn(`[${EXT_DISPLAY}] resolveLBChangeTarget: no book data found`, {
-              change, resolvedBookName: bookName, activeBooks: getActiveLorebookNames(), cacheKeys: Object.keys(wiCache)
-          });
-      } else if (!origEntry && change.action !== 'add') {
-          console.warn(`[${EXT_DISPLAY}] resolveLBChangeTarget: entry not found`, {
-              fuzzyName, fuzzyWorld, targetUid,
-              entries: Object.values(data.entries || {}).map(e => ({ uid: e.uid, comment: e.comment, key: e.key?.slice(0, 3) }))
-          });
-      }
-      return { bookName, data, origEntry };
+      return matches.length === 1 ? matches[0] : { bookName, data: null, origEntry: null };
   }
 
   async function expandOutletsAsync(text, depth = 0) {
@@ -3234,7 +3293,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
   }
 
   function renderDiffUnified(diffLines) {
-      if (!diffLines.length) return '<div style="padding:20px;color:var(--scp-text-muted);text-align:center">No changes to display</div>';
+      if (!diffLines.length) return '<div style="padding:20px;color:var(--scp-text-muted);text-align:center" data-i18n="No changes to display">No changes to display</div>';
       const processed = processDiffLinesForInline(diffLines);
       return `<div class="scp-diff-unified">${processed.map(l => {
         const cls = l.type === 'added' ? 'scp-diff-add' : l.type === 'removed' ? 'scp-diff-rem' : 'scp-diff-ctx';
@@ -3283,7 +3342,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               ai = a.length; bi = b.length;
           }
       }
-      return `<table class="scp-diff-split-table"><thead><tr><th>Original</th><th>Modified</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+      return `<table class="scp-diff-split-table"><thead><tr><th data-i18n="Original">Original</th><th data-i18n="Modified">Modified</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
   }
 
   function openTextDiffModal(title, originalText, newText) {
@@ -3470,7 +3529,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           items.forEach(([val, txt]) => {
               const btn = document.createElement('button');
               btn.className = `scp-stats-pill${s[stateKey] === val ? ' active' : ''}`;
-              btn.textContent = txt;
+              btn.textContent = translate(txt);
               btn.dataset[stateKey] = val;
               btn.addEventListener('click', () => {
                   if (_statsState[stateKey] === val) return;
@@ -3507,17 +3566,17 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
       const danger = document.createElement('div');
       danger.className = 'scp-sp-group scp-stats-danger';
-      danger.innerHTML = `<div class="scp-sp-group-title" style="color:var(--scp-danger)"><i class="fa-solid fa-triangle-exclamation"></i> Danger Zone</div>`;
+      danger.innerHTML = `<div class="scp-sp-group-title" style="color:var(--scp-danger)"><i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="Danger Zone">Danger Zone</span></div>`;
       const resetBtn = document.createElement('button');
       resetBtn.className = 'scp-action-btn scp-sp-danger-btn';
-      resetBtn.innerHTML = '<i class="fa-solid fa-trash"></i><span>Reset Statistics</span>';
+      resetBtn.innerHTML = '<i class="fa-solid fa-trash"></i><span data-i18n="Reset Statistics">Reset Statistics</span>';
       resetBtn.addEventListener('click', async () => {
-          const ok = await showCustomDialog({ type:'confirm', title:'Reset Statistics', message:'Delete ALL collected statistics permanently? This cannot be undone.', delayConfirm:3 });
+          const ok = await showCustomDialog({ type:'confirm', title:translate('Reset Statistics'), message:'Delete ALL collected statistics permanently? This cannot be undone.', delayConfirm:3 });
           if (!ok) return;
           getSettings().stats = { g:{}, c:{}, ch:{} };
           saveSettings();
           renderStatsPane(container);
-          toastr.success('Statistics cleared.', EXT_DISPLAY);
+          toastr.success(translate('Statistics cleared.'), EXT_DISPLAY);
       });
       danger.appendChild(resetBtn);
       container.appendChild(danger);
@@ -3930,11 +3989,12 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       console.log(`[${EXT_DISPLAY}] applyLBChanges: processing ${changes.length} change(s)`, JSON.parse(JSON.stringify(changes)));
       const bookCache = {};
       const successfulChanges =[];
+      const changeBooks = new Map();
 
       for (const change of changes) {
           let { bookName, data, origEntry } = await resolveLBChangeTarget(change);
 
-          if (change.worldName && change.action !== 'delete') {
+          if (change.worldName && change.action === 'add') {
               const activeBooks = getActiveLorebookNames();
               
               if (!activeBooks.includes(change.worldName)) {
@@ -3954,9 +4014,17 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               continue;
           }
           if (!bookName) {
-              toastr.error(`[LB] Could not resolve book name for change: "${change.name || change.uid || '?'}"`, EXT_DISPLAY, { timeOut: 10000 });
+              toastr.error(t`[LB] Could not resolve book name for change: "${change.name || change.uid || '?'}"`, EXT_DISPLAY, { timeOut: 10000 });
               continue;
           }
+          if (data._embedded) {
+              toastr.warning(translate('Cannot save embedded character books directly.'), EXT_DISPLAY);
+              continue;
+          }
+          // Work on a copy so a failed save cannot mutate SillyTavern's loaded book.
+          data = bookCache[bookName] || structuredClone(data);
+          if (origEntry) origEntry = Object.values(data.entries).find(entry => String(entry.uid) === String(origEntry.uid));
+          changeBooks.set(change, bookName);
 
           if (change.action === 'add' && data) {
               const exists = Object.values(data.entries).find(e => e.comment && e.comment.toLowerCase() === (change.name || '').toLowerCase());
@@ -3999,7 +4067,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               successfulChanges.push(change);
           } else if (change.action === 'edit') {
               if (!origEntry) {
-                  toastr.error(`[LB] Entry not found for edit: "${change.name || change.uid || '?'}" in "${bookName}"`, EXT_DISPLAY, { timeOut: 10000 });
+                  toastr.error(t`[LB] Entry not found for edit: "${change.name || change.uid || '?'}" in "${bookName}"`, EXT_DISPLAY, { timeOut: 10000 });
                   continue;
               }
               if (change.name !== undefined) origEntry.comment = change.name;
@@ -4032,7 +4100,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               successfulChanges.push(change);
           } else if (change.action === 'patch') {
               if (!origEntry) {
-                  toastr.error(`[LB] Entry not found for patch: "${change.name || change.uid || '?'}" in "${bookName}"`, EXT_DISPLAY, { timeOut: 10000 });
+                  toastr.error(t`[LB] Entry not found for patch: "${change.name || change.uid || '?'}" in "${bookName}"`, EXT_DISPLAY, { timeOut: 10000 });
                   continue;
               }
               let current = origEntry.content || '';
@@ -4040,7 +4108,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               for (const patch of (change.patches || [])) {
                   const { result, matched } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
                   if (!matched) {
-                      toastr.warning(`[LB] SEARCH not found in "${origEntry.comment}": "${(patch.search || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 });
+                      toastr.warning(t`[LB] SEARCH not found in "${origEntry.comment}": "${(patch.search || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 });
                       allMatched = false;
                       break;
                   }
@@ -4080,22 +4148,27 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       }
 
       if (changes.length > 0 && !Object.keys(bookCache).length) {
-          toastr.warning('[LB] No changes were applied — see browser console (F12) for details', EXT_DISPLAY, { timeOut: 10000 });
-          return;
+          toastr.warning(translate('[LB] No changes were applied — see browser console (F12) for details'), EXT_DISPLAY, { timeOut: 10000 });
+          return [];
       }
 
+      const savedBooks = new Set();
       for (const [name, data] of Object.entries(bookCache)) {
           try {
               await saveWorldInfoBook(name, data);
+              savedBooks.add(name);
           } catch (e) {
-              toastr.error(`[LB] Save failed for "${name}": ${e.message}`, EXT_DISPLAY, { timeOut: 12000 });
+              delete wiCache[name];
+              toastr.error(t`[LB] Save failed for "${name}": ${e.message}`, EXT_DISPLAY, { timeOut: 12000 });
           }
       }
 
-      if (successfulChanges.length > 0) {
-          recordStat(SM.lb, successfulChanges.length);
-          logLBHistoryChanges(successfulChanges, 'Accepted', afterMsgId);
+      const appliedChanges = successfulChanges.filter(change => savedBooks.has(changeBooks.get(change)));
+      if (appliedChanges.length > 0) {
+          recordStat(SM.lb, appliedChanges.length);
+          logLBHistoryChanges(appliedChanges, 'Accepted', afterMsgId);
       }
+      return appliedChanges;
   }
 
   function renderProposalCard(changes, msgEl) {
@@ -4136,7 +4209,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       header.className = 'scp-lb-proposal-header';
       const headerLeft = document.createElement('div');
       headerLeft.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0';
-      headerLeft.innerHTML = `<span class="scp-lb-proposal-icon">${I.book}</span><span class="scp-lb-proposal-title">Proposed Lorebook Changes</span>`;
+      headerLeft.innerHTML = `<span class="scp-lb-proposal-icon">${I.book}</span><span class="scp-lb-proposal-title" data-i18n="Proposed Lorebook Changes">Proposed Lorebook Changes</span>`;
 
       const countBadge = document.createElement('span');
       countBadge.className = 'scp-lb-proposal-count';
@@ -4169,7 +4242,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
           const itemMeta = document.createElement('div');
           itemMeta.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;flex-wrap:wrap';
-          itemMeta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(actionLabels[c.action] || c.action || '?')}</span><span class="scp-lb-proposal-name scp-lb-pn-target">${escHtml(c.name || c.originalName || `Entry #${c.uid || '?'}`)}</span>${c.constant ? '<span class="scp-lb-src-badge scp-lb-src-global" style="font-size:9px;padding:1px 5px" title="Constant entry">★</span>' : ''}`;
+          itemMeta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(actionLabels[c.action] || c.action || '?')}</span><span class="scp-lb-proposal-name scp-lb-pn-target">${escHtml(c.name || c.originalName || `Entry #${c.uid || '?'}`)}</span>${c.constant ? '<span class="scp-lb-src-badge scp-lb-src-global" style="font-size:9px;padding:1px 5px" title="Constant entry" data-i18n="[title]Constant entry">★</span>' : ''}`;
 
           const warnEl = document.createElement('div');
           warnEl.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;width:100%;display:none;cursor:pointer;';
@@ -4223,7 +4296,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   worldPanel.appendChild(sep);
                   const newItem = document.createElement('div');
                   newItem.className = 'scp-lb-proposal-world-item scp-lb-proposal-world-new';
-                  newItem.innerHTML = `<span>${I.plus}</span><span>Create new lorebook…</span>`;
+                  newItem.innerHTML = `<span>${I.plus}</span><span data-i18n="Create new lorebook…">Create new lorebook…</span>`;
                   newItem.addEventListener('click', async () => {
                       worldPanel.classList.remove('open'); worldTrigger.classList.remove('open');
                       const name = await showCustomDialog({ type: 'prompt', title: 'New Lorebook Name', message: 'Enter name for the new lorebook:', placeholder: 'My Lorebook' });
@@ -4238,18 +4311,24 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               }
           };
 
+          let validationVersion = 0;
           const _validateBookEntry = async (bookName) => {
+              const version = ++validationVersion;
               worldTrigger.classList.add('loading');
               const checkChange = { ...editableChanges[ci], worldName: bookName };
               if (bookName !== editableChanges[ci].worldName) delete checkChange.uid;
               
               const resolved = await resolveLBChangeTarget(checkChange, true);
+              // A slower response for the previous book must not pin its ID into
+              // the newly selected book, where the same ID can mean another entry.
+              if (version !== validationVersion || bookName !== (editableChanges[ci].worldName || '')) return;
               worldTrigger.classList.remove('loading');
 
               const found = !!resolved.origEntry;
               if (found) {
                   const orig = resolved.origEntry;
                   const n = orig.comment || `Entry #${orig.uid}`;
+                  editableChanges[ci].uid = orig.uid;
                   editableChanges[ci].originalName = n;
                   if (!editableChanges[ci].name) editableChanges[ci].name = n;
                   
@@ -4274,7 +4353,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   _selectedBook = resolved.bookName;
                   worldPanel.querySelectorAll('.scp-lb-proposal-world-item').forEach(el => el.classList.toggle('active', el.dataset.value === resolved.bookName));
                   worldTriggerText.textContent = `in ${getDisplayName(resolved.bookName)}`;
-                  toastr.info(`Entry found in "<b>${escHtml(getDisplayName(resolved.bookName))}</b>" instead — lorebook switched automatically.`, EXT_DISPLAY, { escapeHtml: false });
+                  toastr.info(t`Entry found in "<b>${escHtml(getDisplayName(resolved.bookName))}</b>" instead — lorebook switched automatically.`, EXT_DISPLAY, { escapeHtml: false });
               } else {
                   worldTriggerText.textContent = found ? `in ${getDisplayName(bookName)}` : `in ${getDisplayName(bookName)} ⚠`;
               }
@@ -4303,6 +4382,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           };
 
           const selectBook = async (name) => {
+              if (name !== editableChanges[ci].worldName) delete editableChanges[ci].uid;
               _selectedBook = name;
               editableChanges[ci].worldName = name;
               worldTriggerText.textContent = `in ${getDisplayName(name)}`;
@@ -4347,7 +4427,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   e.stopPropagation();
                   const change = editableChanges[ci];
                   const { origEntry } = await resolveLBChangeTarget(change);
-                  if (!origEntry) { toastr.warning('Could not find original entry to compare against.', EXT_DISPLAY); return; }
+                  if (!origEntry) { toastr.warning(translate('Could not find original entry to compare against.'), EXT_DISPLAY); return; }
                   openDiffModal(change, origEntry);
               });
               itemBtns.appendChild(diffBtn);
@@ -4372,13 +4452,14 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               closeEditPanel();
               applyItemBtn.disabled = true; applyItemBtn.textContent = '…';
               try {
-                  await applyLBChanges([editableChanges[ci]], card.dataset.for);
+                  const applied = await applyLBChanges([editableChanges[ci]], card.dataset.for);
+                  if (!applied.includes(editableChanges[ci])) throw new Error('Change was not saved. Check the target book and entry.');
                   itemStates[ci] = 'applied'; item.classList.add('scp-lb-item-applied');
                   itemBtns.querySelectorAll('button').forEach(b => { b.disabled = true; });
                   updateCountBadge(); updateFooterBtns(); syncBlockToMessage(); checkAllResolved();
-                  toastr.success('[LB] Change applied.', EXT_DISPLAY);
+                  toastr.success(translate('[LB] Change applied.'), EXT_DISPLAY);
               } catch (err) {
-                  toastr.error(`Failed: ${err.message}`, EXT_DISPLAY);
+                  toastr.error(t`Failed: ${err.message}`, EXT_DISPLAY);
                   applyItemBtn.disabled = false; applyItemBtn.textContent = '✓';
               }
           });
@@ -4477,7 +4558,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   const contentTa = document.createElement('textarea');
                   contentTa.className = 'scp-lb-pe-textarea'; contentTa.value = c.content || '';
                   contentTa.addEventListener('input', () => { editableChanges[ci].content = contentTa.value; });
-                  editPanel.appendChild(mkRow('Content', contentTa));
+                  editPanel.appendChild(mkRow(translate('Content'), contentTa));
               }
 
               const constWrap = document.createElement('label');
@@ -4501,7 +4582,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               oNameInp.value = c.outlet_name || '';
               oNameInp.placeholder = 'Outlet macro name...';
               oNameInp.addEventListener('input', () => { editableChanges[ci].outlet_name = oNameInp.value; });
-              outletNameRow.innerHTML = '<label class="scp-lb-pe-label">Outlet Name</label>';
+              outletNameRow.innerHTML = '<label class="scp-lb-pe-label" data-i18n="Outlet Name">Outlet Name</label>';
               outletNameRow.appendChild(oNameInp);
 
               outletCb.addEventListener('change', () => { 
@@ -4552,12 +4633,13 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           if (!pending.length) return;
           applyAllBtn.disabled = true; applyAllBtn.textContent = 'Applying…';
           try {
-              await applyLBChanges(pending, card.dataset.for);
-              itemStates.forEach((s, i) => { if (s === 'pending') { itemStates[i] = 'applied'; itemEls[i].classList.add('scp-lb-item-applied'); itemEls[i].querySelectorAll('button').forEach(b => { b.disabled = true; }); } });
-              updateCountBadge(); updateFooterBtns(); checkAllResolved();
-              toastr.success(`[LB] ${pending.length} changes applied.`, EXT_DISPLAY);
+              const applied = await applyLBChanges(pending, card.dataset.for);
+              itemStates.forEach((s, i) => { if (s === 'pending' && applied.includes(editableChanges[i])) { itemStates[i] = 'applied'; itemEls[i].classList.add('scp-lb-item-applied'); itemEls[i].querySelectorAll('button').forEach(b => { b.disabled = true; }); } });
+              updateCountBadge(); updateFooterBtns(); syncBlockToMessage(); checkAllResolved();
+              if (applied.length) toastr.success(t`[LB] ${applied.length} changes applied.`, EXT_DISPLAY);
+              applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';
           } catch (e) {
-              toastr.error(`Failed: ${e.message}`, EXT_DISPLAY);
+              toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
               applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';
           }
       });
@@ -4634,7 +4716,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       listEl.innerHTML = '';
       
       if (!activeNamesArray.length) {
-          listEl.innerHTML = '<div class="scp-lb-loading">No active lorebooks found.<br><small style="opacity:.5">Link one to the character or select globally.</small></div>';
+          listEl.innerHTML = '<div class="scp-lb-loading"><span data-i18n="No active lorebooks found.">No active lorebooks found.</span><br><small style="opacity:.5" data-i18n="Link one to the character or select globally.">Link one to the character or select globally.</small></div>';
           return;
       }
       
@@ -4687,7 +4769,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       const getSourceInfo = (name) => {
           if (name === EMBEDDED_BOOK_KEY) return { cls: 'scp-lb-src-character', label: 'C', title: 'Embedded Character Lorebook' };
           
-          if (name === chatBook) return { cls: 'scp-lb-src-chat', label: 'Ch', title: 'Chat Lorebook' };
+          if (name === chatBook) return { cls: 'scp-lb-src-chat', label: translate('Ch'), title: 'Chat Lorebook' };
           if (name === personaBook) return { cls: 'scp-lb-src-persona', label: 'P', title: 'Persona Lorebook' };
           if (charBooks.has(name)) return { cls: 'scp-lb-src-character', label: 'C', title: 'Character Lorebook (Primary or Additional)' };
           if (globalBooks.includes(name)) return { cls: 'scp-lb-src-global', label: 'G', title: 'Global Lorebook' };
@@ -4769,7 +4851,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       const container = document.getElementById('scp-lb-entries');
       if (!container) return;
       const data = await fetchWorldInfoBook(bookName);
-      if (!data) { container.innerHTML = '<div class="scp-lb-empty-state">Failed to load lorebook</div>'; return; }
+      if (!data) { container.innerHTML = '<div class="scp-lb-empty-state" data-i18n="Failed to load lorebook">Failed to load lorebook</div>'; return; }
 
       const entries = wiEntriesToArray(data);
       const s = getSettings();
@@ -4807,7 +4889,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           row.innerHTML = `
             <div class="scp-lb-entry-indicator ${indClass}"></div>
             <div class="scp-lb-entry-info">
-                <span class="scp-lb-entry-name">${escHtml(entry.comment || `#${entry.uid}`)}${isInCtx ? ' <span class="scp-lb-in-ctx-badge">in context</span>' : ''}</span>
+                <span class="scp-lb-entry-name">${escHtml(entry.comment || `#${entry.uid}`)}${isInCtx ? ' <span class="scp-lb-in-ctx-badge" data-i18n="in context">in context</span>' : ''}</span>
                 <span class="scp-lb-entry-keys">${entry.key?.slice(0, 5).map(k => escHtml(k)).join(' · ') || '—'}</span>
             </div>
             <div class="scp-lb-entry-actions">
@@ -4871,7 +4953,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       const lbStatus = document.getElementById('scp-lb-detail-lb-status');
       if (lbStatus) {
           const updateStatus = () => {
-              lbStatus.textContent = entry.disable ? 'Disabled' : 'Enabled';
+              lbStatus.textContent = entry.disable ? translate('Disabled') : translate('Enabled');
               lbStatus.className = `scp-lb-detail-status ${entry.disable ? 'status-disabled' : 'status-enabled'}`;
           };
           updateStatus();
@@ -4882,7 +4964,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               if (data?.entries[entry.uid] !== undefined) {
                   data.entries[entry.uid].disable = entry.disable;
                   await saveWorldInfoBook(bookName, data);
-                  toastr.success('Status updated', EXT_DISPLAY);
+                  toastr.success(translate('Status updated'), EXT_DISPLAY);
                   renderEntryList(bookName, state.lbSearchQuery);
               }
           };
@@ -4898,7 +4980,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
   async function saveEntryDetail() {
       if (!state.lbEntryDetailEntry || !state.lbEntryDetailBook) return;
-      if (state.lbEntryDetailBook === EMBEDDED_BOOK_KEY) { toastr.warning('Cannot save embedded character book entries.', EXT_DISPLAY); return; }
+      if (state.lbEntryDetailBook === EMBEDDED_BOOK_KEY) { toastr.warning(translate('Cannot save embedded character book entries.'), EXT_DISPLAY); return; }
       const data = await fetchWorldInfoBook(state.lbEntryDetailBook);
       if (!data) return;
       const entry = data.entries[state.lbEntryDetailEntry.uid];
@@ -4908,7 +4990,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       Object.assign(state.lbEntryDetailEntry, entry);
       await saveWorldInfoBook(state.lbEntryDetailBook, data);
 
-      toastr.success('Entry saved', EXT_DISPLAY);
+      toastr.success(translate('Entry saved'), EXT_DISPLAY);
       document.getElementById('scp-lb-detail-title').textContent = entry.comment || `Entry #${entry.uid}`;
       renderEntryList(state.lbEntryDetailBook, state.lbSearchQuery);
       updateMsgCount(getCurrentSession());
@@ -4923,7 +5005,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       delete data.entries[state.lbEntryDetailEntry.uid];
       await saveWorldInfoBook(state.lbEntryDetailBook, data);
 
-      toastr.success('Entry deleted', EXT_DISPLAY);
+      toastr.success(translate('Entry deleted'), EXT_DISPLAY);
       document.getElementById('scp-lb-entry-detail').style.display = 'none';
       document.getElementById('scp-lb-entries').style.display = '';
       renderEntryList(state.lbEntryDetailBook, state.lbSearchQuery);
@@ -4931,8 +5013,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
   }
 
   async function addNewEntry() {
-      if (!state.lbActiveBook) { toastr.warning('Select a lorebook first', EXT_DISPLAY); return; }
-      if (state.lbActiveBook === EMBEDDED_BOOK_KEY) { toastr.warning('Cannot add entries to embedded character books.', EXT_DISPLAY); return; }
+      if (!state.lbActiveBook) { toastr.warning(translate('Select a lorebook first'), EXT_DISPLAY); return; }
+      if (state.lbActiveBook === EMBEDDED_BOOK_KEY) { toastr.warning(translate('Cannot add entries to embedded character books.'), EXT_DISPLAY); return; }
       const name = await showCustomDialog({ type: 'prompt', title: 'New Entry', message: 'Entry name:', placeholder: 'New Entry' });
       if (name === null) return;
       const data = await fetchWorldInfoBook(state.lbActiveBook);
@@ -4947,7 +5029,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
       data.entries[newUid] = newEntry;
       await saveWorldInfoBook(state.lbActiveBook, data);
-      toastr.success('Entry created', EXT_DISPLAY);
+      toastr.success(translate('Entry created'), EXT_DISPLAY);
       await renderEntryList(state.lbActiveBook, state.lbSearchQuery);
       showEntryDetail(newEntry, state.lbActiveBook);
       updateMsgCount(getCurrentSession());
@@ -6030,7 +6112,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       if (!isEnabled) { container.style.display = 'none'; return; }
 
       if (!greetings.length) {
-          container.innerHTML = '<div style="font-size:11px;color:var(--scp-text-muted);font-style:italic;padding:4px">No alternate greetings found for current character.</div>';
+          container.innerHTML = '<div style="font-size:11px;color:var(--scp-text-muted);font-style:italic;padding:4px" data-i18n="No alternate greetings found for current character.">No alternate greetings found for current character.</div>';
           container.style.display = '';
           return;
       }
@@ -6118,7 +6200,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
   }
 
   async function applyCharChanges(changes, char, afterMsgId = null) {
-      if (!char) { toastr.error('[CharEdit] No active character.', EXT_DISPLAY); return; }
+      if (!char) { toastr.error(translate('[CharEdit] No active character.'), EXT_DISPLAY); return; }
       const successLog = [];
 
       for (const change of changes) {
@@ -6133,7 +6215,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                       successLog.push(change);
                   } else {
                       const idx = (change.index || 1) - 1;
-                      if (idx < 0 || idx >= greetings.length) { toastr.warning(`[CharEdit] Greeting index ${change.index} out of range.`, EXT_DISPLAY); continue; }
+                      if (idx < 0 || idx >= greetings.length) { toastr.warning(t`[CharEdit] Greeting index ${change.index} out of range.`, EXT_DISPLAY); continue; }
 
                       if (action === 'overwrite') {
                           greetings[idx] = change.value || '';
@@ -6146,7 +6228,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                           let allMatched = true;
                           for (const patch of (change.patches || [])) {
                               const { result, matched } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
-                              if (!matched) { toastr.warning(`[CharEdit] SEARCH not found in greeting #${change.index}.`, EXT_DISPLAY); allMatched = false; break; }
+                              if (!matched) { toastr.warning(t`[CharEdit] SEARCH not found in greeting #${change.index}.`, EXT_DISPLAY); allMatched = false; break; }
                               current = result;
                           }
                           if (!allMatched) continue;
@@ -6172,7 +6254,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   let allMatched = true;
                   for (const patch of (change.patches || [])) {
                       const { result, matched } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
-                      if (!matched) { toastr.warning(`[CharEdit] SEARCH not found in field "${field}": "${(patch.search || '').slice(0, 60)}…"`, EXT_DISPLAY, { timeOut: 8000 }); allMatched = false; break; }
+                      if (!matched) { toastr.warning(t`[CharEdit] SEARCH not found in field "${field}": "${(patch.search || '').slice(0, 60)}…"`, EXT_DISPLAY, { timeOut: 8000 }); allMatched = false; break; }
                       current = result;
                   }
                   if (!allMatched) continue;
@@ -6181,13 +6263,13 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               }
           } catch (e) {
               console.error(`[ST-Copilot-Debug] Failed on char field "${field}":`, e);
-              toastr.error(`[CharEdit] Failed on "${field}": ${e.message}`, EXT_DISPLAY, { timeOut: 10000 });
+              toastr.error(t`[CharEdit] Failed on "${field}": ${e.message}`, EXT_DISPLAY, { timeOut: 10000 });
           }
       }
 
       if (successLog.length > 0) {
           logCharEditHistory(successLog, 'Applied', afterMsgId, char.name);
-          toastr.success(`[CharEdit] ${successLog.length} change(s) applied to ${char.name}.`, EXT_DISPLAY);
+          toastr.success(t`[CharEdit] ${successLog.length} change(s) applied to ${char.name}.`, EXT_DISPLAY);
       }
   }
 
@@ -6301,7 +6383,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       header.className = 'scp-lb-proposal-header';
       const headerLeft = document.createElement('div');
       headerLeft.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0';
-      headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-success);display:flex"><i class="fa-solid fa-user-plus"></i></span><span class="scp-lb-proposal-title">New Character Proposal</span>`;
+      headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-success);display:flex"><i class="fa-solid fa-user-plus"></i></span><span class="scp-lb-proposal-title" data-i18n="New Character Proposal">New Character Proposal</span>`;
       const dismissBtn = document.createElement('button');
       dismissBtn.className = 'scp-lb-proposal-dismiss'; dismissBtn.innerHTML = I.x; dismissBtn.title = 'Dismiss';
       dismissBtn.addEventListener('click', () => {
@@ -6324,7 +6406,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           row.className = 'scp-lb-pe-row';
           const lbl = document.createElement('label');
           lbl.className = 'scp-lb-pe-label';
-          lbl.textContent = f.label + (f.key === 'name' ? ' *' : '');
+          lbl.textContent = translate(f.label) + (f.key === 'name' ? ' *' : '');
           let inp;
           if (f.multiline) {
               inp = document.createElement('textarea');
@@ -6354,11 +6436,11 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
       const cancelBtn = document.createElement('button');
       cancelBtn.className = 'scp-lb-proposal-reject';
-      cancelBtn.textContent = 'Cancel';
+      cancelBtn.textContent = translate('Cancel');
 
       createBtn.addEventListener('click', async () => {
           if (!editableData.name?.trim()) {
-              toastr.warning('Character name is required.', EXT_DISPLAY);
+              toastr.warning(translate('Character name is required.'), EXT_DISPLAY);
               inputs.name.focus();
               return;
           }
@@ -6374,11 +6456,11 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           try {
               await createCharacterAPI(editableData);
               logCharCreationHistory(editableData, 'Applied', card.dataset.for);
-              toastr.success(`Character "${escHtml(editableData.name)}" created!`, EXT_DISPLAY);
+              toastr.success(t`Character "${escHtml(editableData.name)}" created!`, EXT_DISPLAY);
               card.remove();
           } catch (e) {
               console.error('[ST-Copilot-Debug] Character creation UI error:', e);
-              toastr.error(`Failed: ${e.message}`, EXT_DISPLAY, { timeOut: 10000 });
+              toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY, { timeOut: 10000 });
               createBtn.disabled = false;
               createBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Create Character';
           }
@@ -6520,7 +6602,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               : c.action === 'prepend' ? '⬆ Prepend'
               : c.action === 'append_text' ? '⬇ Append'
               : `✎ Replace${patchCount}`;
-          meta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(actionLabel)}</span><span class="scp-lb-proposal-name">${escHtml(getFieldLabel(c.field))}${c.index?` #${c.index}`:''}</span>`;
+          meta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(actionLabel)}</span><span class="scp-lb-proposal-name">${escHtml(translate(getFieldLabel(c.field)))}${c.index?` #${c.index}`:''}</span>`;
 
           const btns = document.createElement('div');
           btns.className = 'scp-lb-proposal-item-btns';
@@ -6582,7 +6664,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   countBadge.textContent = `${getPending()} pending`; updateFooter();
                   checkAllResolved();
               } catch (err) {
-                  toastr.error(`Failed: ${err.message}`, EXT_DISPLAY);
+                  toastr.error(t`Failed: ${err.message}`, EXT_DISPLAY);
                   applyBtn.disabled = false; applyBtn.textContent = '\u2713';
                   if (isNameField) { itemStates[ci] = 'pending'; _syncAllCardsToMessage(msgId); }
               }
@@ -6691,7 +6773,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
                   const addPatchBtn = document.createElement('button');
                   addPatchBtn.className = 'scp-action-btn'; addPatchBtn.style.marginTop = '8px';
-                  addPatchBtn.innerHTML = `${I.plus}<span>Add Patch</span>`;
+                  addPatchBtn.innerHTML = `${I.plus}<span data-i18n="Add Patch">Add Patch</span>`;
                   addPatchBtn.addEventListener('click', () => { change.patches.push({ search: '', replace: '' }); rebuildEditPanel(); });
                   editPanel.appendChild(addPatchBtn);
               } else {
@@ -6750,7 +6832,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               countBadge.textContent = `${getPending()} pending`; updateFooter();
               checkAllResolved();
           } catch (e) {
-              toastr.error(`Failed: ${e.message}`, EXT_DISPLAY);
+              toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
               applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';
               if (hasNameField) { pendingIndices.forEach(i => { itemStates[i] = 'pending'; }); _syncAllCardsToMessage(msgId); }
           }
@@ -6985,7 +7067,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
   async function applyChatChanges(changes, afterMsgId = null) {
       const ctx = SillyTavern.getContext();
       const msgs = ctx.chat;
-      if (!msgs) { toastr.error('[ChatEdit] No active chat.', EXT_DISPLAY); return; }
+      if (!msgs) { toastr.error(translate('[ChatEdit] No active chat.'), EXT_DISPLAY); return; }
       const successLog = [];
 
       for (const change of changes) {
@@ -7097,7 +7179,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                                   content = content.replace(re, change.replace || '');
                                   changed = true;
                               }
-                          } catch(e) { toastr.error(`[ChatEdit] Invalid regex: ${change.regex}`, EXT_DISPLAY); }
+                          } catch(e) { toastr.error(t`[ChatEdit] Invalid regex: ${change.regex}`, EXT_DISPLAY); }
                       }
 
                       if (changed) {
@@ -7117,7 +7199,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   );
                   for (const idx of sortedIndices) {
                       if (idx < 0 || idx >= msgs.length) {
-                          toastr.warning(`[ChatEdit] Message #${idx} not found`, EXT_DISPLAY, { timeOut: 6000 });
+                          toastr.warning(t`[ChatEdit] Message #${idx} not found`, EXT_DISPLAY, { timeOut: 6000 });
                           allSuccess = false; continue;
                       }
                       const msg = msgs[idx];
@@ -7137,7 +7219,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                           let matched = true;
                           for (const patch of (change.patches || [])) {
                               const { result, matched: m } = applySearchReplaceToField(content, patch.search || patch.anchor || '', patch.replace || '');
-                              if (!m) { toastr.warning(`[ChatEdit] ANCHOR not found in #${idx}: "${(patch.search || patch.anchor || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 }); matched = false; break; }
+                              if (!m) { toastr.warning(t`[ChatEdit] ANCHOR not found in #${idx}: "${(patch.search || patch.anchor || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 }); matched = false; break; }
                               content = result;
                           }
                           if (!matched) { allSuccess = false; continue; }
@@ -7151,7 +7233,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
               const resolved = _resolveStMsgByIndexOrId(change);
               if (!resolved) {
-                  toastr.warning(`[ChatEdit] Message not found: Index ${change.msg_index ?? change.msg_id}`, EXT_DISPLAY, { timeOut: 6000 });
+                  toastr.warning(t`[ChatEdit] Message not found: Index ${change.msg_index ?? change.msg_id}`, EXT_DISPLAY, { timeOut: 6000 });
                   continue;
               }
               const { idx, msg } = resolved;
@@ -7176,7 +7258,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   for (const patch of (change.patches || [])) {
                       const { result, matched } = applySearchReplaceToField(content, patch.search || patch.anchor || '', patch.replace || '');
                       if (!matched) {
-                          toastr.warning(`[ChatEdit] ANCHOR not found in message ${change.msg_index ?? change.msg_id}: "${(patch.search || patch.anchor || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 });
+                          toastr.warning(t`[ChatEdit] ANCHOR not found in message ${change.msg_index ?? change.msg_id}: "${(patch.search || patch.anchor || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 });
                           allMatched = false; break;
                       }
                       content = result;
@@ -7188,14 +7270,14 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               successLog.push(change);
           } catch (e) {
               console.error(`[ST-Copilot-Debug] ChatEdit Failed:`, e);
-              toastr.error(`[ChatEdit] Failed on change: ${e.message}`, EXT_DISPLAY, { timeOut: 10000 });
+              toastr.error(t`[ChatEdit] Failed on change: ${e.message}`, EXT_DISPLAY, { timeOut: 10000 });
           }
       }
 
       if (successLog.length > 0) {
           setTimeout(() => _refreshSTChatDOM(ctx), 100);
           await logChatEditHistory$1(successLog, 'Applied', afterMsgId);
-          toastr.success(`[ChatEdit] ${successLog.length} change(s) applied.`, EXT_DISPLAY);
+          toastr.success(t`[ChatEdit] ${successLog.length} change(s) applied.`, EXT_DISPLAY);
       }
   }
 
@@ -7247,15 +7329,15 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       const itemStates = editableChanges.map(() => 'pending');
 
       const ACTION_LABELS = { 
-          add: '<i class="fa-solid fa-square-plus" style="margin-right: 4px;"></i> Add', 
+          add: '<i class="fa-solid fa-square-plus" style="margin-right: 4px;"></i> <span data-i18n="Add">Add</span>',
           replace: '<i class="fa-solid fa-pen-to-square" style="margin-right: 4px;"></i> Replace', 
           overwrite: '<i class="fa-solid fa-rotate" style="margin-right: 4px;"></i> Overwrite', 
           prepend: '<i class="fa-solid fa-arrow-up" style="margin-right: 4px;"></i> Prepend', 
           append: '<i class="fa-solid fa-arrow-down" style="margin-right: 4px;"></i> Append', 
           bulk_replace: '<i class="fa-solid fa-list-check" style="margin-right: 4px;"></i> Bulk', 
           regex: '<i class="fa-solid fa-terminal" style="margin-right: 4px;"></i> Regex', 
-          delete: '<i class="fa-solid fa-trash" style="margin-right: 4px;"></i> Delete', 
-          hide: '<i class="fa-solid fa-eye-slash" style="margin-right: 4px;"></i> Hide', 
+          delete: '<i class="fa-solid fa-trash" style="margin-right: 4px;"></i> <span data-i18n="Delete">Delete</span>',
+          hide: '<i class="fa-solid fa-eye-slash" style="margin-right: 4px;"></i> <span data-i18n="Hide">Hide</span>',
           unhide: '<i class="fa-solid fa-eye" style="margin-right: 4px;"></i> Unhide',
           rename_chat: '<i class="fa-solid fa-tag" style="margin-right: 4px;"></i> Rename Chat' 
       };
@@ -7423,7 +7505,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       const countBadge = document.createElement('span');
       countBadge.className = 'scp-lb-proposal-count';
       countBadge.textContent = `${editableChanges.length} pending`;
-      headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-accent);display:flex">${I.chatEdit}</span><span class="scp-lb-proposal-title">Proposed Chat Edits</span>`;
+      headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-accent);display:flex">${I.chatEdit}</span><span class="scp-lb-proposal-title" data-i18n="Proposed Chat Edits">Proposed Chat Edits</span>`;
       headerLeft.appendChild(countBadge);
       const dismissBtn = document.createElement('button');
       dismissBtn.className = 'scp-lb-proposal-dismiss'; dismissBtn.innerHTML = I.x; dismissBtn.title = 'Dismiss all';
@@ -7501,11 +7583,11 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   } else {
                       let startIdx = change.msg_index !== undefined ? change.msg_index : (change.msg_range ? change.msg_range[0] : null);
                       let endIdx = change.msg_index !== undefined ? change.msg_index : (change.msg_range ? change.msg_range[1] : null);
-                      if (startIdx === null || endIdx === null) { toastr.warning('Message index not specified.', EXT_DISPLAY); return; }
+                      if (startIdx === null || endIdx === null) { toastr.warning(translate('Message index not specified.'), EXT_DISPLAY); return; }
                       for (let i = Math.max(0, startIdx); i <= Math.min(stMsgs.length - 1, endIdx); i++) { if (stMsgs[i]) targetIdxList.push(i); }
                   }
 
-                  if (!targetIdxList.length) { toastr.warning(`Message(s) not found — chat may have changed since this proposal was generated.`, EXT_DISPLAY, { timeOut: 7000 }); return; }
+                  if (!targetIdxList.length) { toastr.warning(translate('Message(s) not found — chat may have changed since this proposal was generated.'), EXT_DISPLAY, { timeOut: 7000 }); return; }
                   
                   let origCombined = [];
                   let newCombined = [];
@@ -7524,7 +7606,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   }
 
                   if (changesFound === 0) {
-                      toastr.info('No changes would be made to these messages.', EXT_DISPLAY);
+                      toastr.info(translate('No changes would be made to these messages.'), EXT_DISPLAY);
                       return;
                   }
 
@@ -7589,7 +7671,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                       updateFooterBtns(); 
                       syncBlockToMessage(); 
 
-                      toastr.error(`Failed: ${err.message}`, EXT_DISPLAY);
+                      toastr.error(t`Failed: ${err.message}`, EXT_DISPLAY);
                       applyBtn.disabled = false; 
                       applyBtn.textContent = '✓';
                   }
@@ -7714,7 +7796,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                           refreshPreview(); 
                           refreshValidation(); 
                       });
-                      editPanel.appendChild(mkRow('Content', valueTa));
+                      editPanel.appendChild(mkRow(translate('Content'), valueTa));
                   } else if (change.action === 'replace') {
                       (change.patches || []).forEach((patch, pi) => {
                           const pHdr = document.createElement('div');
@@ -7739,7 +7821,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                       });
                       const addPatchBtn = document.createElement('button');
                       addPatchBtn.className = 'scp-action-btn'; addPatchBtn.style.marginTop = '8px';
-                      addPatchBtn.innerHTML = `${I.plus}<span>Add Patch</span>`;
+                      addPatchBtn.innerHTML = `${I.plus}<span data-i18n="Add Patch">Add Patch</span>`;
                       addPatchBtn.addEventListener('click', () => { change.patches.push({ search: '', replace: '' }); rebuildEditPanel(); });
                       editPanel.appendChild(addPatchBtn);
                   } else if (change.action === 'bulk_replace') {
@@ -7767,7 +7849,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                       const valueTa = document.createElement('textarea');
                       valueTa.className = 'scp-lb-pe-textarea'; valueTa.rows = 5; valueTa.value = change.content || '';
                       valueTa.addEventListener('input', () => { change.content = valueTa.value; refreshPreview(); refreshValidation(); });
-                      editPanel.appendChild(mkRow('Content', valueTa));
+                      editPanel.appendChild(mkRow(translate('Content'), valueTa));
                   }
               };
               rebuildEditPanel();
@@ -7865,7 +7947,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   updateFooterBtns(); 
                   syncBlockToMessage(); 
                   
-                  toastr.error(`Failed: ${e.message}`, EXT_DISPLAY);
+                  toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
                   applyAllBtn.disabled = false; 
                   applyAllBtn.textContent = 'Apply All';
               }
@@ -8159,8 +8241,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                 <button class="scp-memory-item-toggle" title="${mem.disabled ? 'Enable Memory' : 'Disable Memory'}">
                     <i class="fa-solid ${mem.disabled ? 'fa-toggle-off' : 'fa-toggle-on'}"></i>
                 </button>
-                <button class="scp-memory-item-edit" title="Edit"><i class="fa-solid fa-pen"></i></button>
-                <button class="scp-memory-item-del" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                <button class="scp-memory-item-edit" title="Edit" data-i18n="[title]Edit"><i class="fa-solid fa-pen"></i></button>
+                <button class="scp-memory-item-del" title="Delete" data-i18n="[title]Delete"><i class="fa-solid fa-trash"></i></button>
             </div>
         `;
           const valEl = document.createElement('div');
@@ -8220,7 +8302,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       };
 
       if (tree.global.length > 0) {
-          const globDet = buildDetails('Global', 'globe', tree.global.map(createMemEl), true);
+          const globDet = buildDetails(translate('Global'), 'globe', tree.global.map(createMemEl), true);
           if (globDet) listEl.appendChild(globDet);
       }
 
@@ -8295,17 +8377,17 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
           overlay.innerHTML = `<div class="scp-dialog-box">
 <div class="scp-dialog-title">${isNew ? 'Add Memory' : 'Edit Memory'}</div>
-<div class="scp-dialog-msg">Category / Key:</div>
-<input type="text" class="scp-dialog-input" id="scp-mem-key-inp" placeholder="e.g. Preferences, About Me, Profession..." value="${escHtml(mem?.key || '')}">
-<div class="scp-dialog-msg" style="margin-top:4px">Value:</div>
-<textarea class="scp-dialog-input" id="scp-mem-val-inp" rows="3" placeholder="What to remember..." style="height:auto;resize:vertical;margin-bottom:10px;">${escHtml(mem?.value || '')}</textarea>
-<div class="scp-dialog-msg" style="margin-top:4px">Scope:</div>
+<div class="scp-dialog-msg" data-i18n="Category / Key:">Category / Key:</div>
+<input type="text" class="scp-dialog-input" id="scp-mem-key-inp" placeholder="e.g. Preferences, About Me, Profession..." data-i18n="[placeholder]e.g. Preferences, About Me, Profession..." value="${escHtml(mem?.key || '')}">
+<div class="scp-dialog-msg" style="margin-top:4px" data-i18n="Value:">Value:</div>
+<textarea class="scp-dialog-input" id="scp-mem-val-inp" rows="3" placeholder="What to remember..." data-i18n="[placeholder]What to remember..." style="height:auto;resize:vertical;margin-bottom:10px;">${escHtml(mem?.value || '')}</textarea>
+<div class="scp-dialog-msg" style="margin-top:4px" data-i18n="Scope:">Scope:</div>
 <select class="scp-dialog-input" id="scp-mem-scope-inp" style="margin-bottom:20px;">
 ${scopeHtml}
 </select>
 <div class="scp-dialog-btns">
-<button class="scp-dialog-btn scp-dialog-cancel">Cancel</button>
-<button class="scp-dialog-btn scp-dialog-ok">${isNew ? 'Add' : 'Save'}</button>
+<button class="scp-dialog-btn scp-dialog-cancel" data-i18n="Cancel">Cancel</button>
+<button class="scp-dialog-btn scp-dialog-ok">${isNew ? translate('Add') : translate('Save')}</button>
 </div></div>`;
           document.body.appendChild(overlay);
           const keyInp = overlay.querySelector('#scp-mem-key-inp');
@@ -8395,7 +8477,7 @@ ${scopeHtml}
               saveSettings();
               const el = document.getElementById('scp-sp-memory-prompt'); if (el) el.value = DEFAULT_MEMORY_PROMPT;
               const stEl = document.getElementById('scp-memory-prompt'); if (stEl) stEl.value = DEFAULT_MEMORY_PROMPT;
-              toastr.success('Prompt reset.', EXT_DISPLAY);
+              toastr.success(translate('Prompt reset.'), EXT_DISPLAY);
           });
       }
 
@@ -8414,12 +8496,12 @@ ${scopeHtml}
           clearBtn.parentNode.replaceChild(newClearBtn, clearBtn);
           newClearBtn.addEventListener('click', async () => {
               const count = Object.keys(getMemories()).length;
-              if (!count) { toastr.info('No memories to clear.', EXT_DISPLAY); return; }
-              const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Memories', message: `Delete all ${count} stored memories? This cannot be undone.`, delayConfirm: 2 });
+              if (!count) { toastr.info(translate('No memories to clear.'), EXT_DISPLAY); return; }
+              const ok = await showCustomDialog({ type: 'confirm', title: translate('Clear All Memories'), message: `Delete all ${count} stored memories? This cannot be undone.`, delayConfirm: 2 });
               if (!ok) return;
               clearAllMemories();
               renderMemoryList();
-              toastr.success('All memories cleared.', EXT_DISPLAY);
+              toastr.success(translate('All memories cleared.'), EXT_DISPLAY);
           });
       }
 
@@ -8805,7 +8887,7 @@ ${scopeHtml}
         <div class="scp-color-pop-row">
             <input type="color" class="scp-color-pop-wheel" value="${hexVal}">
             <div class="scp-color-pop-alpha-col">
-                <span class="scp-color-pop-alpha-label">Alpha</span>
+                <span class="scp-color-pop-alpha-label" data-i18n="Alpha">Alpha</span>
                 <input type="range" class="scp-slider scp-color-pop-alpha" min="0" max="100" value="${alphaVal}">
                 <span class="scp-color-pop-alpha-val">${alphaVal}%</span>
             </div>
@@ -9156,7 +9238,7 @@ ${scopeHtml}
           s.connectionProfileId = ''; saveSettings(); currentVal = '';
       }
       if (service?.handleDropdown) { service.handleDropdown(profSel); if (currentVal && Array.from(profSel.options).some(o => o.value === currentVal)) profSel.value = currentVal; return; }
-      profSel.innerHTML = '<option value="">-- Select Profile --</option>';
+      profSel.innerHTML = '<option value="" data-i18n="-- Select Profile --">-- Select Profile --</option>';
       profiles.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; profSel.appendChild(o); });
       if (Array.from(profSel.options).some(o => o.value === currentVal)) profSel.value = currentVal;
   }
@@ -9174,7 +9256,7 @@ ${scopeHtml}
               if (isOv) setSessionOverride('connectionProfileId', undefined); else { s.connectionProfileId = ''; saveSettings(); }
               targetVal = '';
           }
-          sel.innerHTML = '<option value="">-- Select Profile --</option>';
+          sel.innerHTML = '<option value="" data-i18n="-- Select Profile --">-- Select Profile --</option>';
           profiles.forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.appendChild(o); });
           if (Array.from(sel.options).some(o => o.value === targetVal)) sel.value = targetVal;
       });
@@ -9233,13 +9315,13 @@ ${scopeHtml}
       const profileRow = document.createElement('div'); profileRow.className = 'scp-profile-bar'; profileRow.style.marginBottom = '12px';
       profileRow.innerHTML = `
         <select id="scp-theme-profile-select"></select>
-        <button class="scp-profile-icon-btn" id="scp-theme-save" title="Save current theme"><i class="fa-solid fa-floppy-disk"></i></button>
-        <button class="scp-profile-icon-btn" id="scp-theme-create" title="Create new theme"><i class="fa-solid fa-plus"></i></button>
-        <button class="scp-profile-icon-btn" id="scp-theme-duplicate" title="Duplicate theme"><i class="fa-solid fa-copy"></i></button>
-        <button class="scp-profile-icon-btn" id="scp-theme-rename" title="Rename theme"><i class="fa-solid fa-pen"></i></button>
-        <button class="scp-profile-icon-btn danger" id="scp-theme-delete" title="Delete theme"><i class="fa-solid fa-trash"></i></button>
-        <button class="scp-profile-icon-btn" id="scp-theme-export" title="Export theme"><i class="fa-solid fa-file-export"></i></button>
-        <button class="scp-profile-icon-btn" id="scp-theme-import" title="Import theme"><i class="fa-solid fa-file-import"></i></button>`;
+        <button class="scp-profile-icon-btn" id="scp-theme-save" title="Save current theme" data-i18n="[title]Save current theme"><i class="fa-solid fa-floppy-disk"></i></button>
+        <button class="scp-profile-icon-btn" id="scp-theme-create" title="Create new theme" data-i18n="[title]Create new theme"><i class="fa-solid fa-plus"></i></button>
+        <button class="scp-profile-icon-btn" id="scp-theme-duplicate" title="Duplicate theme" data-i18n="[title]Duplicate theme"><i class="fa-solid fa-copy"></i></button>
+        <button class="scp-profile-icon-btn" id="scp-theme-rename" title="Rename theme" data-i18n="[title]Rename theme"><i class="fa-solid fa-pen"></i></button>
+        <button class="scp-profile-icon-btn danger" id="scp-theme-delete" title="Delete theme" data-i18n="[title]Delete theme"><i class="fa-solid fa-trash"></i></button>
+        <button class="scp-profile-icon-btn" id="scp-theme-export" title="Export theme" data-i18n="[title]Export theme"><i class="fa-solid fa-file-export"></i></button>
+        <button class="scp-profile-icon-btn" id="scp-theme-import" title="Import theme" data-i18n="[title]Import theme"><i class="fa-solid fa-file-import"></i></button>`;
       container.appendChild(profileRow);
       const sel = profileRow.querySelector('#scp-theme-profile-select');
       const optGrpDefault = document.createElement('optgroup'); optGrpDefault.label = 'Default Presets';
@@ -9264,7 +9346,7 @@ ${scopeHtml}
       sel.addEventListener('change', async () => {
           const name = sel.value;
           if (isThemeDirty()) {
-              const ok = await showCustomDialog({ type: 'confirm', title: 'Unsaved Changes', message: 'You have unsaved changes. Switch anyway?' });
+              const ok = await showCustomDialog({ type: 'confirm', title: translate('Unsaved Changes'), message: 'You have unsaved changes. Switch anyway?' });
               if (!ok) { sel.value = s.activeThemeProfile ? s.activeThemeProfile : sel.value; return; }
           }
           const s2 = getSettings();
@@ -9280,15 +9362,15 @@ ${scopeHtml}
           if (val.startsWith('__preset__')) {
               const name = await showCustomDialog({ type: 'prompt', title: 'Save as Custom Theme', message: 'Name for your custom theme:', placeholder: 'My Theme' });
               if (!name?.trim()) return;
-              const s2 = getSettings(); s2.savedThemes[name.trim()] = { ...s2.customTheme }; s2.activeThemeProfile = name.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success(`Theme "${name.trim()}" saved`, EXT_DISPLAY); _clearDirty('theme');
+              const s2 = getSettings(); s2.savedThemes[name.trim()] = { ...s2.customTheme }; s2.activeThemeProfile = name.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success(t`Theme "${name.trim()}" saved`, EXT_DISPLAY); _clearDirty('theme');
           } else if (val) {
-              const s2 = getSettings(); s2.savedThemes[val] = { ...s2.customTheme }; saveSettings(); toastr.success(`Theme "${val}" updated`, EXT_DISPLAY); _clearDirty('theme');
+              const s2 = getSettings(); s2.savedThemes[val] = { ...s2.customTheme }; saveSettings(); toastr.success(t`Theme "${val}" updated`, EXT_DISPLAY); _clearDirty('theme');
           }
       });
       profileRow.querySelector('#scp-theme-create').addEventListener('click', async () => {
           const name = await showCustomDialog({ type: 'prompt', title: 'New Theme', message: 'Enter name for new theme:', placeholder: 'My New Theme' });
           if (!name?.trim()) return;
-          const s2 = getSettings(); s2.savedThemes[name.trim()] = { ...s2.customTheme }; s2.activeThemeProfile = name.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success(`Created theme "${name.trim()}"`, EXT_DISPLAY);
+          const s2 = getSettings(); s2.savedThemes[name.trim()] = { ...s2.customTheme }; s2.activeThemeProfile = name.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success(t`Created theme "${name.trim()}"`, EXT_DISPLAY);
       });
       profileRow.querySelector('#scp-theme-duplicate').addEventListener('click', async () => {
           const val = sel.value; if (!val) return;
@@ -9297,20 +9379,20 @@ ${scopeHtml}
           const name = await showCustomDialog({ type: 'prompt', title: 'Duplicate Theme', message: 'Name for the duplicated theme:', defaultValue: defaultName });
           if (!name?.trim()) return;
           const s2 = getSettings(); s2.savedThemes[name.trim()] = JSON.parse(JSON.stringify(baseTheme)); s2.activeThemeProfile = name.trim(); s2.customTheme = { ...s2.savedThemes[name.trim()] };
-          saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(`Theme duplicated as "${name.trim()}"`, EXT_DISPLAY);
+          saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(t`Theme duplicated as "${name.trim()}"`, EXT_DISPLAY);
       });
       profileRow.querySelector('#scp-theme-rename').addEventListener('click', async () => {
-          const val = sel.value; if (!val || val.startsWith('__preset__')) { toastr.info('Select a custom theme to rename.', EXT_DISPLAY); return; }
+          const val = sel.value; if (!val || val.startsWith('__preset__')) { toastr.info(translate('Select a custom theme to rename.'), EXT_DISPLAY); return; }
           const newName = await showCustomDialog({ type: 'prompt', title: 'Rename Theme', message: 'Enter new name:', defaultValue: val });
           if (!newName?.trim() || newName.trim() === val) return;
-          const s2 = getSettings(); s2.savedThemes[newName.trim()] = s2.savedThemes[val]; delete s2.savedThemes[val]; s2.activeThemeProfile = newName.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success('Theme renamed.', EXT_DISPLAY);
+          const s2 = getSettings(); s2.savedThemes[newName.trim()] = s2.savedThemes[val]; delete s2.savedThemes[val]; s2.activeThemeProfile = newName.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success(translate('Theme renamed.'), EXT_DISPLAY);
       });
       profileRow.querySelector('#scp-theme-delete').addEventListener('click', async () => {
-          const val = sel.value; if (!val || val.startsWith('__preset__')) { toastr.info('Select a custom theme to delete.', EXT_DISPLAY); return; }
+          const val = sel.value; if (!val || val.startsWith('__preset__')) { toastr.info(translate('Select a custom theme to delete.'), EXT_DISPLAY); return; }
           const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Theme', message: `Delete "${val}"?` }); if (!ok) return;
           const s2 = getSettings(); delete s2.savedThemes[val]; s2.activeThemeProfile = Object.keys(s2.savedThemes)[0] || '';
           s2.customTheme = s2.activeThemeProfile ? { ...s2.savedThemes[s2.activeThemeProfile] } : { ...THEME_PRESETS.default };
-          saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success('Deleted.', EXT_DISPLAY);
+          saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(translate('Deleted.'), EXT_DISPLAY);
       });
       profileRow.querySelector('#scp-theme-export').addEventListener('click', () => {
           const s2 = getSettings(); const val = sel.value;
@@ -9327,8 +9409,8 @@ ${scopeHtml}
                   if (typeof imported !== 'object' || Array.isArray(imported)) throw new Error('Invalid format');
                   const themeName = (data.name && typeof data.name === 'string') ? data.name : file.name.replace(/\.json$/i, '');
                   const s2 = getSettings(); s2.savedThemes[themeName] = { ...THEME_PRESETS.default, ...imported }; s2.activeThemeProfile = themeName; s2.customTheme = { ...s2.savedThemes[themeName] };
-                  saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(`Theme "${escHtml(themeName)}" imported.`, EXT_DISPLAY);
-              } catch (e) { toastr.error('Invalid theme file.', EXT_DISPLAY); }
+                  saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(t`Theme "${escHtml(themeName)}" imported.`, EXT_DISPLAY);
+              } catch (e) { toastr.error(translate('Invalid theme file.'), EXT_DISPLAY); }
           };
           inp.click();
       });
@@ -9748,26 +9830,26 @@ ${scopeHtml}
           const displayVal = defaultVal;
           [stId, spId].forEach(id => { const el = document.getElementById(id); if (el) el.value = displayVal; });
           Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession()));
-          toastr.success(`${label} reset.`, EXT_DISPLAY);
+          toastr.success(t`${translate(label)} reset.`, EXT_DISPLAY);
       };
       document.getElementById('scp-reset-prompt')?.addEventListener('click', () => _resetPrompt('systemPrompt', DEFAULT_SYSTEM_PROMPT, 'scp-sysprompt', 'scp-sp-sysprompt', 'System Prompt'));
       document.getElementById('scp-reset-char-edit-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Char Edit Prompt', message: 'Reset to built-in default?' }); if (!ok) return;
           getSettings().charEditPrompt = ''; saveSettings(); _markDirty('config');
           ['scp-char-edit-prompt', 'scp-sp-char-edit-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_CHAR_EDIT_DIRECTIVE.trim(); });
-          Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Char edit prompt reset.', EXT_DISPLAY);
+          Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('Char edit prompt reset.'), EXT_DISPLAY);
       });
       document.getElementById('scp-reset-lb-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Lorebook Prompt', message: 'Reset to default?' }); if (!ok) return;
           getSettings().lorebookManagePrompt = ''; saveSettings();
           ['scp-lb-manage-prompt', 'scp-sp-lb-manage-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_LB_MANAGE_PROMPT; });
-          toastr.success('Lorebook prompt reset.', EXT_DISPLAY);
+          toastr.success(translate('Lorebook prompt reset.'), EXT_DISPLAY);
       });
       document.getElementById('scp-reset-memory-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset memory prompt to default?' }); if (!ok) return;
           getSettings().memoryManagePrompt = ''; saveSettings();
           ['scp-memory-prompt', 'scp-sp-memory-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_MEMORY_PROMPT; });
-          Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Prompt reset.', EXT_DISPLAY);
+          Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('Prompt reset.'), EXT_DISPLAY);
       });
 
       // ── Profile management (ST drawer) ──
@@ -9783,7 +9865,7 @@ ${scopeHtml}
           const sel = document.getElementById('scp-profile-select'); let name = sel?.value;
           if (!name) { name = await showCustomDialog({ type: 'prompt', title: 'Save Configuration', message: 'Enter a name for this configuration:', placeholder: 'My Config' }); if (!name?.trim()) return; name = name.trim(); }
           saveProfile(name); refreshProfilesDropdown(); if (sel) sel.value = name;
-          updateBindingSection(); toastr.success(`Saved "${name}"`, EXT_DISPLAY); _clearDirty('config');
+          updateBindingSection(); toastr.success(t`Saved "${name}"`, EXT_DISPLAY); _clearDirty('config');
       });
       document.getElementById('scp-profile-create-new')?.addEventListener('click', async () => {
           const name = await showCustomDialog({ type: 'prompt', title: 'New Configuration', message: 'Enter a name for the new default profile:', placeholder: 'New Config' }); if (!name?.trim()) return;
@@ -9791,18 +9873,18 @@ ${scopeHtml}
           s.profiles[n] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8200 };
           saveSettings(); refreshProfilesDropdown(); loadProfile(n);
           const sel = document.getElementById('scp-profile-select'); if (sel) sel.value = n;
-          updateBindingSection(); toastr.success(`Created "${n}"`, EXT_DISPLAY);
+          updateBindingSection(); toastr.success(t`Created "${n}"`, EXT_DISPLAY);
       });
       document.getElementById('scp-profile-duplicate')?.addEventListener('click', async () => {
-          const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return toastr.info('No configuration selected.', EXT_DISPLAY);
+          const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return toastr.info(translate('No configuration selected.'), EXT_DISPLAY);
           const newName = await showCustomDialog({ type: 'prompt', title: 'Duplicate Configuration', message: 'Name for the new profile:', defaultValue: sel.value + ' (Copy)' }); if (!newName?.trim()) return;
           const n = newName.trim(); const s = getSettings(); const p = s.profiles[sel.value]; if (!p) return;
           s.profiles[n] = JSON.parse(JSON.stringify(p)); saveSettings(); refreshProfilesDropdown(); refreshSPProfilesDropdown(); loadProfile(n);
           const newSel = document.getElementById('scp-profile-select'); if (newSel) newSel.value = n;
-          updateBindingSection(); toastr.success(`Duplicated as "${n}"`, EXT_DISPLAY);
+          updateBindingSection(); toastr.success(t`Duplicated as "${n}"`, EXT_DISPLAY);
       });
       document.getElementById('scp-profile-rename')?.addEventListener('click', async () => {
-          const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return toastr.info('No configuration selected.', EXT_DISPLAY);
+          const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return toastr.info(translate('No configuration selected.'), EXT_DISPLAY);
           const newName = await showCustomDialog({ type: 'prompt', title: 'Rename Configuration', message: 'New name:', defaultValue: sel.value }); if (!newName?.trim() || newName.trim() === sel.value) return;
           const s = getSettings(); const p = s.profiles[sel.value]; if (!p) return;
           s.profiles[newName.trim()] = p; delete s.profiles[sel.value];
@@ -9810,13 +9892,13 @@ ${scopeHtml}
           for (const k in s.profileBindings) { if (s.profileBindings[k] === sel.value) s.profileBindings[k] = newName.trim(); }
           saveSettings(); refreshProfilesDropdown();
           const newSel = document.getElementById('scp-profile-select'); if (newSel) newSel.value = newName.trim();
-          updateBindingSection(); toastr.success('Renamed.', EXT_DISPLAY);
+          updateBindingSection(); toastr.success(translate('Renamed.'), EXT_DISPLAY);
       });
       document.getElementById('scp-profile-delete')?.addEventListener('click', async () => {
           const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return;
-          const s = getSettings(); if (Object.keys(s.profiles).length <= 1) { toastr.warning('Cannot delete the last remaining configuration profile.', EXT_DISPLAY); return; }
+          const s = getSettings(); if (Object.keys(s.profiles).length <= 1) { toastr.warning(translate('Cannot delete the last remaining configuration profile.'), EXT_DISPLAY); return; }
           const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Configuration', message: `Delete "${sel.value}"?` }); if (!ok) return;
-          deleteProfile(sel.value); refreshProfilesDropdown(); updateBindingSection(); toastr.success('Deleted.', EXT_DISPLAY);
+          deleteProfile(sel.value); refreshProfilesDropdown(); updateBindingSection(); toastr.success(translate('Deleted.'), EXT_DISPLAY);
       });
       document.getElementById('scp-bind-char')?.addEventListener('click', () => {
           const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return;
@@ -9836,8 +9918,9 @@ ${scopeHtml}
       document.getElementById('scp-download-debug')?.addEventListener('click', () => Promise.resolve().then(function () { return utilDebug; }).then(m => m.dbgDownload()));
       document.getElementById('scp-open-memory-settings')?.addEventListener('click', () => { openSettingsPanel(); setTimeout(() => document.querySelector('[data-sptab="memory"]')?.click(), 80); });
       document.getElementById('scp-open-tools-settings')?.addEventListener('click', () => { openSettingsPanel(); setTimeout(() => document.querySelector('[data-sptab="tools"]')?.click(), 80); });
+      document.getElementById('scp-cleanup-files')?.addEventListener('click', () => Promise.resolve().then(function () { return featureStorageCleanup; }).then(m => m.runOrphanCleanup()));
       document.getElementById('scp-clear-sessions')?.addEventListener('click', async () => {
-          const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete ALL Copilot sessions? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
+          const ok = await showCustomDialog({ type: 'confirm', title: translate('Clear All Sessions'), message: translate('Delete all Copilot sessions in this chat? This cannot be undone.'), delayConfirm: 3 }); if (!ok) return;
           const { charId, chatId } = getBindingKey();
           _dbgAdd('SESSION_CLEAR_REQUESTED', { source: 'st-drawer', charId, chatId });
           getSettings().sessions = {}; saveSettings();
@@ -9846,11 +9929,11 @@ ${scopeHtml}
               _dbgAdd('SESSION_CLEAR_DONE', { source: 'st-drawer', charId, chatId });
           } catch (e) {
               _dbgAdd('SESSION_CLEAR_FAILED', { source: 'st-drawer', charId, chatId, error: e?.message || String(e), stack: e?.stack });
-              toastr.error(`Failed to clear sessions: ${e.message}`, EXT_DISPLAY);
+              toastr.error(t`Failed to clear sessions: ${e.message}`, EXT_DISPLAY);
               return;
           }
           Promise.resolve().then(function () { return uiChat; }).then(m => m.onChatChanged());
-          toastr.success('Sessions cleared.', EXT_DISPLAY);
+          toastr.success(translate('Sessions cleared.'), EXT_DISPLAY);
       });
 
       // ── Background (ST) ──
@@ -9901,7 +9984,7 @@ ${scopeHtml}
           const sel = document.getElementById('scp-sp-profile-select'); let name = sel?.value;
           if (!name) { name = await showCustomDialog({ type: 'prompt', title: 'Save Configuration', message: 'Profile name:', placeholder: 'My Config' }); if (!name?.trim()) return; name = name.trim(); }
           saveProfile(name); refreshSPProfilesDropdown(); refreshProfilesDropdown(); if (sel) sel.value = name;
-          updateSPBindingSection(); toastr.success(`Saved "${name}"`, EXT_DISPLAY); _clearDirty('config');
+          updateSPBindingSection(); toastr.success(t`Saved "${name}"`, EXT_DISPLAY); _clearDirty('config');
       });
       document.getElementById('scp-sp-profile-create')?.addEventListener('click', async () => {
           const name = await showCustomDialog({ type: 'prompt', title: 'New Configuration', message: 'Name:', placeholder: 'New Config' }); if (!name?.trim()) return;
@@ -9909,15 +9992,15 @@ ${scopeHtml}
           s.profiles[n] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8200, applyRegexToContext: true };
           saveSettings(); refreshSPProfilesDropdown(); refreshProfilesDropdown(); loadProfile(n); syncSPFromSettings(); updateSettingsUI();
           const sel = document.getElementById('scp-sp-profile-select'); if (sel) sel.value = n;
-          updateSPBindingSection(); toastr.success(`Created "${n}"`, EXT_DISPLAY);
+          updateSPBindingSection(); toastr.success(t`Created "${n}"`, EXT_DISPLAY);
       });
       document.getElementById('scp-sp-profile-duplicate')?.addEventListener('click', async () => {
-          const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return toastr.info('No configuration selected.', EXT_DISPLAY);
+          const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return toastr.info(translate('No configuration selected.'), EXT_DISPLAY);
           const newName = await showCustomDialog({ type: 'prompt', title: 'Duplicate Configuration', message: 'Name for the new profile:', defaultValue: sel.value + ' (Copy)' }); if (!newName?.trim()) return;
           const n = newName.trim(); const s = getSettings(); const p = s.profiles[sel.value]; if (!p) return;
           s.profiles[n] = JSON.parse(JSON.stringify(p)); saveSettings(); refreshSPProfilesDropdown(); refreshProfilesDropdown(); loadProfile(n); syncSPFromSettings(); updateSettingsUI();
           const newSel = document.getElementById('scp-sp-profile-select'); if (newSel) newSel.value = n;
-          updateSPBindingSection(); toastr.success(`Duplicated as "${n}"`, EXT_DISPLAY);
+          updateSPBindingSection(); toastr.success(t`Duplicated as "${n}"`, EXT_DISPLAY);
       });
       document.getElementById('scp-sp-profile-rename')?.addEventListener('click', async () => {
           const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return;
@@ -9928,13 +10011,13 @@ ${scopeHtml}
           for (const k in s.profileBindings) { if (s.profileBindings[k] === sel.value) s.profileBindings[k] = newName.trim(); }
           saveSettings(); refreshSPProfilesDropdown(); refreshProfilesDropdown();
           const newSel = document.getElementById('scp-sp-profile-select'); if (newSel) newSel.value = newName.trim();
-          updateSPBindingSection(); toastr.success('Renamed.', EXT_DISPLAY);
+          updateSPBindingSection(); toastr.success(translate('Renamed.'), EXT_DISPLAY);
       });
       document.getElementById('scp-sp-profile-delete')?.addEventListener('click', async () => {
           const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return;
-          const s = getSettings(); if (Object.keys(s.profiles).length <= 1) { toastr.warning('Cannot delete the last profile.', EXT_DISPLAY); return; }
+          const s = getSettings(); if (Object.keys(s.profiles).length <= 1) { toastr.warning(translate('Cannot delete the last profile.'), EXT_DISPLAY); return; }
           const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Profile', message: `Delete "${sel.value}"?` }); if (!ok) return;
-          deleteProfile(sel.value); refreshSPProfilesDropdown(); refreshProfilesDropdown(); updateSPBindingSection(); toastr.success('Deleted.', EXT_DISPLAY);
+          deleteProfile(sel.value); refreshSPProfilesDropdown(); refreshProfilesDropdown(); updateSPBindingSection(); toastr.success(translate('Deleted.'), EXT_DISPLAY);
       });
       document.getElementById('scp-sp-bind-char')?.addEventListener('click', () => {
           const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return;
@@ -9959,44 +10042,45 @@ ${scopeHtml}
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset System Prompt', message: 'Reset to default?' }); if (!ok) return;
           getSettings().systemPrompt = ''; saveSettings();
           ['scp-sp-sysprompt', 'scp-sysprompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_SYSTEM_PROMPT; });
-          Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success('System prompt reset.', EXT_DISPLAY);
+          Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('System prompt reset.'), EXT_DISPLAY);
       });
       document.getElementById('scp-sp-reset-lb-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset LB Prompt', message: 'Reset to default?' }); if (!ok) return;
           getSettings().lorebookManagePrompt = ''; saveSettings();
           ['scp-sp-lb-manage-prompt', 'scp-lb-manage-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_LB_MANAGE_PROMPT; });
-          toastr.success('Lorebook prompt reset.', EXT_DISPLAY);
+          toastr.success(translate('Lorebook prompt reset.'), EXT_DISPLAY);
       });
       document.getElementById('scp-sp-reset-char-edit-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Char Edit Prompt', message: 'Reset to built-in default?' }); if (!ok) return;
           getSettings().charEditPrompt = ''; saveSettings(); _markDirty('config');
           ['scp-sp-char-edit-prompt', 'scp-char-edit-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_CHAR_EDIT_DIRECTIVE.trim(); });
-          Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Char edit prompt reset.', EXT_DISPLAY);
+          Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('Char edit prompt reset.'), EXT_DISPLAY);
       });
       document.getElementById('scp-sp-reset-chat-edit-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Chat Edit Prompt', message: 'Reset to default?' }); if (!ok) return;
           getSettings().chatEditPrompt = ''; saveSettings(); _markDirty('config');
           ['scp-sp-chat-edit-prompt', 'scp-chat-edit-prompt-st'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_CHAT_EDIT_DIRECTIVE.trim(); });
-          Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Chat edit prompt reset.', EXT_DISPLAY);
+          Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('Chat edit prompt reset.'), EXT_DISPLAY);
       });
       document.getElementById('scp-sp-reset-memory-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset memory prompt to default?' }); if (!ok) return;
           getSettings().memoryManagePrompt = ''; saveSettings();
           ['scp-sp-memory-prompt', 'scp-memory-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_MEMORY_PROMPT; });
-          toastr.success('Prompt reset.', EXT_DISPLAY);
+          toastr.success(translate('Prompt reset.'), EXT_DISPLAY);
       });
       document.getElementById('scp-sp-tools-reset')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset tools prompt to default?' }); if (!ok) return;
           getSettings().toolsSystemPrompt = ''; saveSettings();
           const ta = document.getElementById('scp-sp-tools-prompt'); if (ta) ta.value = DEFAULT_TOOLS_PROMPT;
-          toastr.success('Tools prompt reset.', EXT_DISPLAY);
+          toastr.success(translate('Tools prompt reset.'), EXT_DISPLAY);
       });
 
       // ── Misc SP ──
       document.getElementById('scp-sp-open-changelog')?.addEventListener('click', () => { closeSettingsPanel(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.openChangelog()); });
       document.getElementById('scp-sp-download-debug')?.addEventListener('click', () => Promise.resolve().then(function () { return utilDebug; }).then(m => m.dbgDownload()));
+      document.getElementById('scp-sp-cleanup-files')?.addEventListener('click', () => Promise.resolve().then(function () { return featureStorageCleanup; }).then(m => m.runOrphanCleanup()));
       document.getElementById('scp-sp-clear-sessions')?.addEventListener('click', async () => {
-          const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete ALL Copilot sessions? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
+          const ok = await showCustomDialog({ type: 'confirm', title: translate('Clear All Sessions'), message: translate('Delete all Copilot sessions in this chat? This cannot be undone.'), delayConfirm: 3 }); if (!ok) return;
           const { charId, chatId } = getBindingKey();
           _dbgAdd('SESSION_CLEAR_REQUESTED', { source: 'settings-overlay', charId, chatId });
           getSettings().sessions = {}; saveSettings();
@@ -10004,17 +10088,17 @@ ${scopeHtml}
               await initChatBucket({ forceReset: true });
               _dbgAdd('SESSION_CLEAR_DONE', { source: 'settings-overlay', charId, chatId });
               Promise.resolve().then(function () { return uiChat; }).then(m => m.onChatChanged());
-              toastr.success('Sessions cleared.', EXT_DISPLAY);
+              toastr.success(translate('Sessions cleared.'), EXT_DISPLAY);
           } catch (e) {
               _dbgAdd('SESSION_CLEAR_FAILED', { source: 'settings-overlay', charId, chatId, error: e?.message || String(e), stack: e?.stack });
-              toastr.error(`Failed to clear sessions: ${e.message}`, EXT_DISPLAY);
+              toastr.error(t`Failed to clear sessions: ${e.message}`, EXT_DISPLAY);
           }
       });
       document.getElementById('scp-sp-reset-all-overrides')?.addEventListener('click', async () => {
-          if (!hasSessionOverrides()) { toastr.info('No session overrides active.', EXT_DISPLAY); return; }
+          if (!hasSessionOverrides()) { toastr.info(translate('No session overrides active.'), EXT_DISPLAY); return; }
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Session Overrides', message: 'Clear all session overrides for this session?' }); if (!ok) return;
           clearAllSessionOverrides(); syncSPFromSettings();
-          Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Session overrides cleared.', EXT_DISPLAY);
+          Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('Session overrides cleared.'), EXT_DISPLAY);
       });
 
       // ── Session Override bindings ──
@@ -10106,7 +10190,7 @@ ${scopeHtml}
       const typeSel = document.createElement('select'); typeSel.className = isSP ? 'scp-sp-select text_pole' : 'text_pole'; typeSel.style.flex = '1';
 
       const renderDropdown = () => {
-          typeSel.innerHTML = '<option value="none">None</option>';
+          typeSel.innerHTML = '<option value="none" data-i18n="None">None</option>';
           if (Object.keys(s.customBackgrounds).length) {
               const grp = document.createElement('optgroup'); grp.label = 'Custom Backgrounds';
               for (const [key, bg] of Object.entries(s.customBackgrounds)) { const o = document.createElement('option'); o.value = key; o.textContent = bg.name; grp.appendChild(o); }
@@ -10124,7 +10208,7 @@ ${scopeHtml}
           const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*,video/mp4,video/webm';
           inp.onchange = async () => {
               const file = inp.files?.[0]; if (!file) return;
-              if (file.size > 25 * 1024 * 1024) { toastr.warning('File too large (>25MB).', EXT_DISPLAY); return; }
+              if (file.size > 25 * 1024 * 1024) { toastr.warning(translate('File too large (>25MB).'), EXT_DISPLAY); return; }
               const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(null); r.readAsDataURL(file); });
               if (!dataUrl) return;
               const s2 = getSettings(); const id = 'bg_' + Date.now();
@@ -10144,7 +10228,7 @@ ${scopeHtml}
           const newName = await showCustomDialog({ type: 'prompt', title: 'Rename Background', message: 'New name:', defaultValue: s.customBackgrounds[val]?.name });
           if (newName?.trim()) { s.customBackgrounds[val].name = newName.trim(); saveSettings(); rebuildAll(); }
       }));
-      actWrap.appendChild(mkBtn('trash', 'Delete', isSP ? 'scp-sp-danger-btn' : '', async () => {
+      actWrap.appendChild(mkBtn('trash', translate('Delete'), isSP ? 'scp-sp-danger-btn' : '', async () => {
           const val = typeSel.value; if (val === 'none') return;
           const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Background', message: 'Delete this background?' }); if (!ok) return;
           const s2 = getSettings(); delete s2.customBackgrounds[val]; s2.windowBg = 'none'; saveSettings(); rebuildAll();
@@ -10183,7 +10267,7 @@ ${scopeHtml}
       const renderList = () => {
           list.innerHTML = '';
           const prompts = getSettings().quickPrompts || [];
-          if (!prompts.length) { list.innerHTML = `<div style="font-size:11px;color:var(--scp-text-muted);text-align:center;padding:10px 0">No quick prompts yet. Add one below.</div>`; }
+          if (!prompts.length) { list.innerHTML = `<div style="font-size:11px;color:var(--scp-text-muted);text-align:center;padding:10px 0" data-i18n="No quick prompts yet. Add one below.">No quick prompts yet. Add one below.</div>`; }
           prompts.forEach((qp, idx) => {
               const row = document.createElement('div'); row.className = 'scp-qp-settings-row';
               const iconBtn = document.createElement('button'); iconBtn.className = 'scp-qp-settings-icon-btn'; iconBtn.textContent = qp.icon || '⚡'; iconBtn.title = 'Change icon';
@@ -10196,7 +10280,7 @@ ${scopeHtml}
               moveUpBtn.addEventListener('click', () => { if (idx === 0) return; const arr = getSettings().quickPrompts; [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]]; saveSettings(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
               const moveDnBtn = document.createElement('button'); moveDnBtn.className = 'scp-qp-settings-move'; moveDnBtn.textContent = '↓'; moveDnBtn.title = 'Move down'; moveDnBtn.disabled = idx === prompts.length - 1;
               moveDnBtn.addEventListener('click', () => { const arr = getSettings().quickPrompts; if (idx >= arr.length - 1) return; [arr[idx], arr[idx+1]] = [arr[idx+1], arr[idx]]; saveSettings(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
-              const delBtn = document.createElement('button'); delBtn.className = 'scp-qp-settings-del'; delBtn.innerHTML = I.trash; delBtn.title = 'Delete';
+              const delBtn = document.createElement('button'); delBtn.className = 'scp-qp-settings-del'; delBtn.innerHTML = I.trash; delBtn.title = translate('Delete');
               delBtn.addEventListener('click', async () => { const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Prompt', message: `Delete "${qp.label || 'this prompt'}"?` }); if (!ok) return; getSettings().quickPrompts.splice(idx, 1); saveSettings(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
               const textArea = document.createElement('textarea'); textArea.className = 'scp-qp-settings-text scp-sp-textarea'; textArea.placeholder = 'Prompt text… (supports {{user}}, {{char}} macros)'; textArea.rows = 2; textArea.value = qp.text || '';
               textArea.addEventListener('input', () => { getSettings().quickPrompts[idx].text = textArea.value; saveSettings(); });
@@ -10207,7 +10291,7 @@ ${scopeHtml}
       };
       renderList();
 
-      const addBtn = document.createElement('button'); addBtn.className = 'scp-action-btn'; addBtn.style.marginTop = '8px'; addBtn.innerHTML = `${I.plus}<span>Add Prompt</span>`;
+      const addBtn = document.createElement('button'); addBtn.className = 'scp-action-btn'; addBtn.style.marginTop = '8px'; addBtn.innerHTML = `${I.plus}<span data-i18n="Add Prompt">Add Prompt</span>`;
       addBtn.addEventListener('click', async () => {
           const label = await showCustomDialog({ type: 'prompt', title: 'New Quick Prompt', message: 'Label for this prompt:', placeholder: 'My Prompt' }); if (label === null) return;
           getSettings().quickPrompts.push({ id: 'qp_'+Date.now(), label: label.trim() || 'Prompt', icon: '⚡', text: '' }); saveSettings(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar());
@@ -10475,7 +10559,7 @@ ${tc.result !== undefined ? `<div class="scp-tool-call-section-label" style="mar
                       _dbgAdd('IMAGE_CAPTIONING_SERVICE_MISSING', { name: a.name });
                       return '';
                   });
-                  if (!cap) toastr.warning(`Captioning failed for ${a.name}`, EXT_DISPLAY);
+                  if (!cap) toastr.warning(t`Captioning failed for ${a.name}`, EXT_DISPLAY);
                   processed.push({
                       ...a,
                       sendAsText: true,
@@ -11968,7 +12052,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                 <div class="scp-empty-icon">
                     <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7" /><ellipse cx="12" cy="12" rx="11" ry="3" transform="rotate(-25 12 12)" /><circle cx="21.5" cy="7.5" r="1.5" fill="currentColor" stroke="none" /></svg>
                 </div>
-                <div class="scp-empty-title">New Session</div>
+                <div class="scp-empty-title" data-i18n="New Session">New Session</div>
                 <div class="scp-empty-sub">Ask anything about your roleplay — continuity checks, character analysis, writing feedback, worldbuilding, and more.</div>
             </div>`;
           updateMsgCount(session);
@@ -12418,7 +12502,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
       body.innerHTML = '';
       if (!msgs.length) {
-          body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--scp-text-muted)">No messages in current chat</div>';
+          body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--scp-text-muted)" data-i18n="No messages in current chat">No messages in current chat</div>';
           _updatePickerCountEl(0);
           return;
       }
@@ -12426,7 +12510,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const frag = document.createDocumentFragment();
       msgs.forEach((msg, idx) => {
           const isUser = msg.is_user;
-          const name = isUser ? (ctx.name1 || 'User') : (msg.name || charInfo?.name || 'Character');
+          const name = isUser ? (ctx.name1 || 'User') : (msg.name || charInfo?.name || translate('Character'));
           const isSelected = pickedSet.has(idx);
           const row = document.createElement('div');
           row.className = `scp-picker-row${isSelected ? ' selected' : ''}${isUser ? ' user' : ''}`;
@@ -12536,7 +12620,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const el = document.getElementById('scp-picker-count');
       if (!el) return;
       const n = count !== undefined ? count : document.querySelectorAll('#scp-picker-body .scp-picker-row.selected').length;
-      el.textContent = `${n} selected`;
+      el.textContent = t`${n} selected`;
   }
 
   function setupChatPickerListeners() {
@@ -12592,7 +12676,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           bar.style.display = on ? 'flex' : 'none';
           if (on) {
               const t = document.getElementById('scp-thinking-text');
-              if (t) t.textContent = 'Thinking…';
+              if (t) t.textContent = translate('Thinking…');
           }
       }
       if (sendBtn) sendBtn.disabled = on;
@@ -12716,7 +12800,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               
               const span = document.createElement('span');
               span.className = 'scp-depth-val scp-depth-clickable'; span.id = 'scp-depth-val';
-              span.title = 'Click to enter exact value'; span.textContent = val;
+              span.title = translate('Click to enter exact value'); span.textContent = val;
               
               input.parentNode.replaceChild(span, input);
               setupDepthClickEdit();
@@ -13527,7 +13611,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const windowEl = document.getElementById(WIN_ID);
       const iconEl = document.getElementById('scp-dock-icon');
       const s = getSettings(); 
-      if (!s.enabled) { toastr.warning('ST-Copilot is disabled.', EXT_DISPLAY); return; }
+      if (!s.enabled) { toastr.warning(translate('ST-Copilot is disabled.'), EXT_DISPLAY); return; }
       s.windowVisible = true; 
       s.minimized = false;
       if(windowEl) windowEl.style.display = 'flex';
@@ -13575,7 +13659,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           inp.onchange = async () => {
               const file = inp.files[0];
               if (!file) return;
-              if (file.size > 25 * 1024 * 1024) { toastr.warning('File is too large (>25MB). Use URL instead.', 'ST-Copilot'); return; }
+              if (file.size > 25 * 1024 * 1024) { toastr.warning(translate('File is too large (>25MB). Use URL instead.'), 'ST-Copilot'); return; }
               const url = await _uploadBgToST(file).catch(() => null);
               if (url) {
                   getSettings().windowBgUrl = url;
@@ -13585,7 +13669,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                   applyWindowBackground();
                   if (onUploadSuccess) onUploadSuccess();
               } else {
-                  toastr.error('Failed to upload background.', 'ST-Copilot');
+                  toastr.error(translate('Failed to upload background.'), 'ST-Copilot');
               }
           };
           inp.click();
@@ -13659,12 +13743,12 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       overlay.style.zIndex = '2147483055';
       overlay.innerHTML = `
         <div class="scp-dialog-box">
-            <div class="scp-dialog-title">Unsaved Changes</div>
-            <div class="scp-dialog-msg">You have unsaved changes to character fields. What would you like to do?</div>
+            <div class="scp-dialog-title" data-i18n="Unsaved Changes">Unsaved Changes</div>
+            <div class="scp-dialog-msg" data-i18n="You have unsaved changes to character fields. What would you like to do?">You have unsaved changes to character fields. What would you like to do?</div>
             <div class="scp-dialog-btns">
-                <button class="scp-dialog-btn scp-dialog-cancel" id="_uc_cancel">Cancel</button>
-                <button class="scp-dialog-btn scp-dialog-cancel" id="_uc_discard" style="color:var(--scp-danger,#ff5c5c)">Discard</button>
-                <button class="scp-dialog-btn scp-dialog-ok" id="_uc_save">Save &amp; Exit</button>
+                <button class="scp-dialog-btn scp-dialog-cancel" id="_uc_cancel" data-i18n="Cancel">Cancel</button>
+                <button class="scp-dialog-btn scp-dialog-cancel" id="_uc_discard" style="color:var(--scp-danger,#ff5c5c)" data-i18n="Discard">Discard</button>
+                <button class="scp-dialog-btn scp-dialog-ok" id="_uc_save" data-i18n="Save &amp; Exit">Save &amp; Exit</button>
             </div>
         </div>`;
       document.body.appendChild(overlay);
@@ -13848,7 +13932,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       labelRow.className = 'scp-char-field-label-row';
       const label = document.createElement('span');
       label.className = 'scp-char-field-label';
-      label.textContent = fieldDef.label;
+      label.textContent = translate(fieldDef.label);
       const tokenSpan = document.createElement('span');
       tokenSpan.className = 'scp-char-field-tokens';
       labelRow.appendChild(label);
@@ -13931,18 +14015,18 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           if (!Object.keys(dirty).length) return true;
           const origLabel = saveBtn.innerHTML;
           saveBtn.disabled = true;
-          saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>Saving…</span>`;
+          saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span data-i18n="Saving…">Saving…</span>`;
           try {
               for (const [key, val] of Object.entries(dirty)) {
                   await saveCharacterField(charRef, key, val);
                   delete dirty[key];
               }
               _currentIsDirty = false;
-              toastr.success('Saved.', EXT_DISPLAY);
+              toastr.success(translate('Saved.'), EXT_DISPLAY);
               _renderCharDetail(entity);
               return true;
           } catch (e) {
-              toastr.error(`Failed: ${e.message}`, EXT_DISPLAY);
+              toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
               saveBtn.innerHTML = origLabel;
               updateBtns();
               return false;
@@ -13974,13 +14058,13 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       const span = document.createElement('span');
-      span.textContent = fieldDef.label;
+      span.textContent = translate(fieldDef.label);
       label.appendChild(cb);
       label.appendChild(span);
 
       const resetBtn = document.createElement('button');
       resetBtn.className = 'scp-sp-ov-clear';
-      resetBtn.title = 'Clear override';
+      resetBtn.title = translate('Clear override');
       resetBtn.textContent = '↺';
 
       const refresh = () => {
@@ -14060,13 +14144,13 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
       const saveBtn = document.createElement('button');
       saveBtn.className = 'scp-action-btn scp-char-banner-save-btn';
-      saveBtn.innerHTML = `${I.check}<span>Save</span>`;
+      saveBtn.innerHTML = `${I.check}<span data-i18n="Save">Save</span>`;
       saveBtn.disabled = true;
       saveBtn.style.opacity = '0.4';
 
       const revertBtn = document.createElement('button');
       revertBtn.className = 'scp-action-btn';
-      revertBtn.innerHTML = `${I.x}<span>Revert</span>`;
+      revertBtn.innerHTML = `${I.x}<span data-i18n="Revert">Revert</span>`;
       revertBtn.disabled = true;
       revertBtn.style.opacity = '0.4';
 
@@ -15041,7 +15125,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           cleanupCursor();
 
           if (result && !result.text.trim() && !result.reasoning?.trim()) {
-              toastr.warning('⚠ Generation failed: AI returned an empty response.', EXT_DISPLAY, { timeOut: 10000 });
+              toastr.warning(translate('⚠ Generation failed: AI returned an empty response.'), EXT_DISPLAY, { timeOut: 10000 });
           }
 
           if (result !== null && settings.toolsEnabled && getEnabledTools().length > 0) {
@@ -15369,7 +15453,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const combined = _joinContinuation(originalContent, continuation);
           
           if (isMaxTokens) {
-              toastr.warning('Generation stopped: reached Max Response Tokens limit.', EXT_DISPLAY, { timeOut: 10000 });
+              toastr.warning(translate('Generation stopped: reached Max Response Tokens limit.'), EXT_DISPLAY, { timeOut: 10000 });
           }
 
           targetMsg.content = combined;
@@ -15630,14 +15714,14 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const trigger = document.createElement('button');
       trigger.type = 'button';
       trigger.className = 'scp-preset-mgr-trigger';
-      trigger.innerHTML = `<span class="scp-pmt-label">Select a preset…</span><svg class="scp-pmt-chevron" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+      trigger.innerHTML = `<span class="scp-pmt-label">${escHtml(translate('Select a preset…'))}</span><svg class="scp-pmt-chevron" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>`;
 
       const labelEl = trigger.querySelector('.scp-pmt-label');
 
       const setActive = (name, source) => {
           _activeName = name;
           _activeSource = source;
-          labelEl.textContent = name || 'Select a preset…';
+          labelEl.textContent = name || translate('Select a preset…');
           trigger.classList.toggle('scp-pmt--has-value', !!name);
           updateBtnStates();
       };
@@ -15689,19 +15773,19 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           if (_activeName && _activeSource === 'custom') {
               s[dictKey][_activeName] = getTextFn();
               saveSettings();
-              toastr.success(`Saved preset "${escHtml(_activeName)}"`, EXT_DISPLAY);
+              toastr.success(t`Saved preset "${escHtml(_activeName)}"`, EXT_DISPLAY);
           } else {
               const name = await showCustomDialog({ type: 'prompt', title: 'Save Prompt Preset', message: 'Preset name:', placeholder: 'My Preset' });
               if (!name?.trim()) return;
               s[dictKey][name.trim()] = getTextFn();
               saveSettings();
               setActive(name.trim(), 'custom');
-              toastr.success(`Saved preset "${escHtml(name.trim())}"`, EXT_DISPLAY);
+              toastr.success(t`Saved preset "${escHtml(name.trim())}"`, EXT_DISPLAY);
           }
       });
 
       const renameBtn = mkBtn('pen', 'Rename selected custom preset', '', async () => {
-          if (!_activeName || _activeSource !== 'custom') { toastr.info('Select a custom preset first.', EXT_DISPLAY); return; }
+          if (!_activeName || _activeSource !== 'custom') { toastr.info(translate('Select a custom preset first.'), EXT_DISPLAY); return; }
           const newName = await showCustomDialog({ type: 'prompt', title: 'Rename Preset', message: 'New name:', defaultValue: _activeName });
           if (!newName?.trim() || newName.trim() === _activeName) return;
           s[dictKey][newName.trim()] = s[dictKey][_activeName];
@@ -15711,7 +15795,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       });
 
       const deleteBtn = mkBtn('trash', 'Delete selected custom preset', 'danger', async () => {
-          if (!_activeName || _activeSource !== 'custom') { toastr.info('Only custom presets can be deleted.', EXT_DISPLAY); return; }
+          if (!_activeName || _activeSource !== 'custom') { toastr.info(translate('Only custom presets can be deleted.'), EXT_DISPLAY); return; }
           const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Preset', message: `Delete "${_activeName}"?` });
           if (!ok) return;
           delete s[dictKey][_activeName];
@@ -15785,7 +15869,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               setActive(value);
               renderQuickPromptsBar();
               if (onSetLoaded) onSetLoaded();
-              toastr.success(`Loaded set "${escHtml(value)}"`, EXT_DISPLAY);
+              toastr.success(t`Loaded set "${escHtml(value)}"`, EXT_DISPLAY);
           }, { placeholder: 'Search sets…', width: 340, emptyText: 'No sets saved yet. Save one below.' });
       });
 
@@ -15810,7 +15894,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           s.activeQuickPromptSet = name;
           saveSettings();
           setActive(name);
-          toastr.success(`Saved set "${escHtml(name)}"`, EXT_DISPLAY);
+          toastr.success(t`Saved set "${escHtml(name)}"`, EXT_DISPLAY);
       });
 
       const saveAsBtn = mkBtn('plus', 'Save current prompts as a new set', '', async () => {
@@ -15821,11 +15905,11 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           s.activeQuickPromptSet = n;
           saveSettings();
           setActive(n);
-          toastr.success(`Created set "${escHtml(n)}"`, EXT_DISPLAY);
+          toastr.success(t`Created set "${escHtml(n)}"`, EXT_DISPLAY);
       });
 
       const renameBtn = mkBtn('pen', 'Rename selected set', '', async () => {
-          if (!_activeName) { toastr.info('Select a set first.', EXT_DISPLAY); return; }
+          if (!_activeName) { toastr.info(translate('Select a set first.'), EXT_DISPLAY); return; }
           const newName = await showCustomDialog({ type: 'prompt', title: 'Rename Set', message: 'New name:', defaultValue: _activeName });
           if (!newName?.trim() || newName.trim() === _activeName) return;
           const n = newName.trim();
@@ -15837,7 +15921,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       });
 
       const deleteBtn = mkBtn('trash', 'Delete selected set', 'danger', async () => {
-          if (!_activeName) { toastr.info('Select a set first.', EXT_DISPLAY); return; }
+          if (!_activeName) { toastr.info(translate('Select a set first.'), EXT_DISPLAY); return; }
           const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Set', message: `Delete set "${_activeName}"?` });
           if (!ok) return;
           delete s.quickPromptSets[_activeName];
@@ -16064,7 +16148,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                 </div>
                 <div class="scp-fav-item-text">${escHtml(preview)}</div>
             </div>
-            <button class="scp-fav-item-remove" title="Remove from starred">✕</button>`;
+            <button class="scp-fav-item-remove" title="Remove from starred" data-i18n="[title]Remove from starred">✕</button>`;
 
           item.addEventListener('click', e => {
               if (e.target.classList.contains('scp-fav-item-remove')) return;
@@ -16424,7 +16508,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const typeLbl = document.createElement(isSP ? 'label' : 'b');
       typeLbl.className = isSP ? 'scp-sp-label' : '';
       if (!isSP) typeLbl.style.fontSize = '12px';
-      typeLbl.textContent = 'Completion Sound';
+      typeLbl.textContent = translate('Completion Sound');
       
       const typeWrap = document.createElement('div');
       typeWrap.style.cssText = 'display:flex;gap:6px;align-items:center';
@@ -16441,7 +16525,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           groupPreset.label = 'Presets';
           for (const [key, preset] of Object.entries(_SOUND_PRESETS)) {
               const opt = document.createElement('option');
-              opt.value = key; opt.textContent = preset.label;
+              opt.value = key; opt.textContent = translate(preset.label);
               groupPreset.appendChild(opt);
           }
           typeSel.appendChild(groupPreset);
@@ -16468,7 +16552,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
       const testBtn = document.createElement('button');
       testBtn.className = isSP ? 'scp-action-btn' : 'menu_button interactable';
-      testBtn.innerHTML = `<i class="fa-solid fa-play"></i><span>Test</span>`;
+      testBtn.innerHTML = `<i class="fa-solid fa-play"></i><span data-i18n="Test">Test</span>`;
       if (!isSP) testBtn.style.flex = '0 0 auto';
       testBtn.addEventListener('click', () => playCompletionSound(true));
       
@@ -16483,7 +16567,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       
       const uploadBtn = document.createElement('button');
       uploadBtn.className = isSP ? 'scp-action-btn' : 'menu_button interactable';
-      uploadBtn.innerHTML = `<i class="fa-solid fa-upload"></i><span>Upload Custom</span>`;
+      uploadBtn.innerHTML = `<i class="fa-solid fa-upload"></i><span data-i18n="Upload Custom">Upload Custom</span>`;
       if (!isSP) uploadBtn.style.flex = '1';
 
       uploadBtn.addEventListener('click', () => {
@@ -16491,11 +16575,11 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           inp.type = 'file'; inp.accept = 'audio/*';
           inp.onchange = async () => {
               const file = inp.files?.[0]; if (!file) return;
-              if (file.size > 5 * 1024 * 1024) { toastr.warning('Audio file too large (>5MB).', EXT_DISPLAY); return; }
+              if (file.size > 5 * 1024 * 1024) { toastr.warning(translate('Audio file too large (>5MB).'), EXT_DISPLAY); return; }
               
               const { _fileToDataUrl } = await Promise.resolve().then(function () { return utilDom; });
               const dataUrl = await _fileToDataUrl(file).catch(() => null);
-              if (!dataUrl) { toastr.error('Failed to load audio', EXT_DISPLAY); return; }
+              if (!dataUrl) { toastr.error(translate('Failed to load audio'), EXT_DISPLAY); return; }
               
               const s2 = getSettings();
               const id = 'snd_' + Date.now();
@@ -16511,7 +16595,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
       const deleteBtn = document.createElement('button');
       deleteBtn.className = isSP ? 'scp-action-btn scp-sp-danger-btn' : 'menu_button interactable';
-      deleteBtn.innerHTML = `<i class="fa-solid fa-trash"></i><span>Delete</span>`;
+      deleteBtn.innerHTML = `<i class="fa-solid fa-trash"></i><span data-i18n="Delete">Delete</span>`;
       if (!isSP) deleteBtn.style.flex = '1';
 
       deleteBtn.addEventListener('click', async () => {
@@ -16684,7 +16768,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       listEl.innerHTML = '';
       
       if (!bucket.sessions.length) {
-          listEl.innerHTML = `<div class="scp-sess-empty-label">No sessions — create one below</div>`;
+          listEl.innerHTML = `<div class="scp-sess-empty-label" data-i18n="No sessions — create one below">No sessions — create one below</div>`;
       } else {
           for (const sess of bucket.sessions) {
               const item = document.createElement('div');
@@ -16823,7 +16907,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       // Session dropdown
       document.getElementById('scp-sess-trigger')?.addEventListener('click', e => {
           e.stopPropagation();
-          if (state.generating) { toastr.warning('Please wait for generation to finish.', EXT_DISPLAY); return; }
+          if (state.generating) { toastr.warning(translate('Please wait for generation to finish.'), EXT_DISPLAY); return; }
           const panel = document.getElementById('scp-sess-panel'); const trigger = document.getElementById('scp-sess-trigger');
           const isOpen = panel.classList.contains('open');
           panel.classList.toggle('open', !isOpen); trigger.classList.toggle('open', !isOpen);
@@ -17105,6 +17189,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       
       getSettings();
       _dbgSnapshotSettings();
+      await loadLocale(exports.__extPath);
       await injectUI();
       
       const ctx = SillyTavern.getContext();
@@ -17248,6 +17333,134 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
     get __extPath () { return exports.__extPath; },
     get extVersion () { return exports.extVersion; },
     refreshSessionDropdown: refreshSessionDropdown
+  });
+
+  const LIST_LIMIT = 30;
+
+  async function _postJson(url, body) {
+      const ctx = SillyTavern.getContext();
+      const res = await fetch(url, {
+          method: 'POST',
+          headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(body || {}),
+      });
+      if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
+      return res.json();
+  }
+
+  async function _listSessionFiles() {
+      const { report, token } = await _postJson('/api/data-maid/report');
+      _postJson('/api/data-maid/finalize', { token }).catch(() => {});
+      return (report?.files || []).map(f => f.name).filter(n => SESSION_FILE_RE.test(n));
+  }
+
+  async function _collectReferencedFiles() {
+      const chats = await _postJson('/api/chats/recent', { metadata: true });
+      if (!Array.isArray(chats)) throw new Error('Unexpected chat list response');
+
+      const ctx = SillyTavern.getContext();
+      const refs = new Set();
+      const add = meta => { if (meta?.st_copilot?.file_id) refs.add(meta.st_copilot.file_id); };
+      chats.forEach(c => {
+          add(c.chat_metadata);
+          // Pre-v4 file named after the chat; initChatBucket still migrates from it.
+          if (c.file_id) refs.add(`copilot_sess_${String(c.file_id).replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
+      });
+      (ctx.groups || []).forEach(g => add(g.chat_metadata));
+      add(ctx.chatMetadata);
+      const current = getCurrentSessionFileId();
+      if (current) refs.add(current);
+      return refs;
+  }
+
+  async function _mapLimit(items, limit, fn) {
+      const out = new Array(items.length);
+      let next = 0;
+      const worker = async () => { while (next < items.length) { const i = next++; out[i] = await fn(items[i]); } };
+      await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+      return out;
+  }
+
+  async function scanOrphanSessionFiles() {
+      const [files, refs] = await Promise.all([_listSessionFiles(), _collectReferencedFiles()]);
+      const orphans = files.filter(n => !refs.has(n));
+
+      const inspected = await _mapLimit(orphans, 6, async name => {
+          const payload = await loadSessionFile(name);
+          if (payload === null) return { name, messages: 0 };
+          if (payload === false) return { name, messages: -1, chat: '' };
+          const messages = (payload.bucket?.sessions || []).reduce((n, s) => n + (s.messages?.length || 0), 0);
+          return { name, messages, chat: payload.chat_id_reference || '' };
+      });
+
+      return {
+          total: files.length,
+          referenced: files.length - orphans.length,
+          empty: inspected.filter(f => f.messages === 0).map(f => f.name),
+          withContent: inspected.filter(f => f.messages !== 0),
+      };
+  }
+
+  async function _deleteAll(names) {
+      const results = await _mapLimit(names, 6, deleteSessionFile);
+      return results.filter(Boolean).length;
+  }
+
+  function _contentListHtml(items) {
+      const rows = items.slice(0, LIST_LIMIT).map(f => {
+          const count = f.messages < 0 ? t`unreadable` : t`${f.messages} msgs`;
+          return `<div style="display:flex;justify-content:space-between;gap:8px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(f.chat || f.name)}</span><span style="flex-shrink:0;opacity:.7">${escHtml(count)}</span></div>`;
+      }).join('');
+      const more = items.length > LIST_LIMIT ? `<div style="opacity:.7">${escHtml(t`…and ${items.length - LIST_LIMIT} more`)}</div>` : '';
+      return `<div style="max-height:40vh;overflow:auto;margin-top:8px;font-size:12px">${rows}${more}</div>`;
+  }
+
+  async function runOrphanCleanup() {
+      toastr.info(t`Scanning Copilot session files…`, EXT_DISPLAY);
+      let scan;
+      try {
+          scan = await scanOrphanSessionFiles();
+      } catch (e) {
+          _dbgAdd('STORAGE_CLEANUP_SCAN_FAILED', { error: e?.message || String(e) });
+          toastr.error(t`Scan failed: ${e.message}`, EXT_DISPLAY);
+          return;
+      }
+      _dbgAdd('STORAGE_CLEANUP_SCAN', { total: scan.total, referenced: scan.referenced, empty: scan.empty.length, withContent: scan.withContent.length });
+
+      if (!scan.empty.length && !scan.withContent.length) {
+          toastr.success(t`No orphaned session files. (${scan.total} files, all in use)`, EXT_DISPLAY);
+          return;
+      }
+
+      let deleted = 0;
+
+      if (scan.empty.length) {
+          const ok = await showCustomDialog({
+              type: 'confirm',
+              title: t`Clean Up Session Files`,
+              message: t`Found ${scan.empty.length} empty session files that no chat uses. Delete them?`,
+          });
+          if (ok) deleted += await _deleteAll(scan.empty);
+      }
+
+      if (scan.withContent.length) {
+          const ok = await showCustomDialog({
+              type: 'confirm',
+              title: t`Orphaned Sessions With Messages`,
+              htmlMessage: escHtml(t`${scan.withContent.length} session files still contain messages, but no chat points to them anymore (deleted chats or old branches). Delete them too? This cannot be undone.`) + _contentListHtml(scan.withContent),
+              delayConfirm: 3,
+          });
+          if (ok) deleted += await _deleteAll(scan.withContent.map(f => f.name));
+      }
+
+      _dbgAdd('STORAGE_CLEANUP_DONE', { deleted });
+      if (deleted) toastr.success(t`Deleted ${deleted} session files.`, EXT_DISPLAY);
+  }
+
+  var featureStorageCleanup = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    runOrphanCleanup: runOrphanCleanup,
+    scanOrphanSessionFiles: scanOrphanSessionFiles
   });
 
   exports.refreshSessionDropdown = refreshSessionDropdown;

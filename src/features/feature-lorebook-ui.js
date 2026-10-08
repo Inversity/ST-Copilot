@@ -6,6 +6,7 @@ import { escHtml, showCustomDialog, copyText } from '../utils/util-dom.js';
 import { fetchWorldInfoBook, saveWorldInfoBook, wiEntriesToArray, getDisplayName, getActiveLorebookNames, getEntryOverrideKey, buildLorebookContextBlock, stripLBChangesBlock, resolveLBChangeTarget, bindNewLorebookToCharacter, wiCache, lastActiveEntries } from './feature-lorebook-engine.js';
 import { applySearchReplaceToField } from '../utils/util-text.js';
 import { openTextDiffModal } from '../utils/util-diff.js';
+import { t, translate } from '../utils/util-i18n.js';
 
 import { applyCustomTheme, bringWindowToFront } from '../ui/ui-window.js';
 import { updateMsgCount, scrollToBottom, _renderMsgBodyContent, addHistoryToSwipe } from '../ui/ui-chat.js';
@@ -168,11 +169,12 @@ export async function applyLBChanges(changes, afterMsgId = null) {
     console.log(`[${EXT_DISPLAY}] applyLBChanges: processing ${changes.length} change(s)`, JSON.parse(JSON.stringify(changes)));
     const bookCache = {};
     const successfulChanges =[];
+    const changeBooks = new Map();
 
     for (const change of changes) {
         let { bookName, data, origEntry } = await resolveLBChangeTarget(change);
 
-        if (change.worldName && change.action !== 'delete') {
+        if (change.worldName && change.action === 'add') {
             const activeBooks = getActiveLorebookNames();
             
             if (!activeBooks.includes(change.worldName)) {
@@ -192,9 +194,17 @@ export async function applyLBChanges(changes, afterMsgId = null) {
             continue;
         }
         if (!bookName) {
-            toastr.error(`[LB] Could not resolve book name for change: "${change.name || change.uid || '?'}"`, EXT_DISPLAY, { timeOut: 10000 });
+            toastr.error(t`[LB] Could not resolve book name for change: "${change.name || change.uid || '?'}"`, EXT_DISPLAY, { timeOut: 10000 });
             continue;
         }
+        if (data._embedded) {
+            toastr.warning(translate('Cannot save embedded character books directly.'), EXT_DISPLAY);
+            continue;
+        }
+        // Work on a copy so a failed save cannot mutate SillyTavern's loaded book.
+        data = bookCache[bookName] || structuredClone(data);
+        if (origEntry) origEntry = Object.values(data.entries).find(entry => String(entry.uid) === String(origEntry.uid));
+        changeBooks.set(change, bookName);
 
         if (change.action === 'add' && data) {
             const exists = Object.values(data.entries).find(e => e.comment && e.comment.toLowerCase() === (change.name || '').toLowerCase());
@@ -237,7 +247,7 @@ export async function applyLBChanges(changes, afterMsgId = null) {
             successfulChanges.push(change);
         } else if (change.action === 'edit') {
             if (!origEntry) {
-                toastr.error(`[LB] Entry not found for edit: "${change.name || change.uid || '?'}" in "${bookName}"`, EXT_DISPLAY, { timeOut: 10000 });
+                toastr.error(t`[LB] Entry not found for edit: "${change.name || change.uid || '?'}" in "${bookName}"`, EXT_DISPLAY, { timeOut: 10000 });
                 continue;
             }
             if (change.name !== undefined) origEntry.comment = change.name;
@@ -270,7 +280,7 @@ export async function applyLBChanges(changes, afterMsgId = null) {
             successfulChanges.push(change);
         } else if (change.action === 'patch') {
             if (!origEntry) {
-                toastr.error(`[LB] Entry not found for patch: "${change.name || change.uid || '?'}" in "${bookName}"`, EXT_DISPLAY, { timeOut: 10000 });
+                toastr.error(t`[LB] Entry not found for patch: "${change.name || change.uid || '?'}" in "${bookName}"`, EXT_DISPLAY, { timeOut: 10000 });
                 continue;
             }
             let current = origEntry.content || '';
@@ -278,7 +288,7 @@ export async function applyLBChanges(changes, afterMsgId = null) {
             for (const patch of (change.patches || [])) {
                 const { result, matched } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
                 if (!matched) {
-                    toastr.warning(`[LB] SEARCH not found in "${origEntry.comment}": "${(patch.search || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 });
+                    toastr.warning(t`[LB] SEARCH not found in "${origEntry.comment}": "${(patch.search || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 });
                     allMatched = false;
                     break;
                 }
@@ -318,22 +328,27 @@ export async function applyLBChanges(changes, afterMsgId = null) {
     }
 
     if (changes.length > 0 && !Object.keys(bookCache).length) {
-        toastr.warning('[LB] No changes were applied — see browser console (F12) for details', EXT_DISPLAY, { timeOut: 10000 });
-        return;
+        toastr.warning(translate('[LB] No changes were applied — see browser console (F12) for details'), EXT_DISPLAY, { timeOut: 10000 });
+        return [];
     }
 
+    const savedBooks = new Set();
     for (const [name, data] of Object.entries(bookCache)) {
         try {
             await saveWorldInfoBook(name, data);
+            savedBooks.add(name);
         } catch (e) {
-            toastr.error(`[LB] Save failed for "${name}": ${e.message}`, EXT_DISPLAY, { timeOut: 12000 });
+            delete wiCache[name];
+            toastr.error(t`[LB] Save failed for "${name}": ${e.message}`, EXT_DISPLAY, { timeOut: 12000 });
         }
     }
 
-    if (successfulChanges.length > 0) {
-        recordStat(SM.lb, successfulChanges.length);
-        logLBHistoryChanges(successfulChanges, 'Accepted', afterMsgId);
+    const appliedChanges = successfulChanges.filter(change => savedBooks.has(changeBooks.get(change)));
+    if (appliedChanges.length > 0) {
+        recordStat(SM.lb, appliedChanges.length);
+        logLBHistoryChanges(appliedChanges, 'Accepted', afterMsgId);
     }
+    return appliedChanges;
 }
 
 export function renderProposalCard(changes, msgEl) {
@@ -374,7 +389,7 @@ export function renderProposalCard(changes, msgEl) {
     header.className = 'scp-lb-proposal-header';
     const headerLeft = document.createElement('div');
     headerLeft.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0';
-    headerLeft.innerHTML = `<span class="scp-lb-proposal-icon">${I.book}</span><span class="scp-lb-proposal-title">Proposed Lorebook Changes</span>`;
+    headerLeft.innerHTML = `<span class="scp-lb-proposal-icon">${I.book}</span><span class="scp-lb-proposal-title" data-i18n="Proposed Lorebook Changes">Proposed Lorebook Changes</span>`;
 
     const countBadge = document.createElement('span');
     countBadge.className = 'scp-lb-proposal-count';
@@ -407,7 +422,7 @@ export function renderProposalCard(changes, msgEl) {
 
         const itemMeta = document.createElement('div');
         itemMeta.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0;flex-wrap:wrap';
-        itemMeta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(actionLabels[c.action] || c.action || '?')}</span><span class="scp-lb-proposal-name scp-lb-pn-target">${escHtml(c.name || c.originalName || `Entry #${c.uid || '?'}`)}</span>${c.constant ? '<span class="scp-lb-src-badge scp-lb-src-global" style="font-size:9px;padding:1px 5px" title="Constant entry">★</span>' : ''}`;
+        itemMeta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(actionLabels[c.action] || c.action || '?')}</span><span class="scp-lb-proposal-name scp-lb-pn-target">${escHtml(c.name || c.originalName || `Entry #${c.uid || '?'}`)}</span>${c.constant ? '<span class="scp-lb-src-badge scp-lb-src-global" style="font-size:9px;padding:1px 5px" title="Constant entry" data-i18n="[title]Constant entry">★</span>' : ''}`;
 
         const warnEl = document.createElement('div');
         warnEl.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;width:100%;display:none;cursor:pointer;';
@@ -461,7 +476,7 @@ export function renderProposalCard(changes, msgEl) {
                 worldPanel.appendChild(sep);
                 const newItem = document.createElement('div');
                 newItem.className = 'scp-lb-proposal-world-item scp-lb-proposal-world-new';
-                newItem.innerHTML = `<span>${I.plus}</span><span>Create new lorebook…</span>`;
+                newItem.innerHTML = `<span>${I.plus}</span><span data-i18n="Create new lorebook…">Create new lorebook…</span>`;
                 newItem.addEventListener('click', async () => {
                     worldPanel.classList.remove('open'); worldTrigger.classList.remove('open');
                     const name = await showCustomDialog({ type: 'prompt', title: 'New Lorebook Name', message: 'Enter name for the new lorebook:', placeholder: 'My Lorebook' });
@@ -476,18 +491,24 @@ export function renderProposalCard(changes, msgEl) {
             }
         };
 
+        let validationVersion = 0;
         const _validateBookEntry = async (bookName) => {
+            const version = ++validationVersion;
             worldTrigger.classList.add('loading');
             const checkChange = { ...editableChanges[ci], worldName: bookName };
             if (bookName !== editableChanges[ci].worldName) delete checkChange.uid;
             
             const resolved = await resolveLBChangeTarget(checkChange, true);
+            // A slower response for the previous book must not pin its ID into
+            // the newly selected book, where the same ID can mean another entry.
+            if (version !== validationVersion || bookName !== (editableChanges[ci].worldName || '')) return;
             worldTrigger.classList.remove('loading');
 
             const found = !!resolved.origEntry;
             if (found) {
                 const orig = resolved.origEntry;
                 const n = orig.comment || `Entry #${orig.uid}`;
+                editableChanges[ci].uid = orig.uid;
                 editableChanges[ci].originalName = n;
                 if (!editableChanges[ci].name) editableChanges[ci].name = n;
                 
@@ -512,7 +533,7 @@ export function renderProposalCard(changes, msgEl) {
                 _selectedBook = resolved.bookName;
                 worldPanel.querySelectorAll('.scp-lb-proposal-world-item').forEach(el => el.classList.toggle('active', el.dataset.value === resolved.bookName));
                 worldTriggerText.textContent = `in ${getDisplayName(resolved.bookName)}`;
-                toastr.info(`Entry found in "<b>${escHtml(getDisplayName(resolved.bookName))}</b>" instead — lorebook switched automatically.`, EXT_DISPLAY, { escapeHtml: false });
+                toastr.info(t`Entry found in "<b>${escHtml(getDisplayName(resolved.bookName))}</b>" instead — lorebook switched automatically.`, EXT_DISPLAY, { escapeHtml: false });
             } else {
                 worldTriggerText.textContent = found ? `in ${getDisplayName(bookName)}` : `in ${getDisplayName(bookName)} ⚠`;
             }
@@ -541,6 +562,7 @@ export function renderProposalCard(changes, msgEl) {
         };
 
         const selectBook = async (name) => {
+            if (name !== editableChanges[ci].worldName) delete editableChanges[ci].uid;
             _selectedBook = name;
             editableChanges[ci].worldName = name;
             worldTriggerText.textContent = `in ${getDisplayName(name)}`;
@@ -585,7 +607,7 @@ export function renderProposalCard(changes, msgEl) {
                 e.stopPropagation();
                 const change = editableChanges[ci];
                 const { origEntry } = await resolveLBChangeTarget(change);
-                if (!origEntry) { toastr.warning('Could not find original entry to compare against.', EXT_DISPLAY); return; }
+                if (!origEntry) { toastr.warning(translate('Could not find original entry to compare against.'), EXT_DISPLAY); return; }
                 openDiffModal(change, origEntry);
             });
             itemBtns.appendChild(diffBtn);
@@ -610,13 +632,14 @@ export function renderProposalCard(changes, msgEl) {
             closeEditPanel();
             applyItemBtn.disabled = true; applyItemBtn.textContent = '…';
             try {
-                await applyLBChanges([editableChanges[ci]], card.dataset.for);
+                const applied = await applyLBChanges([editableChanges[ci]], card.dataset.for);
+                if (!applied.includes(editableChanges[ci])) throw new Error('Change was not saved. Check the target book and entry.');
                 itemStates[ci] = 'applied'; item.classList.add('scp-lb-item-applied');
                 itemBtns.querySelectorAll('button').forEach(b => { b.disabled = true; });
                 updateCountBadge(); updateFooterBtns(); syncBlockToMessage(); checkAllResolved();
-                toastr.success('[LB] Change applied.', EXT_DISPLAY);
+                toastr.success(translate('[LB] Change applied.'), EXT_DISPLAY);
             } catch (err) {
-                toastr.error(`Failed: ${err.message}`, EXT_DISPLAY);
+                toastr.error(t`Failed: ${err.message}`, EXT_DISPLAY);
                 applyItemBtn.disabled = false; applyItemBtn.textContent = '✓';
             }
         });
@@ -715,7 +738,7 @@ export function renderProposalCard(changes, msgEl) {
                 const contentTa = document.createElement('textarea');
                 contentTa.className = 'scp-lb-pe-textarea'; contentTa.value = c.content || '';
                 contentTa.addEventListener('input', () => { editableChanges[ci].content = contentTa.value; });
-                editPanel.appendChild(mkRow('Content', contentTa));
+                editPanel.appendChild(mkRow(translate('Content'), contentTa));
             }
 
             const constWrap = document.createElement('label');
@@ -739,7 +762,7 @@ export function renderProposalCard(changes, msgEl) {
             oNameInp.value = c.outlet_name || '';
             oNameInp.placeholder = 'Outlet macro name...';
             oNameInp.addEventListener('input', () => { editableChanges[ci].outlet_name = oNameInp.value; });
-            outletNameRow.innerHTML = '<label class="scp-lb-pe-label">Outlet Name</label>';
+            outletNameRow.innerHTML = '<label class="scp-lb-pe-label" data-i18n="Outlet Name">Outlet Name</label>';
             outletNameRow.appendChild(oNameInp);
 
             outletCb.addEventListener('change', () => { 
@@ -790,12 +813,13 @@ export function renderProposalCard(changes, msgEl) {
         if (!pending.length) return;
         applyAllBtn.disabled = true; applyAllBtn.textContent = 'Applying…';
         try {
-            await applyLBChanges(pending, card.dataset.for);
-            itemStates.forEach((s, i) => { if (s === 'pending') { itemStates[i] = 'applied'; itemEls[i].classList.add('scp-lb-item-applied'); itemEls[i].querySelectorAll('button').forEach(b => { b.disabled = true; }); } });
-            updateCountBadge(); updateFooterBtns(); checkAllResolved();
-            toastr.success(`[LB] ${pending.length} changes applied.`, EXT_DISPLAY);
+            const applied = await applyLBChanges(pending, card.dataset.for);
+            itemStates.forEach((s, i) => { if (s === 'pending' && applied.includes(editableChanges[i])) { itemStates[i] = 'applied'; itemEls[i].classList.add('scp-lb-item-applied'); itemEls[i].querySelectorAll('button').forEach(b => { b.disabled = true; }); } });
+            updateCountBadge(); updateFooterBtns(); syncBlockToMessage(); checkAllResolved();
+            if (applied.length) toastr.success(t`[LB] ${applied.length} changes applied.`, EXT_DISPLAY);
+            applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';
         } catch (e) {
-            toastr.error(`Failed: ${e.message}`, EXT_DISPLAY);
+            toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
             applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';
         }
     });
@@ -872,7 +896,7 @@ export async function refreshLorebookList() {
     listEl.innerHTML = '';
     
     if (!activeNamesArray.length) {
-        listEl.innerHTML = '<div class="scp-lb-loading">No active lorebooks found.<br><small style="opacity:.5">Link one to the character or select globally.</small></div>';
+        listEl.innerHTML = '<div class="scp-lb-loading"><span data-i18n="No active lorebooks found.">No active lorebooks found.</span><br><small style="opacity:.5" data-i18n="Link one to the character or select globally.">Link one to the character or select globally.</small></div>';
         return;
     }
     
@@ -925,7 +949,7 @@ export async function refreshLorebookList() {
     const getSourceInfo = (name) => {
         if (name === EMBEDDED_BOOK_KEY) return { cls: 'scp-lb-src-character', label: 'C', title: 'Embedded Character Lorebook' };
         
-        if (name === chatBook) return { cls: 'scp-lb-src-chat', label: 'Ch', title: 'Chat Lorebook' };
+        if (name === chatBook) return { cls: 'scp-lb-src-chat', label: translate('Ch'), title: 'Chat Lorebook' };
         if (name === personaBook) return { cls: 'scp-lb-src-persona', label: 'P', title: 'Persona Lorebook' };
         if (charBooks.has(name)) return { cls: 'scp-lb-src-character', label: 'C', title: 'Character Lorebook (Primary or Additional)' };
         if (globalBooks.includes(name)) return { cls: 'scp-lb-src-global', label: 'G', title: 'Global Lorebook' };
@@ -1007,7 +1031,7 @@ export async function renderEntryList(bookName, search = '') {
     const container = document.getElementById('scp-lb-entries');
     if (!container) return;
     const data = await fetchWorldInfoBook(bookName);
-    if (!data) { container.innerHTML = '<div class="scp-lb-empty-state">Failed to load lorebook</div>'; return; }
+    if (!data) { container.innerHTML = '<div class="scp-lb-empty-state" data-i18n="Failed to load lorebook">Failed to load lorebook</div>'; return; }
 
     const entries = wiEntriesToArray(data);
     const s = getSettings();
@@ -1045,7 +1069,7 @@ export async function renderEntryList(bookName, search = '') {
         row.innerHTML = `
             <div class="scp-lb-entry-indicator ${indClass}"></div>
             <div class="scp-lb-entry-info">
-                <span class="scp-lb-entry-name">${escHtml(entry.comment || `#${entry.uid}`)}${isInCtx ? ' <span class="scp-lb-in-ctx-badge">in context</span>' : ''}</span>
+                <span class="scp-lb-entry-name">${escHtml(entry.comment || `#${entry.uid}`)}${isInCtx ? ' <span class="scp-lb-in-ctx-badge" data-i18n="in context">in context</span>' : ''}</span>
                 <span class="scp-lb-entry-keys">${entry.key?.slice(0, 5).map(k => escHtml(k)).join(' · ') || '—'}</span>
             </div>
             <div class="scp-lb-entry-actions">
@@ -1109,7 +1133,7 @@ export function showEntryDetail(entry, bookName) {
     const lbStatus = document.getElementById('scp-lb-detail-lb-status');
     if (lbStatus) {
         const updateStatus = () => {
-            lbStatus.textContent = entry.disable ? 'Disabled' : 'Enabled';
+            lbStatus.textContent = entry.disable ? translate('Disabled') : translate('Enabled');
             lbStatus.className = `scp-lb-detail-status ${entry.disable ? 'status-disabled' : 'status-enabled'}`;
         };
         updateStatus();
@@ -1120,7 +1144,7 @@ export function showEntryDetail(entry, bookName) {
             if (data?.entries[entry.uid] !== undefined) {
                 data.entries[entry.uid].disable = entry.disable;
                 await saveWorldInfoBook(bookName, data);
-                toastr.success('Status updated', EXT_DISPLAY);
+                toastr.success(translate('Status updated'), EXT_DISPLAY);
                 renderEntryList(bookName, state.lbSearchQuery);
             }
         };
@@ -1136,7 +1160,7 @@ export function showEntryDetail(entry, bookName) {
 
 export async function saveEntryDetail() {
     if (!state.lbEntryDetailEntry || !state.lbEntryDetailBook) return;
-    if (state.lbEntryDetailBook === EMBEDDED_BOOK_KEY) { toastr.warning('Cannot save embedded character book entries.', EXT_DISPLAY); return; }
+    if (state.lbEntryDetailBook === EMBEDDED_BOOK_KEY) { toastr.warning(translate('Cannot save embedded character book entries.'), EXT_DISPLAY); return; }
     const data = await fetchWorldInfoBook(state.lbEntryDetailBook);
     if (!data) return;
     const entry = data.entries[state.lbEntryDetailEntry.uid];
@@ -1146,7 +1170,7 @@ export async function saveEntryDetail() {
     Object.assign(state.lbEntryDetailEntry, entry);
     await saveWorldInfoBook(state.lbEntryDetailBook, data);
 
-    toastr.success('Entry saved', EXT_DISPLAY);
+    toastr.success(translate('Entry saved'), EXT_DISPLAY);
     document.getElementById('scp-lb-detail-title').textContent = entry.comment || `Entry #${entry.uid}`;
     renderEntryList(state.lbEntryDetailBook, state.lbSearchQuery);
     updateMsgCount(getCurrentSession());
@@ -1161,7 +1185,7 @@ export async function deleteEntryDetail() {
     delete data.entries[state.lbEntryDetailEntry.uid];
     await saveWorldInfoBook(state.lbEntryDetailBook, data);
 
-    toastr.success('Entry deleted', EXT_DISPLAY);
+    toastr.success(translate('Entry deleted'), EXT_DISPLAY);
     document.getElementById('scp-lb-entry-detail').style.display = 'none';
     document.getElementById('scp-lb-entries').style.display = '';
     renderEntryList(state.lbEntryDetailBook, state.lbSearchQuery);
@@ -1169,8 +1193,8 @@ export async function deleteEntryDetail() {
 }
 
 export async function addNewEntry() {
-    if (!state.lbActiveBook) { toastr.warning('Select a lorebook first', EXT_DISPLAY); return; }
-    if (state.lbActiveBook === EMBEDDED_BOOK_KEY) { toastr.warning('Cannot add entries to embedded character books.', EXT_DISPLAY); return; }
+    if (!state.lbActiveBook) { toastr.warning(translate('Select a lorebook first'), EXT_DISPLAY); return; }
+    if (state.lbActiveBook === EMBEDDED_BOOK_KEY) { toastr.warning(translate('Cannot add entries to embedded character books.'), EXT_DISPLAY); return; }
     const name = await showCustomDialog({ type: 'prompt', title: 'New Entry', message: 'Entry name:', placeholder: 'New Entry' });
     if (name === null) return;
     const data = await fetchWorldInfoBook(state.lbActiveBook);
@@ -1185,7 +1209,7 @@ export async function addNewEntry() {
 
     data.entries[newUid] = newEntry;
     await saveWorldInfoBook(state.lbActiveBook, data);
-    toastr.success('Entry created', EXT_DISPLAY);
+    toastr.success(translate('Entry created'), EXT_DISPLAY);
     await renderEntryList(state.lbActiveBook, state.lbSearchQuery);
     showEntryDetail(newEntry, state.lbActiveBook);
     updateMsgCount(getCurrentSession());

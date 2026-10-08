@@ -6,7 +6,7 @@
   "scripts": {
     "build": "rollup -c",
     "dev": "rollup -c -w",
-    "test": "node --import ./tests/setup.mjs --test \"tests/*.test.mjs\""
+    "test": "node --import ./tests/setup.mjs --test \"tests/*.test.mjs\" && node --test \"tests/*.test.cjs\""
   },
   "keywords": [],
   "author": "",

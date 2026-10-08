@@ -7,6 +7,7 @@ import { _ensureWrapped } from './utils/util-text.js';
 import { getCharInfo, getUserPersona } from './utils/util-st.js';
 import { recordStat, SM } from './features/feature-stats.js';
 import { _mergeContent } from './features/feature-attachments.js';
+import { translate } from './utils/util-i18n.js';
 
 import { _getAspectEvolutiaCharFields, _getAspectEvolutiaPersonaFields } from './integrations/integ-evolutia.js';
 import { _getSummaryceptionSummary } from './integrations/integ-summaryception.js';
@@ -867,7 +868,7 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
         cleanupCursor();
 
         if (result && !result.text.trim() && !result.reasoning?.trim()) {
-            toastr.warning('⚠ Generation failed: AI returned an empty response.', EXT_DISPLAY, { timeOut: 10000 });
+            toastr.warning(translate('⚠ Generation failed: AI returned an empty response.'), EXT_DISPLAY, { timeOut: 10000 });
         }
 
         if (result !== null && settings.toolsEnabled && getEnabledTools().length > 0) {
@@ -1195,7 +1196,7 @@ export async function runContinue(session, targetMsgId) {
         const combined = _joinContinuation(originalContent, continuation);
         
         if (isMaxTokens) {
-            toastr.warning('Generation stopped: reached Max Response Tokens limit.', EXT_DISPLAY, { timeOut: 10000 });
+            toastr.warning(translate('Generation stopped: reached Max Response Tokens limit.'), EXT_DISPLAY, { timeOut: 10000 });
         }
 
         targetMsg.content = combined;

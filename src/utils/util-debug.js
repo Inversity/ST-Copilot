@@ -2,6 +2,7 @@ import { EXT_DISPLAY } from '../constants.js';
 import { DBG_STATE, DBG_SKIP } from '../state.js';
 import { getSettings, getCurrentSession, hasSessionOverrides } from '../session.js';
 import { extVersion } from '../index.js';
+import { translate } from './util-i18n.js';
 
 export function _dbgStrip(s) {
     const r = {};
@@ -153,5 +154,5 @@ export function dbgDownload() {
     a.download = `st-copilot-debug-${Date.now()}.txt`;
     a.click();
     URL.revokeObjectURL(url);
-    toastr.success('Debug log downloaded.', EXT_DISPLAY);
+    toastr.success(translate('Debug log downloaded.'), EXT_DISPLAY);
 }

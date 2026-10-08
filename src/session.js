@@ -6,6 +6,7 @@ import {
 } from './constants.js';
 import { _dbgAdd, _dbgDiffSettings } from './utils/util-debug.js';
 import { _repairJSON, promptHash } from './utils/util-text.js';
+import { t, translate } from './utils/util-i18n.js';
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 export function getSettings() {
@@ -226,7 +227,48 @@ export function hasSessionOverrides() {
 
 let _inMemoryBucket = { activeSessionId: null, sessions: [] };
 let _currentSessionFileId = null;
+let _fileOnDisk = false;
 const _saveQueue = new Map();
+
+export const SESSION_FILE_RE = /^copilot_sess_.+\.json$/;
+
+export function getCurrentSessionFileId() {
+    return _currentSessionFileId;
+}
+
+function _newSessionFileId() {
+    return `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
+}
+
+// A lone auto-created "Session 1" with nothing in it is not worth a file.
+function _bucketHasContent(bucket) {
+    const sessions = bucket?.sessions || [];
+    return sessions.length > 1 || sessions.some(s => s.messages?.length > 0 || (s.overrides && Object.keys(s.overrides).length > 0));
+}
+
+function _cancelPendingSave(fileId) {
+    const item = _saveQueue.get(fileId);
+    if (!item) return;
+    clearTimeout(item.timer);
+    _saveQueue.delete(fileId);
+}
+
+export async function deleteSessionFile(file_id) {
+    const ctx = SillyTavern.getContext();
+    try {
+        const res = await fetch('/api/files/delete', {
+            method: 'POST',
+            headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: `user/files/${file_id}` }),
+        });
+        if (res.ok || res.status === 404) return true;
+        _dbgAdd('STORAGE_DELETE_FAILED', { file_id, status: res.status });
+        return false;
+    } catch (e) {
+        _dbgAdd('STORAGE_DELETE_FAILED', { file_id, error: e.message });
+        return false;
+    }
+}
 
 export async function saveSessionFile(file_id, payload, useKeepalive = false) {
     const ctx = SillyTavern.getContext();
@@ -291,10 +333,6 @@ export async function loadSessionFile(file_id) {
     }
 }
 
-function _newSessionFileId() {
-    return `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
-}
-
 // The ST chat id the in-memory bucket belongs to (null when no chat is open).
 let _bucketChatId = null;
 // Incremented on every initChatBucket call; an older call that is still awaiting
@@ -340,12 +378,16 @@ export async function initChatBucket({ forceReset = false } = {}) {
     const { charId } = getBindingKey();
     const superseded = () => gen !== _initGeneration || SillyTavern.getContext().chatMetadata !== chatMeta;
 
+    // A reset deletes the current file, so its pending write must not be flushed back onto disk.
+    if (forceReset && _currentSessionFileId) _cancelPendingSave(_currentSessionFileId);
+
     if (!chatId || !chatMeta) {
-        // No chat open (e.g. the welcome screen). Nothing to attach sessions to.
+        // No chat open (e.g. the welcome screen). Keep sessions in memory only.
         await _flushPendingSaves();
         if (gen !== _initGeneration) return;
         _currentSessionFileId = null;
         _bucketChatId = null;
+        _fileOnDisk = false;
         _inMemoryBucket = { activeSessionId: null, sessions: [] };
         _dbgAdd('STORAGE_NO_CHAT', { charId });
         return;
@@ -353,14 +395,20 @@ export async function initChatBucket({ forceReset = false } = {}) {
 
     if (forceReset) {
         const prevMeta = chatMeta.st_copilot || null;
+        await _flushPendingSaves();
+        let prevDeleted = false;
+        if (prevMeta?.file_id && prevMeta.chat_id === chatId) {
+            prevDeleted = await deleteSessionFile(prevMeta.file_id);
+        }
+        if (superseded()) return;
         const freshId = _newSessionFileId();
         chatMeta.st_copilot = { format: 'v4', file_id: freshId, chat_id: chatId };
         _persistChatMetadata(ctx);
         _currentSessionFileId = freshId;
         _bucketChatId = chatId;
+        _fileOnDisk = false;
         _inMemoryBucket = { activeSessionId: null, sessions: [] };
-        await commitBucketChanges(true);
-        _dbgAdd('SESSION_FORCE_RESET', { charId, chatId, prevFileId: prevMeta?.file_id || null, newFileId: freshId });
+        _dbgAdd('SESSION_FORCE_RESET', { charId, chatId, prevFileId: prevMeta?.file_id || null, prevDeleted, newFileId: freshId });
         return;
     }
 
@@ -380,21 +428,25 @@ export async function initChatBucket({ forceReset = false } = {}) {
     let targetFileId = null;
     let payload = null;
     let needsInitialWrite = false;
+    let onDisk = false;
 
     if (meta && meta.file_id && meta.format === 'v4') {
         if (meta.chat_id === chatId) {
             targetFileId = meta.file_id;
             payload = await loadSessionFile(targetFileId);
             if (superseded()) return;
+            onDisk = !!payload;
         } else {
             // The chat was branched or renamed and carried our metadata along: copy the
-            // sessions into a new file so the two chats don't share one.
+            // sessions into a new file so the two chats don't share one. Empty buckets
+            // are not copied (see _bucketHasContent).
             _dbgAdd('STORAGE_CHAT_BRANCH_DETECTED', { oldChatId: meta.chat_id, newChatId: chatId });
             payload = await loadSessionFile(meta.file_id);
             if (superseded()) return;
             targetFileId = _newSessionFileId();
-            if (payload && payload !== false) {
-                await saveSessionFile(targetFileId, payload);
+            if (payload && _bucketHasContent(payload.bucket)) {
+                payload = { ...payload, chat_id_reference: chatId };
+                onDisk = await saveSessionFile(targetFileId, payload);
                 if (superseded()) return;
             }
             chatMeta.st_copilot = { format: 'v4', file_id: targetFileId, chat_id: chatId };
@@ -431,6 +483,8 @@ export async function initChatBucket({ forceReset = false } = {}) {
         needsInitialWrite = true;
     }
 
+    _fileOnDisk = onDisk;
+
     if (payload === false) {
         _dbgAdd('STORAGE_LOAD_CORRUPTED_RECOVERY', { brokenFileId: targetFileId, charId, chatId });
         const recoveryFileId = _newSessionFileId();
@@ -440,9 +494,9 @@ export async function initChatBucket({ forceReset = false } = {}) {
         _inMemoryBucket = { activeSessionId: null, sessions: [] };
         _currentSessionFileId = recoveryFileId;
         _bucketChatId = chatId;
-        await commitBucketChanges(true);
+        _fileOnDisk = false;
 
-        toastr.error('Copilot session file was corrupted and could not be recovered. Started a fresh session storage for this chat; the broken file was kept on disk for manual recovery.', EXT_DISPLAY, { timeOut: 15000 });
+        toastr.error(translate('Copilot session file was corrupted and could not be recovered. Started a fresh session storage for this chat; the broken file was kept on disk for manual recovery.'), EXT_DISPLAY, { timeOut: 15000 });
         return;
     }
 
@@ -457,6 +511,7 @@ export async function initChatBucket({ forceReset = false } = {}) {
         _dbgAdd('STORAGE_BUCKET_EMPTY_INIT', { charId, chatId, fileId: targetFileId, hadPayload: !!payload });
     }
 
+    // commitBucketChanges creates the file lazily, so this is a no-op for an empty bucket.
     if (!payload || needsInitialWrite) {
         await commitBucketChanges(true);
     }
@@ -467,7 +522,11 @@ export async function commitBucketChanges(force = false) {
     if (!fileName) return;
 
     const snapshot = JSON.parse(JSON.stringify(_inMemoryBucket));
-    
+
+    // Create the file lazily; once it exists, keep writing so deletions are persisted too.
+    if (!_fileOnDisk && !_bucketHasContent(snapshot)) return;
+    _fileOnDisk = true;
+
     const payloadToSave = {
         _version: 4,
         chat_id_reference: _bucketChatId,
@@ -682,9 +741,9 @@ export function exportCurrentSession() {
         a.download = `st-copilot-session-${safeName}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        toastr.success('Session exported.', EXT_DISPLAY);
+        toastr.success(translate('Session exported.'), EXT_DISPLAY);
     } catch (e) {
-        toastr.error(`Export failed: ${e.message}`, EXT_DISPLAY);
+        toastr.error(t`Export failed: ${e.message}`, EXT_DISPLAY);
     }
 }
 
@@ -697,7 +756,7 @@ export function importSession(onSuccessCallback) {
             const text = await file.text();
             const data = JSON.parse(text);
             if (!data.session || !data.session.id || !Array.isArray(data.session.messages)) {
-                toastr.error('Invalid session file.', EXT_DISPLAY); return;
+                toastr.error(translate('Invalid session file.'), EXT_DISPLAY); return;
             }
             const ok = await showCustomDialog({
                 type: 'confirm',
@@ -711,10 +770,10 @@ export function importSession(onSuccessCallback) {
             bucket.sessions.push(imported);
             bucket.activeSessionId = imported.id;
             saveSessionsToMetadata();
-            toastr.success(`Session "${escHtml(imported.name)}" imported.`, EXT_DISPLAY);
+            toastr.success(t`Session "${escHtml(imported.name)}" imported.`, EXT_DISPLAY);
             if (onSuccessCallback) onSuccessCallback();
         } catch (e) {
-            toastr.error(`Import failed: ${e.message}`, EXT_DISPLAY);
+            toastr.error(t`Import failed: ${e.message}`, EXT_DISPLAY);
         }
     };
     inp.click();
@@ -727,16 +786,16 @@ export function showSessionDialog({ defaultName = '' } = {}) {
         overlay.style.zIndex = '2147483050';
         overlay.innerHTML = `
             <div class="scp-dialog-box">
-                <div class="scp-dialog-title">New Session</div>
-                <div class="scp-dialog-msg">Session name:</div>
+                <div class="scp-dialog-title" data-i18n="New Session">New Session</div>
+                <div class="scp-dialog-msg" data-i18n="Session name:">Session name:</div>
                 <input type="text" class="scp-dialog-input" value="${escHtml(defaultName)}" placeholder="${escHtml(defaultName)}">
                 <label class="scp-sess-tmp-label">
                     <div class="scp-lb-toggle" id="scp-sess-tmp-toggle"><div class="scp-lb-toggle-knob"></div></div>
-                    <span>Temporary — auto-delete when switching</span>
+                    <span data-i18n="Temporary — auto-delete when switching">Temporary — auto-delete when switching</span>
                 </label>
                 <div class="scp-dialog-btns">
-                    <button class="scp-dialog-btn scp-dialog-cancel">Cancel</button>
-                    <button class="scp-dialog-btn scp-dialog-ok">Create</button>
+                    <button class="scp-dialog-btn scp-dialog-cancel" data-i18n="Cancel">Cancel</button>
+                    <button class="scp-dialog-btn scp-dialog-ok" data-i18n="Create">Create</button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);

@@ -2,6 +2,7 @@ import { EXT_DISPLAY, CHAT_EDIT_FORMAT_BLOCK, DEFAULT_CHAT_EDIT_DIRECTIVE } from
 import { getSettings, getCurrentSession, addMessage } from '../session.js';
 import { applySearchReplaceToField, applyBulkReplacement, _repairJSON } from '../utils/util-text.js';
 import { escHtml } from '../utils/util-dom.js';
+import { t, translate } from '../utils/util-i18n.js';
 
 // Indices of the last `depth` messages; never negative when the chat is shorter than depth.
 function _lastIndices(total, depth) {
@@ -188,7 +189,7 @@ export async function logChatEditHistory(changes, statusStr, afterMsgId = null) 
 export async function applyChatChanges(changes, afterMsgId = null) {
     const ctx = SillyTavern.getContext();
     const msgs = ctx.chat;
-    if (!msgs) { toastr.error('[ChatEdit] No active chat.', EXT_DISPLAY); return; }
+    if (!msgs) { toastr.error(translate('[ChatEdit] No active chat.'), EXT_DISPLAY); return; }
     const successLog = [];
 
     for (const change of changes) {
@@ -300,7 +301,7 @@ export async function applyChatChanges(changes, afterMsgId = null) {
                                 content = content.replace(re, change.replace || '');
                                 changed = true;
                             }
-                        } catch(e) { toastr.error(`[ChatEdit] Invalid regex: ${change.regex}`, EXT_DISPLAY); }
+                        } catch(e) { toastr.error(t`[ChatEdit] Invalid regex: ${change.regex}`, EXT_DISPLAY); }
                     }
 
                     if (changed) {
@@ -320,7 +321,7 @@ export async function applyChatChanges(changes, afterMsgId = null) {
                 );
                 for (const idx of sortedIndices) {
                     if (idx < 0 || idx >= msgs.length) {
-                        toastr.warning(`[ChatEdit] Message #${idx} not found`, EXT_DISPLAY, { timeOut: 6000 });
+                        toastr.warning(t`[ChatEdit] Message #${idx} not found`, EXT_DISPLAY, { timeOut: 6000 });
                         allSuccess = false; continue;
                     }
                     const msg = msgs[idx];
@@ -340,7 +341,7 @@ export async function applyChatChanges(changes, afterMsgId = null) {
                         let matched = true;
                         for (const patch of (change.patches || [])) {
                             const { result, matched: m } = applySearchReplaceToField(content, patch.search || patch.anchor || '', patch.replace || '');
-                            if (!m) { toastr.warning(`[ChatEdit] ANCHOR not found in #${idx}: "${(patch.search || patch.anchor || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 }); matched = false; break; }
+                            if (!m) { toastr.warning(t`[ChatEdit] ANCHOR not found in #${idx}: "${(patch.search || patch.anchor || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 }); matched = false; break; }
                             content = result;
                         }
                         if (!matched) { allSuccess = false; continue; }
@@ -354,7 +355,7 @@ export async function applyChatChanges(changes, afterMsgId = null) {
 
             const resolved = _resolveStMsgByIndexOrId(change);
             if (!resolved) {
-                toastr.warning(`[ChatEdit] Message not found: Index ${change.msg_index ?? change.msg_id}`, EXT_DISPLAY, { timeOut: 6000 });
+                toastr.warning(t`[ChatEdit] Message not found: Index ${change.msg_index ?? change.msg_id}`, EXT_DISPLAY, { timeOut: 6000 });
                 continue;
             }
             const { idx, msg } = resolved;
@@ -379,7 +380,7 @@ export async function applyChatChanges(changes, afterMsgId = null) {
                 for (const patch of (change.patches || [])) {
                     const { result, matched } = applySearchReplaceToField(content, patch.search || patch.anchor || '', patch.replace || '');
                     if (!matched) {
-                        toastr.warning(`[ChatEdit] ANCHOR not found in message ${change.msg_index ?? change.msg_id}: "${(patch.search || patch.anchor || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 });
+                        toastr.warning(t`[ChatEdit] ANCHOR not found in message ${change.msg_index ?? change.msg_id}: "${(patch.search || patch.anchor || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 });
                         allMatched = false; break;
                     }
                     content = result;
@@ -391,13 +392,13 @@ export async function applyChatChanges(changes, afterMsgId = null) {
             successLog.push(change);
         } catch (e) {
             console.error(`[ST-Copilot-Debug] ChatEdit Failed:`, e);
-            toastr.error(`[ChatEdit] Failed on change: ${e.message}`, EXT_DISPLAY, { timeOut: 10000 });
+            toastr.error(t`[ChatEdit] Failed on change: ${e.message}`, EXT_DISPLAY, { timeOut: 10000 });
         }
     }
 
     if (successLog.length > 0) {
         setTimeout(() => _refreshSTChatDOM(ctx), 100);
         await logChatEditHistory(successLog, 'Applied', afterMsgId);
-        toastr.success(`[ChatEdit] ${successLog.length} change(s) applied.`, EXT_DISPLAY);
+        toastr.success(t`[ChatEdit] ${successLog.length} change(s) applied.`, EXT_DISPLAY);
     }
 }
