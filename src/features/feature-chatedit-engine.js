@@ -1,7 +1,14 @@
 import { EXT_DISPLAY, CHAT_EDIT_FORMAT_BLOCK, DEFAULT_CHAT_EDIT_DIRECTIVE } from '../constants.js';
 import { getSettings, getCurrentSession, addMessage } from '../session.js';
-import { applySearchReplaceToField, _repairJSON } from '../utils/util-text.js';
+import { applySearchReplaceToField, applyBulkReplacement, _repairJSON } from '../utils/util-text.js';
 import { escHtml } from '../utils/util-dom.js';
+
+// Indices of the last `depth` messages; never negative when the chat is shorter than depth.
+function _lastIndices(total, depth) {
+    if (depth <= 0) return [];
+    const start = Math.max(0, total - depth);
+    return Array.from({ length: total - start }, (_, i) => start + i);
+}
 
 export function buildChatEditAIInstructions(settings) {
     if (!settings.chatEditAIEnabled) return '';
@@ -16,10 +23,10 @@ export function buildChatEditAIInstructions(settings) {
         if (picked && picked.length > 0) {
             slice = picked.filter(i => i >= 0 && i < stMsgs.length);
         } else {
-            slice = depth > 0 ? stMsgs.slice(-depth).map((_, i) => stMsgs.length - depth + i) : [];
+            slice = _lastIndices(stMsgs.length, depth);
         }
     } catch(_) {
-        slice = depth > 0 ? stMsgs.slice(-depth).map((_, i) => stMsgs.length - depth + i) : [];
+        slice = _lastIndices(stMsgs.length, depth);
     }
     const activeChatIds = slice.map(i => `#${i}`).join(', ') || 'none';
     const base = (settings.chatEditPrompt || DEFAULT_CHAT_EDIT_DIRECTIVE.trim())
@@ -281,13 +288,14 @@ export async function applyChatChanges(changes, afterMsgId = null) {
                     if (change.action === 'bulk_replace') {
                         for (const rp of (change.replacements || [])) {
                             if (!rp.search && !rp.anchor) continue;
-                            const { result, matched } = applySearchReplaceToField(content, rp.search || rp.anchor, rp.replace || '');
+                            const { result, matched } = applyBulkReplacement(content, rp.search || rp.anchor, rp.replace || '');
                             if (matched) { content = result; changed = true; }
                         }
                     } else if (change.action === 'regex') {
                         try {
                             const m = (change.regex || '').match(/^\/([\s\S]+)\/([a-z]*)$/i);
                             const re = m ? new RegExp(m[1], m[2]) : new RegExp(change.regex, 'g');
+                            re.lastIndex = 0;
                             if (re.test(content)) {
                                 content = content.replace(re, change.replace || '');
                                 changed = true;

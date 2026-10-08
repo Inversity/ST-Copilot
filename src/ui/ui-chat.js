@@ -1,6 +1,6 @@
 import { I, EXT_DISPLAY, THEME_PRESETS, WIN_ID } from '../constants.js';
 import { state } from '../state.js';
-import { getSettings, saveSettings, getCurrentSession, saveSessionsToMetadata, addMessage, deleteMsg, truncateAfter, truncateFrom, expandMacros, getEffectiveSettings, getBindingKey, initChatBucket, isMessageStarred, toggleStarMessage } from '../session.js';
+import { getSettings, saveSettings, getCurrentSession, saveSessionsToMetadata, addMessage, deleteMsg, truncateAfter, truncateFrom, expandMacros, getEffectiveSettings, getBindingKey, initChatBucket, isBucketForCurrentChat, isMessageStarred, toggleStarMessage } from '../session.js';
 import { _dbgAdd } from '../utils/util-debug.js';
 import { escHtml, autoResize, showCustomDialog, copyText } from '../utils/util-dom.js';
 import { getCharInfo } from '../utils/util-st.js';
@@ -10,7 +10,7 @@ import { parseLBChangesFromText, stripLBChangesBlock } from '../features/feature
 import { renderProposalCard, appendLBHistoryEl } from '../features/feature-lorebook-ui.js';
 import { parseCharChangesFromText, stripCharChangesBlock, parseCharCreationFromText, stripCharCreationBlock } from '../features/feature-character-engine.js';
 import { renderCharProposalCard, renderCharCreationCard } from '../features/feature-character-ui.js';
-import { normalizeCharNamesInBlock, applySearchReplaceToField } from '../utils/util-text.js';
+import { applySearchReplaceToField } from '../utils/util-text.js';
 import { parseChatChangesFromText, stripChatChangesBlock } from '../features/feature-chatedit-engine.js';
 import { renderChatProposalCard } from '../features/feature-chatedit-ui.js';
 import { stripMemoryBlock } from '../features/feature-memory.js';
@@ -832,7 +832,7 @@ export async function _runSwipeRegen(session, msgId, wrapEl) {
         }
 
         const { text: rawText, reasoning: fullReasoning } = result;
-        const fullText = normalizeCharNamesInBlock(rawText);
+        const fullText = rawText;
 
         msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null };
         msgData.content = fullText;
@@ -1887,7 +1887,9 @@ export function showGenerationError(err) {
 // ─── Chat Events (SillyTavern) ──────────────────────────────────────────────
 
 export async function onChatChanged() {
-    if (state.generating) {
+    // CHAT_CHANGED also fires for the same chat (e.g. after chat edits); only a real
+    // switch should cancel a Copilot generation.
+    if (state.generating && !isBucketForCurrentChat()) {
         state.abortController?.abort();
         state.generating = false;
         setGeneratingState(false);

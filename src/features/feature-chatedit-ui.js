@@ -1,7 +1,7 @@
 import { EXT_DISPLAY, I } from '../constants.js';
 import { getSettings, saveSettings, getCurrentSession, addMessage, saveSessionsToMetadata } from '../session.js';
 import { escHtml } from '../utils/util-dom.js';
-import { applySearchReplaceToField } from '../utils/util-text.js';
+import { applySearchReplaceToField, applyBulkReplacement } from '../utils/util-text.js';
 import { openTextDiffModal } from '../utils/util-diff.js';
 import { stripChatChangesBlock, reconstructChatChangesBlock, _resolveStMsgByIndexOrId } from './feature-chatedit-engine.js';
 import { bringWindowToFront } from '../ui/ui-window.js';
@@ -103,7 +103,7 @@ export function renderChatProposalCard(changes, msgEl) {
                         let content = stMsgs[i].mes || '', thisMsgMatch = true;
                         for (const rp of (change.replacements || [])) {
                             if (!rp.search && !rp.anchor) continue;
-                            const { matched } = applySearchReplaceToField(content, rp.search || rp.anchor, rp.replace || '');
+                            const { matched } = applyBulkReplacement(content, rp.search || rp.anchor, rp.replace || '');
                             if (!matched) { thisMsgMatch = false; break; }
                         }
                         if (thisMsgMatch && change.replacements?.length > 0) anyMatch = true;
@@ -113,7 +113,7 @@ export function renderChatProposalCard(changes, msgEl) {
                     try {
                         const m = (change.regex || '').match(/^\/([\s\S]+)\/([a-z]*)$/i);
                         const re = m ? new RegExp(m[1], m[2]) : new RegExp(change.regex, 'g');
-                        const anyMatch = change.msg_indices.some(i => re.test(stMsgs[i].mes || ''));
+                        const anyMatch = change.msg_indices.some(i => { re.lastIndex = 0; return re.test(stMsgs[i].mes || ''); });
                         if (!anyMatch) return { valid: false, reason: 'Regex matched nothing in the specified messages' };
                     } catch(e) { return { valid: false, reason: 'Invalid regex syntax' }; }
                 }
@@ -136,7 +136,7 @@ export function renderChatProposalCard(changes, msgEl) {
                     let thisMsgMatch = true;
                     for (const rp of (change.replacements || [])) {
                         if (!rp.search && !rp.anchor) continue;
-                        const { matched } = applySearchReplaceToField(content, rp.search || rp.anchor, rp.replace || '');
+                        const { matched } = applyBulkReplacement(content, rp.search || rp.anchor, rp.replace || '');
                         if (!matched) { thisMsgMatch = false; break; }
                     }
                     if (thisMsgMatch && change.replacements?.length > 0) anyMatch = true;
@@ -147,6 +147,7 @@ export function renderChatProposalCard(changes, msgEl) {
                     const m = (change.regex || '').match(/^\/([\s\S]+)\/([a-z]*)$/i);
                     const re = m ? new RegExp(m[1], m[2]) : new RegExp(change.regex, 'g');
                     for (let i = startIdx; i <= endIdx; i++) {
+                        re.lastIndex = 0;
                         if (re.test(stMsgs[i].mes || '')) { anyMatch = true; break; }
                     }
                     if (!anyMatch) return { valid: false, reason: 'Regex matched nothing in the specified range' };
@@ -195,7 +196,7 @@ export function renderChatProposalCard(changes, msgEl) {
         if (change.action === 'bulk_replace') {
             let c = content;
             for (const p of (change.replacements || [])) {
-                const { result } = applySearchReplaceToField(c, p.search || p.anchor || '', p.replace || '');
+                const { result } = applyBulkReplacement(c, p.search || p.anchor || '', p.replace || '');
                 c = result;
             }
             return c;

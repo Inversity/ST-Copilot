@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { getSettings, getEffectiveSettings, saveSettings, getCurrentSession, saveSessionsToMetadata, addMessage, expandMacros } from './session.js';
 import { _dbgAdd } from './utils/util-debug.js';
 import { escHtml } from './utils/util-dom.js';
-import { _ensureWrapped, normalizeCharNamesInBlock } from './utils/util-text.js';
+import { _ensureWrapped } from './utils/util-text.js';
 import { getCharInfo, getUserPersona } from './utils/util-st.js';
 import { recordStat, SM } from './features/feature-stats.js';
 import { _mergeContent } from './features/feature-attachments.js';
@@ -42,7 +42,7 @@ export async function buildSystemContent(settings) {
                 return c ? c.name : m;
             }).filter(Boolean);
             if (memberNames.length > 0) {
-                parts.push(`\n<chat_group_members>\nThats chat with multiple characters. Current group members: ${memberNames.join(', ')}\n</chat_group_members>`);
+                parts.push(`\n<chat_group_members>\nThis is a group chat. Members: ${memberNames.join(', ')}\n</chat_group_members>`);
             }
         }
     }
@@ -56,7 +56,7 @@ export async function buildSystemContent(settings) {
     {
     const editXml = buildCharacterContextBlock(settings);
     if (ctx.groupId) {
-        if (editXml) parts.push('\n\n' + editXml);
+        if (editXml) parts.push(`\n\n<character_information>\n${editXml}\n</character_information>`);
     } else {
         let inner = `Name: ${charInfo ? charInfo.name : (ctx.name2 || 'Character')}\n`;
         if (editXml) inner += '\n' + editXml;
@@ -83,7 +83,7 @@ export async function buildSystemContent(settings) {
                 if (personaContent) inner += `\n${personaContent}`;
             }
         }
-        parts.push(`\n\n<{{user}}_persona>\n${inner}\n</{{user}}_persona>`);
+        parts.push(`\n\n<user_persona>\n${inner}\n</user_persona>`);
     }
 
     const aiInstructions = buildLBAIInstructions(settings).trim();
@@ -94,7 +94,7 @@ export async function buildSystemContent(settings) {
 
     const modules = [memoryAIInstr, aiInstructions, charEditDirective, chatEditDirective, toolsBlock].filter(Boolean);
     if (modules.length > 0) {
-        const reminder = `\n\n[SYSTEM REMINDER: If you intend to modify anything you MUST write the appropriate structured markdown block containing your instructions. The system strictly relies on these blocks to parse and apply your changes automatically. Simply describing your changes in plain text without outputting the corresponding markdown block will result in failure to apply them.]`;
+        const reminder = `\n\n[Reminder: changes are only applied through the structured blocks described above. Describing a change in plain text does not apply it.]`;
         parts.push(`\n\n<modules>\n${modules.join('\n\n')}${reminder}\n</modules>`);
     }
 
@@ -150,8 +150,8 @@ export function getMainChatSlice(depth) {
     } catch(_) {}
     
     if (depth === 0) return [];
-    const total = ctx.chat.length;
-    return ctx.chat.slice(-depth).map((m, i) => extractData(m, total - depth + i));
+    const start = Math.max(0, ctx.chat.length - depth);
+    return ctx.chat.slice(start).map((m, i) => extractData(m, start + i));
 }
 
 export async function assembleMessages(session, settings, pendingUserText, pendingAtts = null) {
@@ -1011,9 +1011,8 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
         }
 
         const { text: rawFullText, reasoning: fullReasoning } = result;
-        const rawNormalized = normalizeCharNamesInBlock(rawFullText); 
-        processMemoryUpdates(rawNormalized, streamMsgId);
-        const fullText = stripMemoryBlock(rawNormalized);
+        processMemoryUpdates(rawFullText, streamMsgId);
+        const fullText = stripMemoryBlock(rawFullText);
 
         if (streamMsgId) {
             const msg = session.messages.find(m => m.id === streamMsgId);

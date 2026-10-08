@@ -86,7 +86,7 @@ export function setupToolsSettingsUI() {
     }
     
     document.getElementById('scp-sp-tools-reset')?.addEventListener('click', () => {
-        getSettings().toolsSystemPrompt = DEFAULT_TOOLS_PROMPT; saveSettings();
+        getSettings().toolsSystemPrompt = ''; saveSettings();
         if (ta) ta.value = DEFAULT_TOOLS_PROMPT;
     });
 

@@ -50,22 +50,27 @@ export function _sanitizeProposedTags(value) {
         .join(', ');
 }
 
-export function normalizeCharNamesInBlock(text) {
-    const ctx = SillyTavern.getContext();
-    const charName = ctx.characters?.[ctx.characterId]?.name;
-    const userName = ctx.name1;
-    return text.replace(/(```(?:character-changes|character-create)[\s\S]*?(?:```|$))/g, block => {
-        let r = block;
-        if (charName && charName.length > 2) {
-            const charRe = new RegExp(`\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-            r = r.replace(charRe, '{{char}}');
-        }
-        if (userName && userName.length > 2) {
-            const userRe = new RegExp(`\\b${userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-            r = r.replace(userRe, '{{user}}');
-        }
-        return r;
-    });
+// A "word" for fuzzy anchor matching: a run of letters/digits in any script. Han and kana
+// are written without spaces, so each of those characters is its own token.
+const WORD_TOKEN_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]|(?:(?![\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}])[\p{L}\p{M}\p{N}])+/u;
+
+// bulk_replace semantics: replace every exact, whole-word occurrence. Fuzzy matching is
+// only used for "first || last" anchors, since a fuzzy or substring replace-all would hit
+// similar words (e.g. "old" inside "gold").
+export function applyBulkReplacement(content, searchText, replaceText) {
+    const src = content || '';
+    const srch = searchText || '';
+    if (!srch) return { result: src, matched: false };
+    if (srch.includes('||')) return applySearchReplaceToField(src, srch, replaceText);
+    const wordChar = /[\p{L}\p{M}\p{N}_]/u;
+    const escaped = srch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(
+        (wordChar.test(srch[0]) ? '(?<![\\p{L}\\p{M}\\p{N}_])' : '') + escaped +
+        (wordChar.test(srch[srch.length - 1]) ? '(?![\\p{L}\\p{M}\\p{N}_])' : ''),
+        'gu');
+    let matched = false;
+    const result = src.replace(re, () => { matched = true; return replaceText || ''; });
+    return { result, matched };
 }
 
 export function applySearchReplaceToField(fieldContent, searchText, replaceText) {
@@ -104,7 +109,7 @@ export function applySearchReplaceToField(fieldContent, searchText, replaceText)
 
     function getTokensWithOffsets(text) {
         const tokens = [];
-        const re = /[a-zA-Z0-9\u00C0-\u00FF]+/g;
+        const re = new RegExp(WORD_TOKEN_RE.source, 'gu');
         let match;
         while ((match = re.exec(text)) !== null) {
             tokens.push({ text: match[0].toLowerCase(), start: match.index, end: re.lastIndex });
@@ -114,7 +119,7 @@ export function applySearchReplaceToField(fieldContent, searchText, replaceText)
 
     function findFuzzyRange(srcText, queryText, minScore = 0.72) {
         const srcTokens = getTokensWithOffsets(srcText);
-        const queryTokens = queryText.toLowerCase().match(/[a-zA-Z0-9\u00C0-\u00FF]+/g) || [];
+        const queryTokens = queryText.toLowerCase().match(new RegExp(WORD_TOKEN_RE.source, 'gu')) || [];
 
         if (!queryTokens.length) {
             const litIdx = srcText.indexOf(queryText.trim());
@@ -157,7 +162,7 @@ export function applySearchReplaceToField(fieldContent, searchText, replaceText)
             const lastQTok = queryTokens[queryTokens.length - 1];
             const lastTokIdx = qLower.lastIndexOf(lastQTok);
             if (lastTokIdx !== -1) {
-                const trailMatch = queryText.slice(lastTokIdx + lastQTok.length).match(/^[^a-zA-Z0-9\u00C0-\u00FF]+/);
+                const trailMatch = queryText.slice(lastTokIdx + lastQTok.length).match(/^[^\p{L}\p{M}\p{N}]+/u);
                 if (trailMatch && srcText.slice(endPos, endPos + trailMatch[0].length) === trailMatch[0]) {
                     endPos += trailMatch[0].length;
                 }
@@ -166,7 +171,7 @@ export function applySearchReplaceToField(fieldContent, searchText, replaceText)
             const firstQTok = queryTokens[0];
             const firstTokIdx = qLower.indexOf(firstQTok);
             if (firstTokIdx > 0) {
-                const leadMatch = queryText.slice(0, firstTokIdx).match(/[^a-zA-Z0-9\u00C0-\u00FF]+$/);
+                const leadMatch = queryText.slice(0, firstTokIdx).match(/[^\p{L}\p{M}\p{N}]+$/u);
                 if (leadMatch && srcText.slice(startPos - leadMatch[0].length, startPos) === leadMatch[0]) {
                     startPos -= leadMatch[0].length;
                 }
@@ -236,4 +241,18 @@ export function _ensureWrapped(text, tag) {
     t = t.replace(new RegExp(`\\s*</${tag}>$`, 'i'), '');
     
     return `${open}\n${t}\n${close}`;
+}
+// Stable hash of a prompt's text, ignoring whitespace differences. Used to
+// recognise saved prompts that are unmodified copies of an old default.
+export function promptHash(text) {
+    const str = String(text || '').replace(/\s+/g, ' ').trim();
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) {
+        const ch = str.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }

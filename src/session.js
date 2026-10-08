@@ -1,13 +1,11 @@
 import { 
     EXT_NAME, 
     EXT_DISPLAY, 
-    DEFAULT_SYSTEM_PROMPT, 
-    DEFAULT_MEMORY_PROMPT, 
-    DEFAULT_LB_MANAGE_PROMPT, 
-    THEME_PRESETS 
+    THEME_PRESETS,
+    KNOWN_DEFAULT_PROMPT_HASHES,
 } from './constants.js';
 import { _dbgAdd, _dbgDiffSettings } from './utils/util-debug.js';
-import { _repairJSON } from './utils/util-text.js';
+import { _repairJSON, promptHash } from './utils/util-text.js';
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 export function getSettings() {
@@ -40,8 +38,8 @@ export function getSettings() {
         includeCharacterCard: true,
         includeUserPersonality: true,
         includeAlternateSwipes: false,
-        systemPrompt: DEFAULT_SYSTEM_PROMPT,
-        memoryManagePrompt: DEFAULT_MEMORY_PROMPT,
+        systemPrompt: '',
+        memoryManagePrompt: '',
         profiles: {},
         activeProfile: '',
         profileBindings: {},
@@ -54,7 +52,7 @@ export function getSettings() {
         lorebookSelectedBooks: [],
         lorebookEntryOverrides: {},
         lorebookAIManageEnabled: true,
-        lorebookManagePrompt: DEFAULT_LB_MANAGE_PROMPT,
+        lorebookManagePrompt: '',
         lorebookSTScanDepth: 5,
         lorebookCopilotScanDepth: 6,
         floatingIconPersistent: false,
@@ -126,7 +124,34 @@ export function getSettings() {
     for (const [k, v] of Object.entries(defaults)) {
         if (s[k] === undefined) s[k] = v;
     }
+    _migrateDefaultPrompts(s);
     return s;
+}
+
+// Prompt settings where '' means "use the built-in default".
+const PROMPT_SETTING_KEYS = ['systemPrompt', 'lorebookManagePrompt', 'memoryManagePrompt', 'toolsSystemPrompt', 'charEditPrompt', 'chatEditPrompt'];
+let _promptsMigrated = false;
+
+// Older versions saved the full default text, which froze users on outdated prompts.
+// Unmodified copies of any shipped default are cleared so the current default applies.
+function _migrateDefaultPrompts(s) {
+    if (_promptsMigrated) return;
+    _promptsMigrated = true;
+    const known = new Set(KNOWN_DEFAULT_PROMPT_HASHES);
+    const targets = [s, ...Object.values(s.profiles || {}).filter(p => p && typeof p === 'object')];
+    const reset = [];
+    for (const t of targets) {
+        for (const k of PROMPT_SETTING_KEYS) {
+            if (typeof t[k] === 'string' && t[k].trim() && known.has(promptHash(t[k]))) {
+                t[k] = '';
+                reset.push(k);
+            }
+        }
+    }
+    if (reset.length) {
+        _dbgAdd('PROMPT_DEFAULTS_MIGRATED', { keys: reset });
+        SillyTavern.getContext().saveSettingsDebounced?.();
+    }
 }
 
 export function saveSettings() {
@@ -266,58 +291,126 @@ export async function loadSessionFile(file_id) {
     }
 }
 
+function _newSessionFileId() {
+    return `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
+}
+
+// The ST chat id the in-memory bucket belongs to (null when no chat is open).
+let _bucketChatId = null;
+// Incremented on every initChatBucket call; an older call that is still awaiting
+// network I/O sees a newer generation and gives up instead of overwriting state.
+let _initGeneration = 0;
+
+function _currentChatId(ctx) {
+    try {
+        const id = typeof ctx.getCurrentChatId === 'function' ? ctx.getCurrentChatId() : ctx.chatId;
+        return id ? String(id) : null;
+    } catch (_) { return null; }
+}
+
+export function isBucketForCurrentChat() {
+    const id = _currentChatId(SillyTavern.getContext());
+    return !!id && id === _bucketChatId;
+}
+
+async function _flushPendingSaves() {
+    const writes = [];
+    for (const [fileId, item] of _saveQueue.entries()) {
+        clearTimeout(item.timer);
+        _saveQueue.delete(fileId);
+        writes.push(saveSessionFile(fileId, item.payload));
+    }
+    await Promise.all(writes);
+}
+
+function _persistChatMetadata(ctx) {
+    // Not awaited: this runs inside ST's CHAT_CHANGED emit, and saveMetadata writes the
+    // current chat immediately (unlike saveMetadataDebounced, which can be dropped by a
+    // quick chat switch).
+    if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
+}
+
 export async function initChatBucket({ forceReset = false } = {}) {
+    const gen = ++_initGeneration;
     const ctx = SillyTavern.getContext();
-    if (!ctx.chatMetadata) ctx.chatMetadata = {};
-    const { charId, chatId } = getBindingKey();
+    // Capture the chat's metadata object now. ST replaces this object when another chat
+    // loads, so writing to a later ctx.chatMetadata could tag the wrong chat.
+    const chatMeta = ctx.chatMetadata;
+    const chatId = _currentChatId(ctx);
+    const { charId } = getBindingKey();
+    const superseded = () => gen !== _initGeneration || SillyTavern.getContext().chatMetadata !== chatMeta;
+
+    if (!chatId || !chatMeta) {
+        // No chat open (e.g. the welcome screen). Nothing to attach sessions to.
+        await _flushPendingSaves();
+        if (gen !== _initGeneration) return;
+        _currentSessionFileId = null;
+        _bucketChatId = null;
+        _inMemoryBucket = { activeSessionId: null, sessions: [] };
+        _dbgAdd('STORAGE_NO_CHAT', { charId });
+        return;
+    }
 
     if (forceReset) {
-        const prevMeta = ctx.chatMetadata.st_copilot || null;
-        const freshId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
-        ctx.chatMetadata.st_copilot = { format: 'v4', file_id: freshId, chat_id: chatId };
-        if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
+        const prevMeta = chatMeta.st_copilot || null;
+        const freshId = _newSessionFileId();
+        chatMeta.st_copilot = { format: 'v4', file_id: freshId, chat_id: chatId };
+        _persistChatMetadata(ctx);
         _currentSessionFileId = freshId;
+        _bucketChatId = chatId;
         _inMemoryBucket = { activeSessionId: null, sessions: [] };
         await commitBucketChanges(true);
         _dbgAdd('SESSION_FORCE_RESET', { charId, chatId, prevFileId: prevMeta?.file_id || null, newFileId: freshId });
         return;
     }
 
-    for (const [fileId, item] of _saveQueue.entries()) {
-        clearTimeout(item.timer);
-        _saveQueue.delete(fileId);
-        saveSessionFile(fileId, item.payload);
+    const meta = chatMeta.st_copilot;
+
+    // CHAT_CHANGED is also emitted for the same chat (e.g. after chat edits). The in-memory
+    // bucket is newer than the file, so reloading it would drop unsaved changes.
+    if (chatId === _bucketChatId && meta?.format === 'v4' && meta.file_id === _currentSessionFileId) {
+        _dbgAdd('STORAGE_SAME_CHAT_SKIP', { chatId });
+        return;
     }
 
-    let meta = ctx.chatMetadata.st_copilot;
+    // Finish writing the previous chat's sessions before reading anything back.
+    await _flushPendingSaves();
+    if (superseded()) return;
+
     let targetFileId = null;
     let payload = null;
+    let needsInitialWrite = false;
 
     if (meta && meta.file_id && meta.format === 'v4') {
         if (meta.chat_id === chatId) {
             targetFileId = meta.file_id;
             payload = await loadSessionFile(targetFileId);
+            if (superseded()) return;
         } else {
+            // The chat was branched or renamed and carried our metadata along: copy the
+            // sessions into a new file so the two chats don't share one.
             _dbgAdd('STORAGE_CHAT_BRANCH_DETECTED', { oldChatId: meta.chat_id, newChatId: chatId });
             payload = await loadSessionFile(meta.file_id);
-            targetFileId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
-            
+            if (superseded()) return;
+            targetFileId = _newSessionFileId();
             if (payload && payload !== false) {
                 await saveSessionFile(targetFileId, payload);
+                if (superseded()) return;
             }
-            
-            ctx.chatMetadata.st_copilot = { format: 'v4', file_id: targetFileId, chat_id: chatId };
-            if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
+            chatMeta.st_copilot = { format: 'v4', file_id: targetFileId, chat_id: chatId };
+            _persistChatMetadata(ctx);
         }
     } else {
-        targetFileId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
+        targetFileId = _newSessionFileId();
         _dbgAdd('STORAGE_MIGRATION_V4_INIT', { targetFileId });
-        
+
         const safeChatId = chatId.replace(/[^a-zA-Z0-9_-]/g, '_');
         payload = await loadSessionFile(`copilot_sess_${safeChatId}.json`);
+        if (superseded()) return;
 
         if (!payload && meta && meta.file_id && meta.format !== 'v4') {
             payload = await loadSessionFile(meta.file_id);
+            if (superseded()) return;
         }
 
         if (!payload) {
@@ -333,36 +426,38 @@ export async function initChatBucket({ forceReset = false } = {}) {
             }
         }
 
-        ctx.chatMetadata.st_copilot = { format: 'v4', file_id: targetFileId, chat_id: chatId };
-        if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
+        chatMeta.st_copilot = { format: 'v4', file_id: targetFileId, chat_id: chatId };
+        _persistChatMetadata(ctx);
+        needsInitialWrite = true;
     }
-
-    _currentSessionFileId = targetFileId;
 
     if (payload === false) {
         _dbgAdd('STORAGE_LOAD_CORRUPTED_RECOVERY', { brokenFileId: targetFileId, charId, chatId });
-        const recoveryFileId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
-        ctx.chatMetadata.st_copilot = { format: 'v4', file_id: recoveryFileId, chat_id: chatId, recoveredFrom: targetFileId };
-        if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
+        const recoveryFileId = _newSessionFileId();
+        chatMeta.st_copilot = { format: 'v4', file_id: recoveryFileId, chat_id: chatId, recoveredFrom: targetFileId };
+        _persistChatMetadata(ctx);
 
-        targetFileId = recoveryFileId;
         _inMemoryBucket = { activeSessionId: null, sessions: [] };
-        _currentSessionFileId = targetFileId;
+        _currentSessionFileId = recoveryFileId;
+        _bucketChatId = chatId;
         await commitBucketChanges(true);
 
         toastr.error('Copilot session file was corrupted and could not be recovered. Started a fresh session storage for this chat; the broken file was kept on disk for manual recovery.', EXT_DISPLAY, { timeOut: 15000 });
         return;
     }
 
+    _currentSessionFileId = targetFileId;
+    _bucketChatId = chatId;
     if (payload && payload.bucket) {
         _inMemoryBucket = payload.bucket;
-        _dbgAdd('STORAGE_BUCKET_LOADED', { charId, chatId, fileId: targetFileId, sessionCount: _inMemoryBucket.sessions?.length || 0 });
+        if (!Array.isArray(_inMemoryBucket.sessions)) _inMemoryBucket.sessions = [];
+        _dbgAdd('STORAGE_BUCKET_LOADED', { charId, chatId, fileId: targetFileId, sessionCount: _inMemoryBucket.sessions.length });
     } else {
         _inMemoryBucket = { activeSessionId: null, sessions: [] };
         _dbgAdd('STORAGE_BUCKET_EMPTY_INIT', { charId, chatId, fileId: targetFileId, hadPayload: !!payload });
     }
-    
-    if (!payload || meta?.format !== 'v4') {
+
+    if (!payload || needsInitialWrite) {
         await commitBucketChanges(true);
     }
 }
@@ -371,12 +466,11 @@ export async function commitBucketChanges(force = false) {
     const fileName = _currentSessionFileId;
     if (!fileName) return;
 
-    const { chatId } = getBindingKey();
     const snapshot = JSON.parse(JSON.stringify(_inMemoryBucket));
     
     const payloadToSave = {
         _version: 4,
-        chat_id_reference: chatId,
+        chat_id_reference: _bucketChatId,
         updated_at: Date.now(),
         bucket: snapshot
     };

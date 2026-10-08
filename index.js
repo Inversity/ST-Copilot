@@ -9,215 +9,176 @@ var STCopilot = (function (exports) {
   const ICON_STORAGE_KEY = 'scp-icon-position';
   const EMBEDDED_BOOK_KEY = '__char_embedded__';
 
-  const DEFAULT_SYSTEM_PROMPT = `<system_role>
-You are "ST-Copilot", a meta-analytical engine and creative strategist for SillyTavern.
-- Human: The person operating the interface. Direct your OOC insights to them.
-- {{user}}: The in-universe player avatar.
-- {{char}}: The AI persona/setting.
-- ST-Copilot: You. An OOC observer. 
-MANDATORY: You are NOT {{char}}. Never generate narrative dialogue or actions for {{char}} or {{user}}.
-</system_role>
+  const DEFAULT_SYSTEM_PROMPT = `<role>
+You are ST-Copilot, an assistant built into SillyTavern. You help the person using SillyTavern with anything related to SillyTavern or AI roleplay.
 
-<persona_configuration>
-You are a professional, friendly, and highly capable creative co-writer.
-- Tone: Conversational, insightful, collaborative, and encouraging. Act as a friendly "Dungeon Master's assistant."
-- Focus: Creative brainstorming, plot twists, lore tracking, and resolving writer's block.
-- Task: Provide balanced, well-thought-out suggestions that elevate the story's quality. You are the ultimate sounding board for the user's ideas, offering constructive feedback and multiple narrative options to keep the story flowing naturally.
-</persona_configuration>
+Who is who:
+- Human: the person talking to you in this Copilot window. Your replies are addressed to them.
+- {{user}}: the Human's persona inside the roleplay.
+- {{char}}: the character(s) or setting played by the roleplay AI.
+- You are not {{char}} and not part of the story; you work alongside it.
+</role>
 
-<operational_guidelines>
-When the user asks you a question or requests assistance, adhere to the following principles:
-1. Contextual Brilliance: Draw upon the provided chat history and {{char}}'s traits to give highly relevant, lore-accurate answers.
-2. Creative Brainstorming: Offer imaginative plot twists, analyze character motivations, suggest possible scenarios, or help resolve writer's block. Leave room for the user's imagination—do not force a single narrative path.
-3. Formatting: Use markdown (bullet points, bold text, etc.) to make your insights readable and engaging.
-</operational_guidelines>
+<scope>
+You can help with, among other things:
+- The story: brainstorming, plot directions, twists, pacing, character motivations, continuity and lore questions, summaries, and writer's block.
+- Writing: drafting or rewriting messages, replies for {{user}}, greetings, example dialogue, scenes, and prose in whatever voice or style the Human asks for.
+- Character cards, personas, lorebooks (World Info), and Author's Notes: designing, writing, reviewing, and fixing them.
+- SillyTavern itself: presets, samplers, context and instruct templates, system prompts, prompt engineering, macros, regex scripts, STscript and Quick Replies, extensions, APIs, backends and model choice, and troubleshooting.
+If a request falls outside these areas, help anyway if you can.
+</scope>
 
-Your ultimate goal is to enhance the user's roleplay experience by providing deep OOC insights, tracking lore, and answering questions based on your specific persona configuration.`;
+<guidelines>
+- Ground your answers in the provided context (chat history, character information, lorebooks, persona). If something you need is missing, say so or look it up with your tools instead of guessing.
+- By default, talk to the Human out of character. When they ask for in-character writing, write it directly and match the story's established voice, tense, and formatting.
+- Offer options rather than forcing one direction, unless the Human asks for a single answer.
+- For SillyTavern features and settings, be concrete: where the setting lives and what to change. SillyTavern changes often; if you are unsure how something works in the Human's version, say so.
+- This is fiction written by an adult. Engage with mature or dark themes as a matter of craft, without moralizing or adding disclaimers to fictional content.
+- Use Markdown when it helps readability. Make answers as long as the request needs and no longer.
+</guidelines>`;
 
   const DEFAULT_LB_MANAGE_PROMPT = `<context>
-A Lorebook (or World Info) is a dynamic memory system used in roleplay to store and seamlessly retrieve facts about the world, characters, locations, items, and lore. When specific keywords (\`triggers\`) are mentioned in the chat, the system secretly injects the corresponding \`content\` into the AI's prompt.
+A lorebook (World Info) stores facts about the world, characters, places, items, and lore. When an entry's trigger keywords appear in the chat, SillyTavern inserts that entry's content into the roleplay AI's prompt. Constant entries are always inserted.
 </context>
 
-<system_mechanics>
-After you generate a proposal, a background script extracts your \`lorebook-changes\` block for the user's UI. Once the user makes a decision, the system AUTOMATICALLY DELETES the code block from your message history to save context tokens.
-</system_mechanics>
+<how_it_works>
+To change a lorebook, end your reply with a \`lorebook-changes\` block. The Human reviews each proposed change before it is applied. After they decide, the block is removed from the conversation history to save tokens, so do not repeat or recreate earlier blocks.
+</how_it_works>
 
-<content_standards>
-- Style: Token-dense, encyclopedic, objective.
-- Anchor Rule: Content MUST start with "[Subject Name] is/was". No pronouns/articles at the start.
-- Anti-Cliché: R Actively reject statistically overused LLM names (e.g., Elara, Kael, Lyra). Invent highly original, phonetically distinct names strictly grounded in the specific setting's culture.
-</content_standards>
+<writing_entries>
+Unless the Human or the existing lorebook uses a different style:
+- Keep entries dense and factual; every token is injected into the prompt.
+- Start the content with the subject's name (e.g. "Castle Varn is..."), so the entry makes sense on its own.
+- Use specific, distinctive trigger keywords (names, unique nouns). Avoid common words that would fire constantly.
+- When inventing names, avoid overused AI names (e.g. Elara, Kael, Lyra) and fit them to the setting's culture.
+</writing_entries>
 
-<outlet_entries_info>
-Outlet entries (position=5) are reusable content blocks injected wherever {{outlet::outlet_name}} macro appears in other prompts or scenarios. They are NOT directly added to context.
-To create an outlet entry: use "add" action with "outlet":true and "outlet_name":"your_outlet_name".
-To convert an existing entry to outlet: use "edit" with "outlet":true and "outlet_name":"your_outlet_name".
-Active outlet entries are listed in lorebook_context under "Outlet Entries" (if exists).
-</outlet_entries_info>
+<outlet_entries>
+Outlet entries are not triggered by keywords. Their content is inserted wherever an outlet::outlet_name macro (wrapped in double curly braces) appears, for example inside another entry or a card field. The macro is written that way here because a literal one would be expanded before you see it.
+- To create one, use "add" with "outlet":true and "outlet_name":"your_outlet_name".
+- To convert an existing entry, use "edit" with "outlet":true and "outlet_name":"your_outlet_name".
+Existing outlet entries are listed under "Outlet Entries" in the lorebook context, if there are any.
+</outlet_entries>
 
-<modification_protocol>
-- \`add\` / \`delete\`: entry from lorebook.
-- \`prepend\` / \`append\`: Insert text EXACTLY BEFORE or AFTER existing entry content.
-- \`edit\`: Total rewrite (<300 words entries only).
-- \`patch\`: Default for entries. 
-   - Triggers: Use specific nouns.
-   - Boundary Syntax: "First 3 words || Last 3 words" (string-string match). 
-     * BAD: "The ancient castle was built in 1240 by a grumpy dwarf."
-     * GOOD: "The ancient castle || grumpy dwarf."
-</modification_protocol>
+<actions>
+- add / delete: create or remove an entry.
+- prepend / append: add text to the start or end of an entry's content.
+- patch: change part of an entry. Each anchor is "first few words || last few words" of the exact passage to replace, copied from the entry. Everything from the first words through the last words is replaced.
+  Example: to replace "The ancient castle was built in 1240 by a grumpy dwarf.", use the anchor "The ancient castle || a grumpy dwarf."
+- edit: rewrite the whole entry. For small changes to long entries, prefer patch.
+Use worldName exactly as listed below, and the uid shown in the context for existing entries.
+</actions>
 
-<output_requirement>
-MANDATORY: Proposals MUST be contained in a \`lorebook-changes\` block at the absolute end.
-Active lorebooks (use sctrict-strict match): {{active_lorebooks}}
+<output_format>
+Active lorebooks: {{active_lorebooks}}
 
-Explain reasoning to the Human briefly, then provide the block: 
+Briefly explain your changes to the Human, then end your reply with the block:
 {{lorebook_output}}
-</output_requirement>`;
+</output_format>`;
 
   const DEFAULT_CHAR_EDIT_DIRECTIVE = `<context>
-SillyTavern utilizes Character Cards—complex JSON structures that define {{char}} cognitive profile, physical attributes, and behavioral heuristics. In this module you can also edit \`user_persona\` (if you have access)
+SillyTavern character cards define a character (or a setting) through fields such as description, personality, scenario, first message, and example dialogue. Here you can edit the active character cards, the Human's persona (\`user_persona\`, when it is in the field list), and propose new characters.
 </context>
 
-<logic_constraints>
-- Transient Memory: Previous \`character-edits\` blocks are purged post-execution. Do not reference them.
-- Macro Imperative: ABSOLUTELY PROHIBITED from using raw names. Use \`{{char}}\` and \`{{user}}\` exclusively in JSON.
-</logic_constraints>
+<how_it_works>
+End your reply with a \`character-changes\` block to edit cards, or a \`character-create\` block to propose a new character. The Human reviews each change before it is applied. After they decide, the block is removed from the conversation history, so do not repeat or recreate earlier blocks.
+</how_it_works>
 
-<character_architecture>
-To maximize semantic density and prevent AI hallucinations, you MUST adhere to this framework:
+<macros>
+Cards get shared and reused, so inside field text write \`{{char}}\` for the card's own character and \`{{user}}\` for the Human's persona instead of their names. Keep real names for everyone else: NPCs, places, and other characters in a group chat. The \`char="..."\` attribute and the \`name\` field always use the real name.
+</macros>
 
-1. THE TAGS FIELD (\`tags\`):
-   - The Semantic Index. Provide an array of universally recognized, highly common tags (e.g., "Fantasy", "Villain", "Tsundere", "Slow Burn", "NSFW/SFW").
-   - Purpose: Immediate cognitive mapping and rapid differentiation. Choose broad, defining descriptors that instantly communicate the core archetype, genre, and dynamic. Strictly avoid hyper-specific, long, or obscure labels.
+<style>
+When editing an existing card, match its current format and voice (plain prose, W++, XML-style tags, lists, first or third person, and so on) unless the Human asks for a change. For a new card, or a field with no established style, these defaults work well:
+- tags: a few broad, common tags for genre, archetype, and tone, e.g. "Fantasy", "Villain", "Slow Burn".
+- description: the factual core (appearance, personality, background, relationships), organized to be easy to scan, e.g. with headings or XML-style sections. Give traits texture ("loyal to a fault; would starve for them") rather than bare adjectives. For a world or RPG card rather than a single character, say so at the start, e.g. "{{char}} is not a character but a setting."
+- personality: show the voice, for example a short interview where {{char}} answers questions in character, with dialogue in quotes and actions in *asterisks*.
+- scenario: the premise and circumstances that hold for the whole roleplay, not one scene's temporary state.
+- first_mes: the opening scene. Write {{char}}'s words and actions; do not decide what {{user}} says, does, thinks, or feels. End on something {{user}} can respond to.
+- mes_example: short examples of {{char}}'s speech and body language across different moods. Start each example with <START> on its own line. Leave out {{user}} lines unless the Human wants them.
+</style>
 
-2. THE DESCRIPTION FIELD (\`description\`):
-   - The Factual Summary Block. Use XML tags (e.g., \`<appearance>\`, \`<mind>\`, \`<background>\`) for dense, scannable facts.
-   - Add texture to traits (e.g., "Loyal (would starve for them)", not just "Loyal").
-   - *Setting Exception*: If creating a world/RPG system, the \`description\` MUST begin EXACTLY with \`"{{char}} is not a character, it's a setting."\` placed right before the first XML tag.
+<routing>
+Active characters appear as \`<character name="ExactName">\` blocks inside \`<character_information>\`. Every tag in a \`character-changes\` block needs a \`char="ExactName"\` attribute with that exact name, even in a solo chat. Use one tag per character per field; never combine edits for two characters in one tag.
+</routing>
 
-3. THE PERSONALITY FIELD (\`personality\`):
-   - The Voice & Behavioral Anchor. Use the Interview format here.
-   - Show, don't tell. Write a brief Q&A where a neutral interviewer asks questions and \`{{char}}\` answers. 
-   - STRICT FORMATTING: All spoken dialogue MUST be enclosed in standard quotes (e.g., "I don't need your help."). All physical actions, body language, and narration MUST be enclosed in asterisks (e.g., *{{char}} crosses their arms and looks away*).
-   - This must demonstrate \`{{char}}\`'s unique voice, verbal tics, deflections, and body language. Do NOT list flat traits here.
+<edit_actions>
+- overwrite: replace the whole field.
+- prepend / append_text: add text to the start or end of the field.
+- replace: change part of a field. On the line after \`<<<<<<< ANCHOR\`, write "first few words || last few words" of the exact passage to replace, copied from the field. Everything from the first words through the last words is replaced by the text after \`=======\`.
+  Example: to replace "The quick brown fox jumps over the lazy dog.", use the anchor "The quick brown || the lazy dog."
+- append: alternate_greetings only; adds a new greeting. To change an existing greeting, use overwrite, replace, prepend, or append_text with index="N".
+</edit_actions>
 
-4. THE SCENARIO (\`scenario\`):
-   - The Permanent Stage. Use ONLY for facts that are ALWAYS TRUE.
-   - NEVER put temporary states or starting locations here. 
+<output_format>
+Editable fields: {{char_edit_fields}}.
 
-5. THE FIRST MESSAGE (\`first_mes\`):
-   - The Template. Length: 200-500 words.
-   - STRICTEST RULE: DO NOT CONTROL \`{{user}}\`. Write strictly from \`{{char}}\`'s 3rd-person perspective. 
-   - \`{{char}}\` cannot know what \`{{user}}\` thinks, feels, or does. \`{{char}}\` can only react to \`{{user}}\`'s presence.
-   - End with a "Hook" (an open question, a tense silence, an action) that invites \`{{user}}\` to respond.
-
-6. EXAMPLE DIALOGUE (\`mes_example\`):
-   - The Voice Coach. Drill speech patterns and emotional range.
-   - FORMAT: Isolate examples with \`<START>\` on a new line. End the section with \`<START>\`.
-   - STRICT FORMATTING: All spoken dialogue MUST be in quotes ("..."). All actions/body language MUST be in asterisks (*...*). Every example should combine speech with a physical action to demonstrate body language.
-   - STRICTEST RULE: NO \`{{user}}\` PROMPTS/DIALOGUE. Do NOT write back-and-forth Q&A here. Make examples context-independent (2-4 sentences showing \`{{char}}\` speaking + acting). Show emotional range (e.g., angry, flustered, guarded)
-
-</character_architecture>
-
-<group_chat_protocol>
-This roleplay may involve a single character (solo chat) or several (group chat). Active characters are listed as \`<character name="ExactName">\` blocks inside \`<character_information>\`.
-
-MANDATORY: every tag you output in the \`character-changes\` block below MUST carry a \`char="ExactName"\` attribute — copied character-for-character from that name — even in solo chats with a single character. Never omit it. Never invent a name absent from context. This is routing metadata; it is NOT subject to the macro rule below (use the real name here, never \`{{char}}\`/\`{{user}}\` — \`{{char}}\` in the format example below is only a documentation placeholder).
-
-If multiple characters need changes, output one tag PER character PER field — never merge edits for two characters into a single tag.
-</group_chat_protocol>
-
-<edit_syntax>
-- \`overwrite\`: Full rewrite.
-- \`prepend\` / \`append\`: Edge insertion.
-- \`replace\`: Surgical patch. Use Boundary Anchor: "3-4 Start Words || 3-4 End Words". 
-  * BAD: "The quick brown fox jumps over the lazy dog."
-  * GOOD: "The quick brown || lazy dog."
-- Every tag above requires \`char="ExactName"\` per <group_chat_protocol>.
-</edit_syntax>
-
-<the_macro_imperative>
-CRITICAL FATAL ERROR PREVENTION: Hardcoding names destroys card portability. 
-You are strictly forbidden from writing the raw name of the character or the user in the JSON block.
-- Replace ANY character/setting name with EXACTLY: \`{{char}}\`
-- Replace ANY user/player name with EXACTLY: \`{{user}}\`
-- BAD: "Alex looks at John's sword." -> GOOD: "{{char}} looks at {{user}}'s sword."
-This rule overrides everything else. Apply it to EVERY field, EVERY JSON value, EVERY time.
-</the_macro_imperative>
-
-<output_requirement>
-MANDATORY: Append \`character-edits\` or \`character-creation\` block at the absolute end. 
-Fields: {{char_edit_fields}}.
-
-Character Edit Format: 
+Edit format:
 {{char_edit_format}}
 
-Character creation Format:
-{{char_create_format}}.
-</output_requirement>`;
+New character format:
+{{char_create_format}}
+</output_format>`;
 
   const DEFAULT_CHAT_EDIT_DIRECTIVE = `<context>
-Read/Write access to chat indices (\`<msg index="N">\`).
+You can edit the main roleplay chat. Messages in \`<roleplay_context>\` appear as \`<msg index="N" role="user|assistant">\`; use those index numbers.
 </context>
 
-<system_mechanics>
-Generated \`chat-changes\` blocks are automatically executed and purged from the visible chat history when user makes decision. Missing past blocks are intentional. NEVER hallucinate or re-generate previous blocks.
-</system_mechanics>
+<how_it_works>
+End your reply with a \`chat-changes\` block. The Human reviews it before anything is applied. Afterwards the block is removed from the conversation history, so do not repeat or recreate earlier blocks.
+</how_it_works>
 
-<operational_rules>
-1. Target: Use \`msg_index\`, \`msg_range\`, or \`msg_indices\` from \`<roleplay_context>\`.
-2. Operations:
-   - \`add\` / \`delete\`: Insert at \`msg_index\`.
-   - \`prepend\` / \`append\`: Insert exactly at the extreme start/end of a message.
-   - \`hide\` / \`unhide\`: Toggle message visibility for AI.
-   - \`overwrite\`: 100% message replacement.
-   - \`regex\`: Execute pattern-based modification using standard regex syntax.
-   - \`replace\`: Surgical patch (Anchor: "3-4 Start || 3-4 End").
-     * GOOD: "The character looked || ever return home."
-     * BAD: (Writing the entire sentence wastes tokens and breaks matching).
-   - \`bulk_replace\`: Mass search-and-replace across a \`msg_range\`.
-3. Guidelines: No narrative introduction of code.
-</operational_rules>
+<actions>
+Target messages with \`msg_index\`, \`msg_range\` ([first, last]), or \`msg_indices\` ([a, b, ...]).
+- add: insert a new message at msg_index.
+- delete: remove a message.
+- prepend / append: add text to the start or end of a message.
+- overwrite: replace a message's entire text.
+- replace: change part of a message. Each anchor is "first few words || last few words" of the exact passage, copied from the message. Everything from the first words through the last words is replaced.
+- bulk_replace: replace every exact occurrence of a word or phrase (case-sensitive, whole words) across the targeted messages.
+- regex: pattern-based replacement using JavaScript regex syntax ("/pattern/flags").
+- hide / unhide: hide messages from the roleplay AI without deleting them, or show them again.
+- rename_chat: rename the current chat.
+</actions>
 
-<output_formatting>
+<output_format>
 {{chat_edit_format}}
 
-Active chat message indices are shown in the \`<roleplay_context>\` block as: \`<msg index="N" role="user|assistant">\`
-Currently visible messages: {{active_chat_ids}}
-</output_formatting>`;
+Messages currently in your context: {{active_chat_ids}}
+</output_format>`;
 
   const LB_FORMAT_BLOCK = `\`\`\`lorebook-changes
 {"changes":[
   {"action":"add","worldName":"BookName","name":"EntryName","triggers":["keyword"],"content":"Entry content","constant":false},
   {"action":"add","worldName":"BookName","name":"OutletEntry","content":"Outlet content here","outlet":true,"outlet_name":"my_outlet_name"},
-  {"action":"delete","worldName":"BookName","uid":123,"name":"EntryName"}
+  {"action":"delete","worldName":"BookName","uid":123,"name":"EntryName"},
   {"action":"prepend","worldName":"BookName","uid":123,"content":"Text to add at the start"},
   {"action":"append","worldName":"BookName","uid":123,"content":"Text to add at the end"},
-  {"action":"edit","worldName":"BookName","uid":123,"name":"NewName","triggers":null | ["newKw"],"content":"New content","constant":false},
-  {"action":"patch","worldName":"BookName","uid":123,"triggers":null | ["newKw"],"patches":[{"anchor":"first || last","replace":"replacement"}]},
+  {"action":"edit","worldName":"BookName","uid":123,"name":"NewName","triggers":["newKw"],"content":"New content","constant":false},
+  {"action":"patch","worldName":"BookName","uid":123,"triggers":null,"patches":[{"anchor":"first || last","replace":"replacement"}]}
 ]}
 \`\`\`
 
-Triggers field rules:
-- Omit or set \`null\` to keep the original triggers unchanged (preferred for patches, appends and partial edits)
-- Provide an array to set new triggers`;
+Triggers field:
+- Omit it or set it to null to keep the current triggers (usual for patch, append, and partial edits).
+- Provide an array to set new triggers.`;
 
   const CHAR_EDIT_FORMAT_BLOCK = `\`\`\`character-changes
-<replace char="char_name" field="FIELD_NAME">
+<replace char="ExactName" field="FIELD_NAME">
 <<<<<<< ANCHOR
 first || last
 =======
 replacement text
 >>>>>>> REPLACE
 </replace>
-<overwrite char="char_name" field="FIELD_NAME">Complete replacement content for this field</overwrite>
-<prepend char="char_name" field="FIELD_NAME">Text to insert at the very beginning of the field</prepend>
-<append_text char="char_name" field="FIELD_NAME">Text to append at the very end of the field</append_text>
+<overwrite char="ExactName" field="FIELD_NAME">Complete replacement content for this field</overwrite>
+<prepend char="ExactName" field="FIELD_NAME">Text to insert at the very beginning of the field</prepend>
+<append_text char="ExactName" field="FIELD_NAME">Text to append at the very end of the field</append_text>
 
-<!-- ALTERNATE GREETINGS OPERATIONS -->
-<append char="char_name" field="alternate_greetings">New alternate greeting to add as a NEW entry</append>
-<overwrite char="char_name" field="alternate_greetings" index="1">Complete rewrite of the EXISTING greeting with id="1"</overwrite>
-<replace char="char_name" field="alternate_greetings" index="2">
+<!-- ALTERNATE GREETINGS -->
+<append char="ExactName" field="alternate_greetings">A new greeting, added as a new entry</append>
+<overwrite char="ExactName" field="alternate_greetings" index="1">Complete rewrite of the existing greeting with id="1"</overwrite>
+<replace char="ExactName" field="alternate_greetings" index="2">
 <<<<<<< ANCHOR
 first || last
 =======
@@ -234,7 +195,7 @@ replacement text
   "personality": "Personality summary",
   "scenario": "Scenario / setting",
   "first_mes": "Opening message",
-  "mes_example": "<START>\\n{{user}}: Hi\\n{{char}}: Hello!"
+  "mes_example": "<START>\\n*{{char}} glances up.* \\"Oh. It's you.\\""
 }
 \`\`\``;
 
@@ -247,61 +208,104 @@ replacement text
   {"action":"delete","msg_index":12},
   {"action":"hide","msg_range":[8,10]},
   {"action":"unhide","msg_index":11},
-  {"action":"bulk_replace","msg_range":[0,10],"replacements":[{"anchor":"old","replace":"new"}]},
+  {"action":"bulk_replace","msg_range":[0,10],"replacements":[{"anchor":"old text","replace":"new text"}]},
   {"action":"regex","msg_index":13,"regex":"/(hello)/gi","replace":"hi $1"},
   {"action":"overwrite","msg_index":6,"content":"New text"},
-  {"action":"replace","msg_index":5,"patches":[{"anchor":"first || last","replace":"new"}]},
+  {"action":"replace","msg_index":5,"patches":[{"anchor":"first || last","replace":"new"}]}
 ]}
 \`\`\``;
 
   const DEFAULT_MEMORY_PROMPT = `<memory_logic>
-Purpose: ADMINISTRATIVE META-MEMORY. This is a non-diegetic (OOC) database for ST-Copilot to track the Human operator's technical requirements, cognitive patterns, and workflow constraints. 
+You have a persistent memory for facts about the Human as a user of this tool: their preferences, working style, formatting rules, and standing instructions for how you should respond. Story content (plot, lore, what characters do) does not belong here; it lives in the chat and the lorebooks.
 
-CRITICAL ARCHITECTURAL BOUNDARY: 
-- DISCARD all diegetic narrative data (plot, lore, world-building, character actions).
-- EXCLUDE "What" is happening in the story.
-- CAPTURE "How" the Human wants your answers to be processed, formatted, or steered.
-
-Actions: \`add\`, \`update\`, \`delete\`.
-Routing Scopes (Choose based on instruction longevity/reach):
-- \`global\`: Persists EVERYWHERE. Use for core, permanent Human traits (e.g., IRL profession, absolute formatting rules, universal hard limits).
-- \`character\`: Persists ONLY for current {{char}}. Use for technical OOC instructions tailored to this specific bot (e.g., "Human requires verbose prose for this bot", "Human wants to avoid romance with this bot").
-- \`chat\`: Persists ONLY in this specific roleplay thread. Use for current storyline structural goals (e.g., "Human wants to shift genre to horror here", "Focus on pacing in this scene").
-- \`session\`: Persists ONLY in this current Copilot brainstorm. Use for immediate, temporary directives (e.g., "Human is testing a prompt", "Keep next answers very short").
+Scopes:
+- global: applies everywhere (e.g. "Human prefers British English spelling").
+- character: applies only with the current {{char}} (e.g. "Human wants verbose prose for this character").
+- chat: applies only in this roleplay chat (e.g. "Human is steering this story toward horror").
+- session: applies only in this Copilot session (e.g. "Human wants very short answers for now").
 </memory_logic>
 
 <output_requirement>
-MANDATORY: Append a \`memory-update\` block at the absolute end IF AND ONLY IF new administrative/OOC metadata about the Human is detected. Do NOT comment on this process.
+When you learn something new of this kind, end your reply with a \`memory-update\` block, and don't mention the block in your text. Otherwise, leave it out. To change or remove an existing memory, use "edit" or "delete" with its exact scope and key. Start every value with the word "Human".
 
-Every entry MUST start with the exact word "Human".
-
-# Active memories:
+Current memories:
 {{current_memories}}
 
-# Format: 
+Format:
 {{memory_format}}
 </output_requirement>`;
   const MEMORY_FORMAT_BLOCK = `\`\`\`memory-update\n[\n  {"action":"add","scope":"global|character|chat|session","key":"CategoryName","value":"Fact to remember"},\n  {"action":"edit","scope":"exact_existing_scope","key":"exact_existing_key","value":"Updated fact"},\n  {"action":"delete","scope":"exact_existing_scope","key":"exact_existing_key"}\n]\n\`\`\``;
 
-  const DEFAULT_TOOLS_PROMPT = `Imperative: NEVER hallucinate missing context. If chat history, specific lore, or data appears absent, DO NOT assume the chat hasn't started or the data doesn't exist. You MUST proactively use your tools to fetch, verify, and retrieve the actual state before answering.
+  const DEFAULT_TOOLS_PROMPT = `You can call tools to look things up before answering. If you need information that isn't in your context (older chat messages, lorebook entries, character fields), use a tool instead of guessing or assuming it doesn't exist.
 
-Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response to the Human. You may chain tools sequentially.
+To call a tool, output a \`tool_call\` block. The result is returned to you, and then you continue your answer to the Human. You can call several tools in a row.
 
 <available_tools>
 {{tools_list}}
 </available_tools>
 
 <output_format>
-{{tool_call_format}}.
+{{tool_call_format}}
 </output_format>`;
+
   const TOOL_CALL_FORMAT_BLOCK = `\`\`\`tool_call\n{"name": "tool_name","input": {"parameter_name": "value"}}\n\`\`\``;
+
+  // promptHash() of every built-in prompt default ever shipped (including the current ones).
+  // A saved prompt matching one of these is an unmodified default, so it is reset to ''
+  // ("use the built-in default") on load and picks up future prompt improvements.
+  // When changing a default prompt, add the hash of the new text here.
+  const KNOWN_DEFAULT_PROMPT_HASHES = [
+      '1l9b3r7kzx2',
+      'bb2qakzoja',
+      'ym035m7jmz',
+      '1s0fp0314df',
+      '16388q9bxl5',
+      'vz2t7x3byv',
+      'xamxqsot5s',
+      '2c8xjhg6zfe',
+      '145w5wziayi',
+      '1fs42habtyf',
+      '259x3c8eseu',
+      'rqernhk9o6',
+      '8wjmde2h6j',
+      '13klcj97vlw',
+      '2fkihst55dg',
+      '2fuassazza1',
+      'su8up8c5k1',
+      '2l2esktr0d',
+      '53wp5xir4t',
+      '25nremk75a0',
+      '1y9moecpem1',
+      '16gdqk8vvt4',
+      '1k207jzb11b',
+      '2cacx10c968',
+      'etqekviamh',
+      '14nkx4tsu9o',
+      '13nsbj0qdab',
+      'm8a14r9497',
+      '16zfn93ijyf',
+      'q508r5jjrd',
+  ];
 
       // ─── Changelog Data ──────────────────────────────────────────────────────────
   const CHANGELOG = [
       {
+          version: '2.9.1',
+          date: '9/23/2026',
+          announce: true,
+          notes: [
+              '<strong>Rewritten Prompts</strong> — Copilot now helps with anything SillyTavern or roleplay related (presets, prompts, extensions, troubleshooting) and can write in-character prose when asked. Module prompts are clearer and no longer contradict each other. Unmodified default prompts update automatically; customized prompts are kept.',
+              '<strong>Character Edit Fixes</strong> — Fixed edits failing to apply: block-name mismatch, names being auto-replaced with {{char}} (which broke anchors, group routing and words like "rose"), and malformed patches overwriting whole fields.',
+              '<strong>Group Chat Safety</strong> — Edits for one group member can no longer overwrite the card open in the character editor, and unknown member names are skipped instead of hitting the first member.',
+              '<strong>Session Persistence</strong> — Fixed Copilot sessions appearing empty after switching characters, caused by overlapping session loads.',
+              '<strong>Chat Edit Fixes</strong> — Message indices are now correct in chats shorter than the context depth; bulk replace matches whole words exactly; regex edits work across multiple messages.',
+              '<strong>Other</strong> — Non-Latin (Cyrillic, CJK, etc.) text now works with anchors; cards missing a field can now be edited.'
+          ],
+      },
+      {
           version: '2.9.0',
           date: '7/2/2026',
-          announce: true,
+          announce: false,
           notes: [
               '<strong>Character Manager</strong> — New interface to edit character fields and configure per-character context inclusion rules.',
               '<strong>Group Chat Editing</strong> — Enabled the ability for Copilot to identify and edit individual characters within group sessions.',
@@ -1111,22 +1115,27 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           .join(', ');
   }
 
-  function normalizeCharNamesInBlock(text) {
-      const ctx = SillyTavern.getContext();
-      const charName = ctx.characters?.[ctx.characterId]?.name;
-      const userName = ctx.name1;
-      return text.replace(/(```(?:character-changes|character-create)[\s\S]*?(?:```|$))/g, block => {
-          let r = block;
-          if (charName && charName.length > 2) {
-              const charRe = new RegExp(`\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-              r = r.replace(charRe, '{{char}}');
-          }
-          if (userName && userName.length > 2) {
-              const userRe = new RegExp(`\\b${userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-              r = r.replace(userRe, '{{user}}');
-          }
-          return r;
-      });
+  // A "word" for fuzzy anchor matching: a run of letters/digits in any script. Han and kana
+  // are written without spaces, so each of those characters is its own token.
+  const WORD_TOKEN_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]|(?:(?![\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}])[\p{L}\p{M}\p{N}])+/u;
+
+  // bulk_replace semantics: replace every exact, whole-word occurrence. Fuzzy matching is
+  // only used for "first || last" anchors, since a fuzzy or substring replace-all would hit
+  // similar words (e.g. "old" inside "gold").
+  function applyBulkReplacement(content, searchText, replaceText) {
+      const src = content || '';
+      const srch = searchText || '';
+      if (!srch) return { result: src, matched: false };
+      if (srch.includes('||')) return applySearchReplaceToField(src, srch, replaceText);
+      const wordChar = /[\p{L}\p{M}\p{N}_]/u;
+      const escaped = srch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(
+          (wordChar.test(srch[0]) ? '(?<![\\p{L}\\p{M}\\p{N}_])' : '') + escaped +
+          (wordChar.test(srch[srch.length - 1]) ? '(?![\\p{L}\\p{M}\\p{N}_])' : ''),
+          'gu');
+      let matched = false;
+      const result = src.replace(re, () => { matched = true; return replaceText || ''; });
+      return { result, matched };
   }
 
   function applySearchReplaceToField(fieldContent, searchText, replaceText) {
@@ -1165,7 +1174,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
 
       function getTokensWithOffsets(text) {
           const tokens = [];
-          const re = /[a-zA-Z0-9\u00C0-\u00FF]+/g;
+          const re = new RegExp(WORD_TOKEN_RE.source, 'gu');
           let match;
           while ((match = re.exec(text)) !== null) {
               tokens.push({ text: match[0].toLowerCase(), start: match.index, end: re.lastIndex });
@@ -1175,7 +1184,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
 
       function findFuzzyRange(srcText, queryText, minScore = 0.72) {
           const srcTokens = getTokensWithOffsets(srcText);
-          const queryTokens = queryText.toLowerCase().match(/[a-zA-Z0-9\u00C0-\u00FF]+/g) || [];
+          const queryTokens = queryText.toLowerCase().match(new RegExp(WORD_TOKEN_RE.source, 'gu')) || [];
 
           if (!queryTokens.length) {
               const litIdx = srcText.indexOf(queryText.trim());
@@ -1218,7 +1227,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
               const lastQTok = queryTokens[queryTokens.length - 1];
               const lastTokIdx = qLower.lastIndexOf(lastQTok);
               if (lastTokIdx !== -1) {
-                  const trailMatch = queryText.slice(lastTokIdx + lastQTok.length).match(/^[^a-zA-Z0-9\u00C0-\u00FF]+/);
+                  const trailMatch = queryText.slice(lastTokIdx + lastQTok.length).match(/^[^\p{L}\p{M}\p{N}]+/u);
                   if (trailMatch && srcText.slice(endPos, endPos + trailMatch[0].length) === trailMatch[0]) {
                       endPos += trailMatch[0].length;
                   }
@@ -1227,7 +1236,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
               const firstQTok = queryTokens[0];
               const firstTokIdx = qLower.indexOf(firstQTok);
               if (firstTokIdx > 0) {
-                  const leadMatch = queryText.slice(0, firstTokIdx).match(/[^a-zA-Z0-9\u00C0-\u00FF]+$/);
+                  const leadMatch = queryText.slice(0, firstTokIdx).match(/[^\p{L}\p{M}\p{N}]+$/u);
                   if (leadMatch && srcText.slice(startPos - leadMatch[0].length, startPos) === leadMatch[0]) {
                       startPos -= leadMatch[0].length;
                   }
@@ -1297,6 +1306,20 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       t = t.replace(new RegExp(`\\s*</${tag}>$`, 'i'), '');
       
       return `${open}\n${t}\n${close}`;
+  }
+  // Stable hash of a prompt's text, ignoring whitespace differences. Used to
+  // recognise saved prompts that are unmodified copies of an old default.
+  function promptHash(text) {
+      const str = String(text || '').replace(/\s+/g, ' ').trim();
+      let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+      for (let i = 0; i < str.length; i++) {
+          const ch = str.charCodeAt(i);
+          h1 = Math.imul(h1 ^ ch, 2654435761);
+          h2 = Math.imul(h2 ^ ch, 1597334677);
+      }
+      h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+      h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+      return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
   }
 
   function escHtml(str) {
@@ -1449,8 +1472,8 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           includeCharacterCard: true,
           includeUserPersonality: true,
           includeAlternateSwipes: false,
-          systemPrompt: DEFAULT_SYSTEM_PROMPT,
-          memoryManagePrompt: DEFAULT_MEMORY_PROMPT,
+          systemPrompt: '',
+          memoryManagePrompt: '',
           profiles: {},
           activeProfile: '',
           profileBindings: {},
@@ -1463,7 +1486,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           lorebookSelectedBooks: [],
           lorebookEntryOverrides: {},
           lorebookAIManageEnabled: true,
-          lorebookManagePrompt: DEFAULT_LB_MANAGE_PROMPT,
+          lorebookManagePrompt: '',
           lorebookSTScanDepth: 5,
           lorebookCopilotScanDepth: 6,
           floatingIconPersistent: false,
@@ -1535,10 +1558,37 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       for (const [k, v] of Object.entries(defaults)) {
           if (s[k] === undefined) s[k] = v;
       }
+      _migrateDefaultPrompts(s);
       return s;
   }
 
-  function saveSettings$1() {
+  // Prompt settings where '' means "use the built-in default".
+  const PROMPT_SETTING_KEYS = ['systemPrompt', 'lorebookManagePrompt', 'memoryManagePrompt', 'toolsSystemPrompt', 'charEditPrompt', 'chatEditPrompt'];
+  let _promptsMigrated = false;
+
+  // Older versions saved the full default text, which froze users on outdated prompts.
+  // Unmodified copies of any shipped default are cleared so the current default applies.
+  function _migrateDefaultPrompts(s) {
+      if (_promptsMigrated) return;
+      _promptsMigrated = true;
+      const known = new Set(KNOWN_DEFAULT_PROMPT_HASHES);
+      const targets = [s, ...Object.values(s.profiles || {}).filter(p => p && typeof p === 'object')];
+      const reset = [];
+      for (const t of targets) {
+          for (const k of PROMPT_SETTING_KEYS) {
+              if (typeof t[k] === 'string' && t[k].trim() && known.has(promptHash(t[k]))) {
+                  t[k] = '';
+                  reset.push(k);
+              }
+          }
+      }
+      if (reset.length) {
+          _dbgAdd('PROMPT_DEFAULTS_MIGRATED', { keys: reset });
+          SillyTavern.getContext().saveSettingsDebounced?.();
+      }
+  }
+
+  function saveSettings() {
       SillyTavern.getContext().saveSettingsDebounced();
       _dbgDiffSettings();
   }
@@ -1675,58 +1725,126 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       }
   }
 
+  function _newSessionFileId() {
+      return `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
+  }
+
+  // The ST chat id the in-memory bucket belongs to (null when no chat is open).
+  let _bucketChatId = null;
+  // Incremented on every initChatBucket call; an older call that is still awaiting
+  // network I/O sees a newer generation and gives up instead of overwriting state.
+  let _initGeneration = 0;
+
+  function _currentChatId(ctx) {
+      try {
+          const id = typeof ctx.getCurrentChatId === 'function' ? ctx.getCurrentChatId() : ctx.chatId;
+          return id ? String(id) : null;
+      } catch (_) { return null; }
+  }
+
+  function isBucketForCurrentChat() {
+      const id = _currentChatId(SillyTavern.getContext());
+      return !!id && id === _bucketChatId;
+  }
+
+  async function _flushPendingSaves() {
+      const writes = [];
+      for (const [fileId, item] of _saveQueue.entries()) {
+          clearTimeout(item.timer);
+          _saveQueue.delete(fileId);
+          writes.push(saveSessionFile(fileId, item.payload));
+      }
+      await Promise.all(writes);
+  }
+
+  function _persistChatMetadata(ctx) {
+      // Not awaited: this runs inside ST's CHAT_CHANGED emit, and saveMetadata writes the
+      // current chat immediately (unlike saveMetadataDebounced, which can be dropped by a
+      // quick chat switch).
+      if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
+  }
+
   async function initChatBucket({ forceReset = false } = {}) {
+      const gen = ++_initGeneration;
       const ctx = SillyTavern.getContext();
-      if (!ctx.chatMetadata) ctx.chatMetadata = {};
-      const { charId, chatId } = getBindingKey();
+      // Capture the chat's metadata object now. ST replaces this object when another chat
+      // loads, so writing to a later ctx.chatMetadata could tag the wrong chat.
+      const chatMeta = ctx.chatMetadata;
+      const chatId = _currentChatId(ctx);
+      const { charId } = getBindingKey();
+      const superseded = () => gen !== _initGeneration || SillyTavern.getContext().chatMetadata !== chatMeta;
+
+      if (!chatId || !chatMeta) {
+          // No chat open (e.g. the welcome screen). Nothing to attach sessions to.
+          await _flushPendingSaves();
+          if (gen !== _initGeneration) return;
+          _currentSessionFileId = null;
+          _bucketChatId = null;
+          _inMemoryBucket = { activeSessionId: null, sessions: [] };
+          _dbgAdd('STORAGE_NO_CHAT', { charId });
+          return;
+      }
 
       if (forceReset) {
-          const prevMeta = ctx.chatMetadata.st_copilot || null;
-          const freshId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
-          ctx.chatMetadata.st_copilot = { format: 'v4', file_id: freshId, chat_id: chatId };
-          if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
+          const prevMeta = chatMeta.st_copilot || null;
+          const freshId = _newSessionFileId();
+          chatMeta.st_copilot = { format: 'v4', file_id: freshId, chat_id: chatId };
+          _persistChatMetadata(ctx);
           _currentSessionFileId = freshId;
+          _bucketChatId = chatId;
           _inMemoryBucket = { activeSessionId: null, sessions: [] };
           await commitBucketChanges(true);
           _dbgAdd('SESSION_FORCE_RESET', { charId, chatId, prevFileId: prevMeta?.file_id || null, newFileId: freshId });
           return;
       }
 
-      for (const [fileId, item] of _saveQueue.entries()) {
-          clearTimeout(item.timer);
-          _saveQueue.delete(fileId);
-          saveSessionFile(fileId, item.payload);
+      const meta = chatMeta.st_copilot;
+
+      // CHAT_CHANGED is also emitted for the same chat (e.g. after chat edits). The in-memory
+      // bucket is newer than the file, so reloading it would drop unsaved changes.
+      if (chatId === _bucketChatId && meta?.format === 'v4' && meta.file_id === _currentSessionFileId) {
+          _dbgAdd('STORAGE_SAME_CHAT_SKIP', { chatId });
+          return;
       }
 
-      let meta = ctx.chatMetadata.st_copilot;
+      // Finish writing the previous chat's sessions before reading anything back.
+      await _flushPendingSaves();
+      if (superseded()) return;
+
       let targetFileId = null;
       let payload = null;
+      let needsInitialWrite = false;
 
       if (meta && meta.file_id && meta.format === 'v4') {
           if (meta.chat_id === chatId) {
               targetFileId = meta.file_id;
               payload = await loadSessionFile(targetFileId);
+              if (superseded()) return;
           } else {
+              // The chat was branched or renamed and carried our metadata along: copy the
+              // sessions into a new file so the two chats don't share one.
               _dbgAdd('STORAGE_CHAT_BRANCH_DETECTED', { oldChatId: meta.chat_id, newChatId: chatId });
               payload = await loadSessionFile(meta.file_id);
-              targetFileId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
-              
+              if (superseded()) return;
+              targetFileId = _newSessionFileId();
               if (payload && payload !== false) {
                   await saveSessionFile(targetFileId, payload);
+                  if (superseded()) return;
               }
-              
-              ctx.chatMetadata.st_copilot = { format: 'v4', file_id: targetFileId, chat_id: chatId };
-              if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
+              chatMeta.st_copilot = { format: 'v4', file_id: targetFileId, chat_id: chatId };
+              _persistChatMetadata(ctx);
           }
       } else {
-          targetFileId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
+          targetFileId = _newSessionFileId();
           _dbgAdd('STORAGE_MIGRATION_V4_INIT', { targetFileId });
-          
+
           const safeChatId = chatId.replace(/[^a-zA-Z0-9_-]/g, '_');
           payload = await loadSessionFile(`copilot_sess_${safeChatId}.json`);
+          if (superseded()) return;
 
           if (!payload && meta && meta.file_id && meta.format !== 'v4') {
               payload = await loadSessionFile(meta.file_id);
+              if (superseded()) return;
           }
 
           if (!payload) {
@@ -1734,44 +1852,46 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
               if (s.sessions && s.sessions[charId]) {
                   if (s.sessions[charId][chatId] && s.sessions[charId][chatId].sessions?.length > 0) {
                       payload = { bucket: { ...s.sessions[charId][chatId] } };
-                      delete s.sessions[charId][chatId]; saveSettings$1();
+                      delete s.sessions[charId][chatId]; saveSettings();
                   } else if (s.sessions[charId]['unified'] && s.sessions[charId]['unified'].sessions?.length > 0) {
                       payload = { bucket: { ...s.sessions[charId]['unified'] } };
-                      delete s.sessions[charId]['unified']; saveSettings$1();
+                      delete s.sessions[charId]['unified']; saveSettings();
                   }
               }
           }
 
-          ctx.chatMetadata.st_copilot = { format: 'v4', file_id: targetFileId, chat_id: chatId };
-          if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
+          chatMeta.st_copilot = { format: 'v4', file_id: targetFileId, chat_id: chatId };
+          _persistChatMetadata(ctx);
+          needsInitialWrite = true;
       }
-
-      _currentSessionFileId = targetFileId;
 
       if (payload === false) {
           _dbgAdd('STORAGE_LOAD_CORRUPTED_RECOVERY', { brokenFileId: targetFileId, charId, chatId });
-          const recoveryFileId = `copilot_sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.json`;
-          ctx.chatMetadata.st_copilot = { format: 'v4', file_id: recoveryFileId, chat_id: chatId, recoveredFrom: targetFileId };
-          if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
+          const recoveryFileId = _newSessionFileId();
+          chatMeta.st_copilot = { format: 'v4', file_id: recoveryFileId, chat_id: chatId, recoveredFrom: targetFileId };
+          _persistChatMetadata(ctx);
 
-          targetFileId = recoveryFileId;
           _inMemoryBucket = { activeSessionId: null, sessions: [] };
-          _currentSessionFileId = targetFileId;
+          _currentSessionFileId = recoveryFileId;
+          _bucketChatId = chatId;
           await commitBucketChanges(true);
 
           toastr.error('Copilot session file was corrupted and could not be recovered. Started a fresh session storage for this chat; the broken file was kept on disk for manual recovery.', EXT_DISPLAY, { timeOut: 15000 });
           return;
       }
 
+      _currentSessionFileId = targetFileId;
+      _bucketChatId = chatId;
       if (payload && payload.bucket) {
           _inMemoryBucket = payload.bucket;
-          _dbgAdd('STORAGE_BUCKET_LOADED', { charId, chatId, fileId: targetFileId, sessionCount: _inMemoryBucket.sessions?.length || 0 });
+          if (!Array.isArray(_inMemoryBucket.sessions)) _inMemoryBucket.sessions = [];
+          _dbgAdd('STORAGE_BUCKET_LOADED', { charId, chatId, fileId: targetFileId, sessionCount: _inMemoryBucket.sessions.length });
       } else {
           _inMemoryBucket = { activeSessionId: null, sessions: [] };
           _dbgAdd('STORAGE_BUCKET_EMPTY_INIT', { charId, chatId, fileId: targetFileId, hadPayload: !!payload });
       }
-      
-      if (!payload || meta?.format !== 'v4') {
+
+      if (!payload || needsInitialWrite) {
           await commitBucketChanges(true);
       }
   }
@@ -1780,12 +1900,11 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       const fileName = _currentSessionFileId;
       if (!fileName) return;
 
-      const { chatId } = getBindingKey();
       const snapshot = JSON.parse(JSON.stringify(_inMemoryBucket));
       
       const payloadToSave = {
           _version: 4,
-          chat_id_reference: chatId,
+          chat_id_reference: _bucketChatId,
           updated_at: Date.now(),
           bucket: snapshot
       };
@@ -2101,7 +2220,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       const idx = arr.indexOf(msgId);
       if (idx >= 0) arr.splice(idx, 1);
       else arr.push(msgId);
-      saveSettings$1();
+      saveSettings();
       return idx < 0; // true = now starred
   }
 
@@ -2129,11 +2248,12 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
     importSession: importSession,
     initChatBucket: initChatBucket,
     insertMessageAfter: insertMessageAfter,
+    isBucketForCurrentChat: isBucketForCurrentChat,
     isMessageStarred: isMessageStarred,
     loadSessionFile: loadSessionFile,
     saveSessionFile: saveSessionFile,
     saveSessionsToMetadata: saveSessionsToMetadata,
-    saveSettings: saveSettings$1,
+    saveSettings: saveSettings,
     setActiveSession: setActiveSession,
     setSessionOverride: setSessionOverride,
     showSessionDialog: showSessionDialog,
@@ -2523,7 +2643,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           }
       }
 
-      if (overridesChanged) saveSettings$1();
+      if (overridesChanged) saveSettings();
 
       if (!Object.keys(toInject).length && !outletLines.length) return '';
 
@@ -3242,7 +3362,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           inc(st.c[charId]);
           if (!st.ch[chk]) st.ch[chk] = {};
           inc(st.ch[chk]);
-          saveSettings$1();
+          saveSettings();
       } catch(_) {}
   }
 
@@ -3395,7 +3515,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           const ok = await showCustomDialog({ type:'confirm', title:'Reset Statistics', message:'Delete ALL collected statistics permanently? This cannot be undone.', delayConfirm:3 });
           if (!ok) return;
           getSettings().stats = { g:{}, c:{}, ch:{} };
-          saveSettings$1();
+          saveSettings();
           renderStatsPane(container);
           toastr.success('Statistics cleared.', EXT_DISPLAY);
       });
@@ -4622,7 +4742,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       } else {
           s.lorebookExcludedBooks = s.lorebookExcludedBooks.filter(b => b !== name);
       }
-      saveSettings$1();
+      saveSettings();
       await buildLorebookContextBlock(s);
       const item = document.querySelector(`.scp-lb-book-item[data-name="${CSS.escape(name)}"]`);
       if (item) _applyLBBookCheckState(item, name, s);
@@ -4715,7 +4835,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       else { delete s.lorebookEntryOverrides[key]; next = undefined; }
       if (next !== undefined) s.lorebookEntryOverrides[key] = next;
 
-      saveSettings$1();
+      saveSettings();
 
       const ind = rowEl.querySelector('.scp-lb-entry-indicator');
       const btn = rowEl.querySelector('.scp-lb-entry-toggle-btn');
@@ -4871,7 +4991,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           if (!state.lbActiveBook || !wiCache[state.lbActiveBook]) return;
           const s = getSettings();
           Object.values(wiCache[state.lbActiveBook].entries).forEach(e => { s.lorebookEntryOverrides[getEntryOverrideKey(state.lbActiveBook, e)] = true; });
-          saveSettings$1(); renderEntryList(state.lbActiveBook, state.lbSearchQuery);
+          saveSettings(); renderEntryList(state.lbActiveBook, state.lbSearchQuery);
           Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession()));
       });
       
@@ -4879,7 +4999,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           if (!state.lbActiveBook || !wiCache[state.lbActiveBook]) return;
           const s = getSettings();
           Object.values(wiCache[state.lbActiveBook].entries).forEach(e => { s.lorebookEntryOverrides[getEntryOverrideKey(state.lbActiveBook, e)] = false; });
-          saveSettings$1(); renderEntryList(state.lbActiveBook, state.lbSearchQuery);
+          saveSettings(); renderEntryList(state.lbActiveBook, state.lbSearchQuery);
           Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession()));
       });
       
@@ -4889,7 +5009,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           if (!ok) return;
           const s = getSettings();
           if (wiCache[state.lbActiveBook]) Object.values(wiCache[state.lbActiveBook].entries).forEach(e => { delete s.lorebookEntryOverrides[getEntryOverrideKey(state.lbActiveBook, e)]; });
-          saveSettings$1(); renderEntryList(state.lbActiveBook, state.lbSearchQuery);
+          saveSettings(); renderEntryList(state.lbActiveBook, state.lbSearchQuery);
           Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession()));
       });
 
@@ -4919,7 +5039,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
               if (val === 'default') delete s.lorebookEntryOverrides[key];
               else s.lorebookEntryOverrides[key] = val === 'true';
               
-              saveSettings$1();
+              saveSettings();
               ['scp-lb-inj-default', 'scp-lb-inj-force-on', 'scp-lb-inj-force-off'].forEach(bid => document.getElementById(bid)?.classList.remove('active'));
               document.getElementById(id)?.classList.add('active');
               showEntryDetail(state.lbEntryDetailEntry, state.lbEntryDetailBook);
@@ -5222,6 +5342,12 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
 
       for (const change of changes) {
           let resolvedChar = change.char ? resolveCharacterByName(change.char, entities) : null;
+          if (!resolvedChar && change.char && entities.length > 1 && change.field !== 'user_persona') {
+              // Guessing in a group chat could write one member's text into another member's card.
+              _dbgAdd('CHAR_ROUTE_UNRESOLVED', { char: change.char, field: change.field });
+              if (typeof toastr !== 'undefined') toastr.warning(`[CharEdit] No group member named "${escHtml(change.char)}"; skipped its "${escHtml(change.field)}" change.`, EXT_DISPLAY, { timeOut: 8000 });
+              continue;
+          }
           if (!resolvedChar) {
               if (entities.length === 1) resolvedChar = entities[0].char;
               else resolvedChar = ctx.characters?.[ctx.characterId] || entities[0]?.char || null;
@@ -5234,30 +5360,73 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       return Array.from(groups.values());
   }
 
+  // Accepts double-quoted, single-quoted and unquoted attribute values.
   function _parseTagAttrs(attrStr) {
       const attrs = {};
-      const re = /([\w-]+)="([^"]*)"/g;
+      const re = /([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g;
       let m;
-      while ((m = re.exec(attrStr || '')) !== null) attrs[m[1]] = m[2];
+      while ((m = re.exec(attrStr || '')) !== null) attrs[m[1]] = m[2] ?? m[3] ?? m[4];
+      if (attrs.field) attrs.field = _normalizeFieldName(attrs.field);
       return attrs;
   }
 
+  // Common names models use for card fields, mapped to the internal field ids.
+  const FIELD_ALIASES = {
+      first_message: 'first_mes', greeting: 'first_mes',
+      example_dialogue: 'mes_example', example_dialogues: 'mes_example', mes_examples: 'mes_example', examples: 'mes_example',
+      main_prompt: 'system_prompt', system_prompt_override: 'system_prompt',
+      post_history: 'post_history_instructions', jailbreak: 'post_history_instructions',
+      persona: 'user_persona', persona_description: 'user_persona',
+      alternate_greeting: 'alternate_greetings', alt_greetings: 'alternate_greetings',
+      author_note: 'authors_note', authors_notes: 'authors_note',
+  };
+
+  function _normalizeFieldName(field) {
+      const f = String(field).trim();
+      if (/^evolutia_(char|user):/.test(f)) return f;
+      const key = f.toLowerCase().replace(/[\s-]+/g, '_');
+      return FIELD_ALIASES[key] || key;
+  }
+
   function _matchTagsWithAttrs(xml, tagName) {
-      const re = new RegExp(`<${tagName}((?:\\s+[\\w-]+="[^"]*")*)\\s*>([\\s\\S]*?)<\\/${tagName}>`, 'g');
+      const re = new RegExp(`<${tagName}(\\s[^>]*)?>([\\s\\S]*?)<\\/${tagName}\\s*>`, 'g');
       const out = [];
       let m;
       while ((m = re.exec(xml)) !== null) out.push({ attrs: _parseTagAttrs(m[1]), content: m[2] });
       return out;
   }
 
-  function parseCharChangesFromText(text) {
-      let raw = null;
-      const strict = text.match(/```character-changes\s*([\s\S]*?)```/);
-      if (strict) raw = strict[1];
-      else {
-          const open = text.match(/```character-changes\s*([\s\S]*?)(?=```|$)/);
-          if (open) raw = open[1];
+  // Block names the model may use. The prompt asks for the first one; the others are
+  // tolerated because older prompts (and some models) use them.
+  const CHAR_CHANGES_BLOCK = '(?:character-changes|character-edits?)(?![\\w-])';
+  const CHAR_CREATE_BLOCK = '(?:character-creation|character-create)(?![\\w-])';
+
+  function _extractFencedBlock(text, namePattern) {
+      const strict = text.match(new RegExp('```' + namePattern + '[^\\S\\r\\n]*\\r?\\n?([\\s\\S]*?)```'));
+      if (strict) return strict[1];
+      const open = text.match(new RegExp('```' + namePattern + '[^\\S\\r\\n]*\\r?\\n?([\\s\\S]*)$'));
+      return open ? open[1] : null;
+  }
+
+  const HAS_DIFF_MARKER_RE = /<{5,}[ \t]*(?:SEARCH|ANCHOR)/;
+
+  // Parses "<<<<<<< ANCHOR / ======= / >>>>>>> REPLACE" patches. Tolerates the anchor on the
+  // same line as the marker, extra spaces, and a missing closing marker.
+  function parseAnchorPatches(content) {
+      const re = /<{5,}[ \t]*(?:SEARCH|ANCHOR)[ \t]*\r?\n?([\s\S]*?)\r?\n?[ \t]*={5,}[ \t]*\r?\n?([\s\S]*?)(?:\r?\n?[ \t]*>{5,}[ \t]*REPLACE[ \t]*|(?=<{5,}[ \t]*(?:SEARCH|ANCHOR))|$)/g;
+      const patches = [];
+      let m;
+      while ((m = re.exec(content)) !== null) {
+          if (m[0] === '') { re.lastIndex++; continue; }
+          const search = m[1].trim();
+          if (!search) continue;
+          patches.push({ search, replace: m[2].replace(/^\r?\n/, '').replace(/\r?\n[ \t]*$/, '') });
       }
+      return patches;
+  }
+
+  function parseCharChangesFromText(text) {
+      const raw = _extractFencedBlock(text, CHAR_CHANGES_BLOCK);
       if (!raw) return null;
       const xml = _repairCharChangesXML(raw);
       const changes = [];
@@ -5270,22 +5439,14 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           const index = attrs.index ? parseInt(attrs.index, 10) : undefined;
           const key = `${charName || ''}::${field}${index !== undefined ? `_${index}` : ''}`;
 
-          const diffRe = /<<<<<<< (?:SEARCH|ANCHOR)\r?\n([\s\S]*?)\r?\n=+\r?\n([\s\S]*?)\r?\n>>>>>>> REPLACE/g;
-          let diffMatch;
-          const patches = [];
-          while ((diffMatch = diffRe.exec(content)) !== null) {
-              let searchVal = diffMatch[1];
-              let replaceVal = diffMatch[2];
-              if (field === 'tags') { searchVal = _sanitizeProposedTags(searchVal); replaceVal = _sanitizeProposedTags(replaceVal); }
-              patches.push({ search: searchVal, replace: replaceVal });
-          }
-          if (!patches.length) {
-              const searchOnly = content.match(/<<<<<<< (?:SEARCH|ANCHOR)\r?\n([\s\S]*?)\r?\n=+/);
-              if (searchOnly) {
-                  let searchVal = searchOnly[1];
-                  if (field === 'tags') searchVal = _sanitizeProposedTags(searchVal);
-                  patches.push({ search: searchVal, replace: '' });
-              }
+          const patches = parseAnchorPatches(content).map(p => field === 'tags'
+              ? { search: _sanitizeProposedTags(p.search), replace: _sanitizeProposedTags(p.replace) }
+              : p);
+          if (!patches.length && HAS_DIFF_MARKER_RE.test(content)) {
+              // A broken patch must never fall through to a full overwrite of the field.
+              // (Also the normal state of a patch that is still streaming in.)
+              _dbgAdd('CHAR_PATCH_UNPARSEABLE', { field, content: content.slice(0, 300) });
+              continue;
           }
           if (!patches.length) {
               let val = content.trim();
@@ -5318,7 +5479,9 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           if (!attrs.field) continue;
           let val = content.trim();
           if (attrs.field === 'tags') val = _sanitizeProposedTags(val);
-          changes.push({ field: attrs.field, action: 'append', value: val, char: attrs.char || null });
+          // <append> adds a new entry for alternate_greetings; for text fields it means append_text.
+          const action = attrs.field === 'alternate_greetings' ? 'append' : 'append_text';
+          changes.push({ field: attrs.field, action, value: val, char: attrs.char || null });
       }
 
       for (const { attrs, content } of _matchTagsWithAttrs(xml, 'prepend')) {
@@ -5377,31 +5540,18 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           }
       }
 
-      s = s.replace(/(<<<<<<< (?:SEARCH|ANCHOR)\r?\n[\s\S]*?)(?=<<<<<<< (?:SEARCH|ANCHOR)|$)/g, (m) => {
-          if (!/=+\r?\n/.test(m) && !m.includes('=======')) return m + '\n=======\n>>>>>>> REPLACE\n';
-          if (!m.includes('>>>>>>> REPLACE')) return m + '\n>>>>>>> REPLACE\n';
-          return m;
-      });
-
       return s;
   }
 
   function stripCharChangesBlock(text) {
       return text
-          .replace(/```character-changes[\s\S]*?```/g, '')
-          .replace(/```character-changes[\s\S]*/g, '')
+          .replace(new RegExp('```' + CHAR_CHANGES_BLOCK + '[\\s\\S]*?```', 'g'), '')
+          .replace(new RegExp('```' + CHAR_CHANGES_BLOCK + '[\\s\\S]*', 'g'), '')
           .trim();
   }
 
   function parseCharCreationFromText(text) {
-      let raw = null;
-      const strict = text.match(/```character-create\s*([\s\S]*?)```/);
-      if (strict) {
-          raw = strict[1].trim();
-      } else {
-          const open = text.match(/```character-create\s*([\s\S]*?)(?=```|$)/);
-          if (open) raw = open[1].trim();
-      }
+      const raw = _extractFencedBlock(text, CHAR_CREATE_BLOCK)?.trim();
       if (!raw) return null;
       try {
           const data = JSON.parse(raw);
@@ -5423,8 +5573,8 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
 
   function stripCharCreationBlock(text) {
       return text
-          .replace(/```character-create[\s\S]*?```/g, '')
-          .replace(/```character-create[\s\S]*/g, '')
+          .replace(new RegExp('```' + CHAR_CREATE_BLOCK + '[\\s\\S]*?```', 'g'), '')
+          .replace(new RegExp('```' + CHAR_CREATE_BLOCK + '[\\s\\S]*', 'g'), '')
           .trim();
   }
 
@@ -5452,6 +5602,24 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       if (fieldId === 'system_prompt') return d.system_prompt || char.system_prompt || '';
       if (fieldId === 'post_history_instructions') return d.post_history_instructions || char.post_history_instructions || '';
       return d[fieldId] || char[fieldId] || '';
+  }
+
+  // True when `char` is the character loaded in SillyTavern's character editor. Writing into
+  // the editor's textareas (and firing input) makes ST autosave the form for that character,
+  // so doing it for any other character would overwrite the wrong card.
+  function _isOpenInEditor(ctx, char) {
+      if (ctx.menuType === 'create') return false;
+      if (typeof document !== 'undefined' && document.getElementById('form_create')?.getAttribute('actiontype') === 'createcharacter') return false;
+      const open = ctx.characterId !== undefined && ctx.characterId !== null ? ctx.characters?.[ctx.characterId] : null;
+      return !!open && open.avatar === char.avatar;
+  }
+
+  function _emitCharacterEdited(ctx, char) {
+      const es = ctx.eventSource || window.eventSource;
+      const et = ctx.event_types || window.event_types;
+      if (!es || !et?.CHARACTER_EDITED) return;
+      const id = (ctx.characters || []).findIndex(c => c.avatar === char.avatar);
+      es.emit(et.CHARACTER_EDITED, { detail: { id: id >= 0 ? id : ctx.characterId, character: char } });
   }
 
   async function saveCharacterField(char, fieldId, newValue) {
@@ -5499,12 +5667,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
               throw new Error(`HTTP ${res.status}: ${errText}`);
           }
           
-          const es = ctx.eventSource || window.eventSource;
-          const et = ctx.event_types || window.event_types;
-          if (es && et?.CHARACTER_EDITED) {
-              es.emit(et.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: char } });
-              es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
-          }
+          _emitCharacterEdited(ctx, char);
           return;
       }
 
@@ -5545,7 +5708,9 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           const trimmedName = (newValue || '').trim();
           if (!trimmedName) throw new Error('Character name cannot be empty');
           
-          if (typeof ctx.executeSlashCommandsWithOptions === 'function') {
+          // /rename-char renames the selected character, so only use it for that one.
+          const isSelected = ctx.characters?.[ctx.characterId]?.avatar === char.avatar;
+          if (isSelected && typeof ctx.executeSlashCommandsWithOptions === 'function') {
               const safeName = trimmedName.replace(/"/g, '\\"');
               await ctx.executeSlashCommandsWithOptions(`/rename-char silent=true chats=true "${safeName}"`);
               return;
@@ -5564,12 +5729,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           if (char.data) char.data.name = trimmedName;
           if (typeof ctx.getCharacters === 'function') await ctx.getCharacters().catch(() => {});
           else if (typeof window.getCharacters === 'function') await window.getCharacters().catch(() => {});
-          const es = ctx.eventSource || window.eventSource;
-          const et = ctx.event_types || window.event_types;
-          if (es && et?.CHARACTER_EDITED) {
-              es.emit(et.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: char } });
-              es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
-          }
+          _emitCharacterEdited(ctx, char);
           if (typeof window.PrintCharacterList === 'function') window.PrintCharacterList();
           return;
       }
@@ -5677,12 +5837,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
               } catch(e) { console.warn("[ST-Copilot] Failed to import tags via core context:", e); }
           }
 
-          const es = ctx.eventSource || window.eventSource;
-          const et = ctx.event_types || window.event_types;
-          if (es && et?.CHARACTER_EDITED) {
-              es.emit(et.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: char } });
-              es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
-          }
+          _emitCharacterEdited(ctx, char);
           return;
       }
       
@@ -5707,7 +5862,21 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+          // edit-attribute rejects fields missing from the stored card (e.g. older cards
+          // without system_prompt); merge-attributes can add them.
+          const errText = await res.text().catch(() => '');
+          if (res.status !== 400 || !/invalid field/i.test(errText)) throw new Error(`HTTP ${res.status}: ${errText}`);
+          const mergeRes = await fetch('/api/characters/merge-attributes', {
+              method: 'POST',
+              headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ avatar: char.avatar, data: { [fieldId]: newValue } }),
+          });
+          if (!mergeRes.ok) {
+              const mergeErr = await mergeRes.text().catch(() => mergeRes.statusText);
+              throw new Error(`HTTP ${mergeRes.status}: ${mergeErr}`);
+          }
+      }
 
       const domMap = {
           description: 'description_textarea',
@@ -5719,24 +5888,21 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           post_history_instructions: 'post_history_instructions_textarea',
       };
 
-      if (domMap[fieldId]) {
-          const el = document.getElementById(domMap[fieldId]);
-          if (el) {
-              el.value = newValue;
-              el.dispatchEvent(new Event('input', { bubbles: true }));
-          }
-      } else if (fieldId === 'alternate_greetings') {
-          if (typeof window.printAlternateGreetings === 'function') {
-              window.printAlternateGreetings();
+      if (_isOpenInEditor(ctx, char)) {
+          if (domMap[fieldId]) {
+              const el = document.getElementById(domMap[fieldId]);
+              if (el) {
+                  el.value = newValue;
+                  el.dispatchEvent(new Event('input', { bubbles: true }));
+              }
+          } else if (fieldId === 'alternate_greetings') {
+              if (typeof window.printAlternateGreetings === 'function') {
+                  window.printAlternateGreetings();
+              }
           }
       }
 
-      const es = ctx.eventSource || window.eventSource;
-      const et = ctx.event_types || window.event_types;
-      if (es && et?.CHARACTER_EDITED) {
-          es.emit(et.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: char } });
-          es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
-      }
+      _emitCharacterEdited(ctx, char);
   }
 
   async function createCharacterAPI(data) {
@@ -5905,7 +6071,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           } else {
               getSettings().altGreetingIndices[charId] = newArray;
           }
-          saveSettings$1(); buildAltGreetingsPicker(container, isOverride);
+          saveSettings(); buildAltGreetingsPicker(container, isOverride);
       });
       wrap.appendChild(allBtn);
 
@@ -5931,7 +6097,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
                   getSettings().altGreetingIndices[charId] = currentArr;
               }
               
-              saveSettings$1();
+              saveSettings();
               allBtn.textContent = currentArr.length === greetings.length ? 'Deselect All' : 'Select All';
               targetArray = currentArr;
           });
@@ -6071,20 +6237,22 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       if (!pendingChanges.length) return '';
       let xml = '```character-changes\n';
       for (const c of pendingChanges) {
+          // Keep the routing attribute, or group-chat edits lose their target after a reload.
+          const ch = c.char ? ` char="${String(c.char).replace(/"/g, "'")}"` : '';
           if (c.action === 'replace') {
-              xml += `<replace field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>\n`;
+              xml += `<replace${ch} field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>\n`;
               for (const p of c.patches) {
                   xml += `<<<<<<< SEARCH\n${p.search}\n=======\n${p.replace}\n>>>>>>> REPLACE\n`;
               }
               xml += `</replace>\n`;
           } else if (c.action === 'overwrite') {
-              xml += `<overwrite field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>${c.value}</overwrite>\n`;
+              xml += `<overwrite${ch} field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>${c.value}</overwrite>\n`;
           } else if (c.action === 'append') {
-              xml += `<append field="${c.field}">${c.value}</append>\n`;
+              xml += `<append${ch} field="${c.field}">${c.value}</append>\n`;
           } else if (c.action === 'prepend') {
-              xml += `<prepend field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>${c.value}</prepend>\n`;
+              xml += `<prepend${ch} field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>${c.value}</prepend>\n`;
           } else if (c.action === 'append_text') {
-              xml += `<append_text field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>${c.value}</append_text>\n`;
+              xml += `<append_text${ch} field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>${c.value}</append_text>\n`;
           }
       }
       xml += '```';
@@ -6296,6 +6464,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
 
       const getAppliedResult = (change) => {
           if (change.action === 'overwrite') return change.value || '';
+          if (change.action === 'append' && change.field === 'alternate_greetings') return change.value || '';
           let current;
           if (change.field === 'alternate_greetings') {
               const idx = (change.index || 1) - 1;
@@ -6303,6 +6472,9 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           } else {
               current = String(getCharFieldValue(char, change.field));
           }
+          // Must mirror applyCharChanges.
+          if (change.action === 'prepend') return (change.value || '') + (current ? '\n\n' + current : '');
+          if (change.action === 'append_text') return (current ? current + '\n\n' : '') + (change.value || '');
           for (const patch of (change.patches || [])) {
               const { result } = applySearchReplaceToField(current, patch.search || patch.anchor || '', patch.replace || '');
               current = result;
@@ -6628,6 +6800,13 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
     renderCharProposalCard: renderCharProposalCard
   });
 
+  // Indices of the last `depth` messages; never negative when the chat is shorter than depth.
+  function _lastIndices(total, depth) {
+      if (depth <= 0) return [];
+      const start = Math.max(0, total - depth);
+      return Array.from({ length: total - start }, (_, i) => start + i);
+  }
+
   function buildChatEditAIInstructions(settings) {
       if (!settings.chatEditAIEnabled) return '';
       const ctx = SillyTavern.getContext();
@@ -6641,10 +6820,10 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           if (picked && picked.length > 0) {
               slice = picked.filter(i => i >= 0 && i < stMsgs.length);
           } else {
-              slice = depth > 0 ? stMsgs.slice(-depth).map((_, i) => stMsgs.length - depth + i) : [];
+              slice = _lastIndices(stMsgs.length, depth);
           }
       } catch(_) {
-          slice = depth > 0 ? stMsgs.slice(-depth).map((_, i) => stMsgs.length - depth + i) : [];
+          slice = _lastIndices(stMsgs.length, depth);
       }
       const activeChatIds = slice.map(i => `#${i}`).join(', ') || 'none';
       const base = (settings.chatEditPrompt || DEFAULT_CHAT_EDIT_DIRECTIVE.trim())
@@ -6906,13 +7085,14 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
                       if (change.action === 'bulk_replace') {
                           for (const rp of (change.replacements || [])) {
                               if (!rp.search && !rp.anchor) continue;
-                              const { result, matched } = applySearchReplaceToField(content, rp.search || rp.anchor, rp.replace || '');
+                              const { result, matched } = applyBulkReplacement(content, rp.search || rp.anchor, rp.replace || '');
                               if (matched) { content = result; changed = true; }
                           }
                       } else if (change.action === 'regex') {
                           try {
                               const m = (change.regex || '').match(/^\/([\s\S]+)\/([a-z]*)$/i);
                               const re = m ? new RegExp(m[1], m[2]) : new RegExp(change.regex, 'g');
+                              re.lastIndex = 0;
                               if (re.test(content)) {
                                   content = content.replace(re, change.replace || '');
                                   changed = true;
@@ -7126,7 +7306,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
                           let content = stMsgs[i].mes || '', thisMsgMatch = true;
                           for (const rp of (change.replacements || [])) {
                               if (!rp.search && !rp.anchor) continue;
-                              const { matched } = applySearchReplaceToField(content, rp.search || rp.anchor, rp.replace || '');
+                              const { matched } = applyBulkReplacement(content, rp.search || rp.anchor, rp.replace || '');
                               if (!matched) { thisMsgMatch = false; break; }
                           }
                           if (thisMsgMatch && change.replacements?.length > 0) anyMatch = true;
@@ -7136,7 +7316,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
                       try {
                           const m = (change.regex || '').match(/^\/([\s\S]+)\/([a-z]*)$/i);
                           const re = m ? new RegExp(m[1], m[2]) : new RegExp(change.regex, 'g');
-                          const anyMatch = change.msg_indices.some(i => re.test(stMsgs[i].mes || ''));
+                          const anyMatch = change.msg_indices.some(i => { re.lastIndex = 0; return re.test(stMsgs[i].mes || ''); });
                           if (!anyMatch) return { valid: false, reason: 'Regex matched nothing in the specified messages' };
                       } catch(e) { return { valid: false, reason: 'Invalid regex syntax' }; }
                   }
@@ -7159,7 +7339,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
                       let thisMsgMatch = true;
                       for (const rp of (change.replacements || [])) {
                           if (!rp.search && !rp.anchor) continue;
-                          const { matched } = applySearchReplaceToField(content, rp.search || rp.anchor, rp.replace || '');
+                          const { matched } = applyBulkReplacement(content, rp.search || rp.anchor, rp.replace || '');
                           if (!matched) { thisMsgMatch = false; break; }
                       }
                       if (thisMsgMatch && change.replacements?.length > 0) anyMatch = true;
@@ -7170,6 +7350,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
                       const m = (change.regex || '').match(/^\/([\s\S]+)\/([a-z]*)$/i);
                       const re = m ? new RegExp(m[1], m[2]) : new RegExp(change.regex, 'g');
                       for (let i = startIdx; i <= endIdx; i++) {
+                          re.lastIndex = 0;
                           if (re.test(stMsgs[i].mes || '')) { anyMatch = true; break; }
                       }
                       if (!anyMatch) return { valid: false, reason: 'Regex matched nothing in the specified range' };
@@ -7218,7 +7399,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           if (change.action === 'bulk_replace') {
               let c = content;
               for (const p of (change.replacements || [])) {
-                  const { result } = applySearchReplaceToField(c, p.search || p.anchor || '', p.replace || '');
+                  const { result } = applyBulkReplacement(c, p.search || p.anchor || '', p.replace || '');
                   c = result;
               }
               return c;
@@ -7753,7 +7934,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
           sessionId, sessionName,
           disabled: false
       };
-      saveSettings$1();
+      saveSettings();
       updateMemoryDot();
       return id;
   }
@@ -7764,20 +7945,20 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
       mem.key = key.trim();
       mem.value = value.trim();
       mem.updatedAt = Date.now();
-      saveSettings$1();
+      saveSettings();
   }
 
   function deleteMemory(id) {
       _dbgAdd('MEM_DELETE', { id });
       delete getMemories()[id];
-      saveSettings$1();
+      saveSettings();
       updateMemoryDot();
   }
 
   function clearAllMemories() {
       _dbgAdd('MEM_CLEAR_ALL');
       getSettings().memories = {};
-      saveSettings$1();
+      saveSettings();
       updateMemoryDot();
   }
 
@@ -8003,7 +8184,7 @@ Process: Output \`tool_call\` JSON block -> Receive result -> Finalize response 
               e.stopPropagation();
               mem.disabled = !mem.disabled;
               _dbgAdd('MEM_TOGGLE_DISABLE', { id: mem.id, disabled: mem.disabled });
-              saveSettings$1();
+              saveSettings();
               renderMemoryList();
           });
 
@@ -8158,7 +8339,7 @@ ${scopeHtml}
           m.chatName = chatId;
           m.sessionId = getCurrentSession()?.id;
           m.sessionName = getCurrentSession()?.name;
-          saveSettings$1();
+          saveSettings();
       }
       renderMemoryList();
   }
@@ -8173,7 +8354,7 @@ ${scopeHtml}
           newEl.checked = !!s[key];
           newEl.addEventListener('change', () => {
               getSettings()[key] = newEl.checked;
-              saveSettings$1();
+              saveSettings();
               
               const stMap = {
                   'memoryEnabled': 'scp-memory-enabled',
@@ -8197,7 +8378,7 @@ ${scopeHtml}
           promptEl.parentNode.replaceChild(newPromptEl, promptEl);
           newPromptEl.addEventListener('input', () => {
               getSettings().memoryManagePrompt = newPromptEl.value;
-              saveSettings$1();
+              saveSettings();
               const stEl = document.getElementById('scp-memory-prompt');
               if (stEl) stEl.value = newPromptEl.value;
           });
@@ -8210,8 +8391,8 @@ ${scopeHtml}
           newResetBtn.addEventListener('click', async () => {
               const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset memory prompt to default?' });
               if (!ok) return;
-              getSettings().memoryManagePrompt = DEFAULT_MEMORY_PROMPT;
-              saveSettings$1();
+              getSettings().memoryManagePrompt = '';
+              saveSettings();
               const el = document.getElementById('scp-sp-memory-prompt'); if (el) el.value = DEFAULT_MEMORY_PROMPT;
               const stEl = document.getElementById('scp-memory-prompt'); if (stEl) stEl.value = DEFAULT_MEMORY_PROMPT;
               toastr.success('Prompt reset.', EXT_DISPLAY);
@@ -8768,7 +8949,8 @@ ${scopeHtml}
 
       // ── Prompts ───────────────────────────────────────────────────────────────
       { key: 'systemPrompt', stId: 'scp-sysprompt', spId: 'scp-sp-sysprompt', type: 'textarea', updCtx: true, profileKey: true,
-        fromSetting: s => s.systemPrompt || DEFAULT_SYSTEM_PROMPT },
+        fromSetting: s => s.systemPrompt || DEFAULT_SYSTEM_PROMPT,
+        toVal: v => v.trim() === DEFAULT_SYSTEM_PROMPT.trim() ? '' : v },
 
       // ── Character Edit ────────────────────────────────────────────────────────
       { key: 'charEditAIEnabled', stId: 'scp-char-edit-enabled', spId: 'scp-sp-char-edit-enabled', type: 'checkbox', updCtx: true, profileKey: true },
@@ -8791,7 +8973,8 @@ ${scopeHtml}
         }
       },
       { key: 'lorebookManagePrompt', stId: 'scp-lb-manage-prompt', spId: 'scp-sp-lb-manage-prompt', type: 'textarea', profileKey: true,
-        fromSetting: s => s.lorebookManagePrompt || DEFAULT_LB_MANAGE_PROMPT },
+        fromSetting: s => s.lorebookManagePrompt || DEFAULT_LB_MANAGE_PROMPT,
+        toVal: v => v.trim() === DEFAULT_LB_MANAGE_PROMPT.trim() ? '' : v },
       { key: 'lorebookSTScanDepth',     stId: 'scp-lb-st-scan-depth',      spId: 'scp-sp-lb-st-scan-depth',      type: 'input', toVal: Number, profileKey: true },
       { key: 'lorebookCopilotScanDepth', stId: 'scp-lb-copilot-scan-depth', spId: 'scp-sp-lb-copilot-scan-depth', type: 'input', toVal: Number, profileKey: true },
 
@@ -8806,7 +8989,8 @@ ${scopeHtml}
       { key: 'memoryInject',       stId: 'scp-memory-inject',  spId: 'scp-sp-memory-inject',  type: 'checkbox', updCtx: true },
       { key: 'memoryNotify',       stId: null,                 spId: 'scp-sp-memory-notify',  type: 'checkbox' },
       { key: 'memoryManagePrompt', stId: 'scp-memory-prompt',  spId: 'scp-sp-memory-prompt',  type: 'textarea', updCtx: true,
-        fromSetting: s => s.memoryManagePrompt || DEFAULT_MEMORY_PROMPT },
+        fromSetting: s => s.memoryManagePrompt || DEFAULT_MEMORY_PROMPT,
+        toVal: v => v.trim() === DEFAULT_MEMORY_PROMPT.trim() ? '' : v },
 
       // ── Tools ─────────────────────────────────────────────────────────────────
       { key: 'toolsEnabled', stId: 'scp-tools-enabled', spId: 'scp-sp-tools-enabled', type: 'checkbox', updCtx: true },
@@ -8908,14 +9092,14 @@ ${scopeHtml}
       const s = getSettings(); const p = {};
       for (const k of _PROFILE_KEYS) p[k] = s[k];
       p.charEditFields = JSON.parse(JSON.stringify(s.charEditFields || {}));
-      s.profiles[name] = p; s.activeProfile = name; saveSettings$1();
+      s.profiles[name] = p; s.activeProfile = name; saveSettings();
   }
 
   function loadProfile(name) {
       const s = getSettings(); const p = s.profiles[name]; if (!p) return;
       for (const k of _PROFILE_KEYS) { if (p[k] !== undefined) s[k] = p[k]; }
       if (p.charEditFields) s.charEditFields = JSON.parse(JSON.stringify(p.charEditFields));
-      s.activeProfile = name; saveSettings$1();
+      s.activeProfile = name; saveSettings();
       if (typeof updateSettingsUI === 'function') updateSettingsUI();
       _takeProfileSnapshot(); state.configDirty = false; _updateDirtyDots();
       _pruneMatchingOverrides();
@@ -8925,7 +9109,7 @@ ${scopeHtml}
       const s = getSettings(); delete s.profiles[name];
       if (s.activeProfile === name) s.activeProfile = '';
       for (const k in s.profileBindings) { if (s.profileBindings[k] === name) delete s.profileBindings[k]; }
-      saveSettings$1();
+      saveSettings();
   }
 
   function refreshProfilesDropdown() {
@@ -8933,7 +9117,7 @@ ${scopeHtml}
       const s = getSettings();
       if (!Object.keys(s.profiles).length) {
           s.profiles['Default'] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8200, applyRegexToContext: true };
-          s.activeProfile = 'Default'; saveSettings$1();
+          s.activeProfile = 'Default'; saveSettings();
       }
       sel.innerHTML = ''; let hasActive = false;
       for (const name of Object.keys(s.profiles)) {
@@ -8969,7 +9153,7 @@ ${scopeHtml}
       let profiles = service?.getSupportedProfiles?.() ?? ctx.extensionSettings?.connectionManager?.profiles ?? [];
       if (currentVal && !profiles.some(p => p.id === currentVal)) {
           _dbgAdd('PROFILE_GHOST_CLEANUP', { removedId: currentVal });
-          s.connectionProfileId = ''; saveSettings$1(); currentVal = '';
+          s.connectionProfileId = ''; saveSettings(); currentVal = '';
       }
       if (service?.handleDropdown) { service.handleDropdown(profSel); if (currentVal && Array.from(profSel.options).some(o => o.value === currentVal)) profSel.value = currentVal; return; }
       profSel.innerHTML = '<option value="">-- Select Profile --</option>';
@@ -8987,7 +9171,7 @@ ${scopeHtml}
           const isOv = sid === 'scp-sp-ov-conn-profile';
           let targetVal = isOv ? (eff.connectionProfileId || '') : (s.connectionProfileId || '');
           if (targetVal && !profiles.some(p => p.id === targetVal)) {
-              if (isOv) setSessionOverride('connectionProfileId', undefined); else { s.connectionProfileId = ''; saveSettings$1(); }
+              if (isOv) setSessionOverride('connectionProfileId', undefined); else { s.connectionProfileId = ''; saveSettings(); }
               targetVal = '';
           }
           sel.innerHTML = '<option value="">-- Select Profile --</option>';
@@ -9001,7 +9185,7 @@ ${scopeHtml}
       const s = getSettings();
       if (!Object.keys(s.profiles).length) {
           s.profiles['Default'] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8200, applyRegexToContext: true };
-          s.activeProfile = 'Default'; saveSettings$1();
+          s.activeProfile = 'Default'; saveSettings();
       }
       sel.innerHTML = '';
       for (const name of Object.keys(s.profiles)) {
@@ -9044,7 +9228,7 @@ ${scopeHtml}
       const s = getSettings();
       if (!s.savedThemes || !Object.keys(s.savedThemes).length) {
           s.savedThemes = { 'Default': { ...THEME_PRESETS.default } }; s.activeThemeProfile = 'Default';
-          s.customTheme = { ...s.savedThemes['Default'] }; saveSettings$1();
+          s.customTheme = { ...s.savedThemes['Default'] }; saveSettings();
       }
       const profileRow = document.createElement('div'); profileRow.className = 'scp-profile-bar'; profileRow.style.marginBottom = '12px';
       profileRow.innerHTML = `
@@ -9089,22 +9273,22 @@ ${scopeHtml}
           } else if (s2.savedThemes[name]) {
               s2.customTheme = { ...s2.savedThemes[name] }; s2.activeThemeProfile = name;
           }
-          saveSettings$1(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride);
+          saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride);
       });
       profileRow.querySelector('#scp-theme-save').addEventListener('click', async () => {
           const val = sel.value;
           if (val.startsWith('__preset__')) {
               const name = await showCustomDialog({ type: 'prompt', title: 'Save as Custom Theme', message: 'Name for your custom theme:', placeholder: 'My Theme' });
               if (!name?.trim()) return;
-              const s2 = getSettings(); s2.savedThemes[name.trim()] = { ...s2.customTheme }; s2.activeThemeProfile = name.trim(); saveSettings$1(); buildThemeEditor(containerOverride); toastr.success(`Theme "${name.trim()}" saved`, EXT_DISPLAY); _clearDirty('theme');
+              const s2 = getSettings(); s2.savedThemes[name.trim()] = { ...s2.customTheme }; s2.activeThemeProfile = name.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success(`Theme "${name.trim()}" saved`, EXT_DISPLAY); _clearDirty('theme');
           } else if (val) {
-              const s2 = getSettings(); s2.savedThemes[val] = { ...s2.customTheme }; saveSettings$1(); toastr.success(`Theme "${val}" updated`, EXT_DISPLAY); _clearDirty('theme');
+              const s2 = getSettings(); s2.savedThemes[val] = { ...s2.customTheme }; saveSettings(); toastr.success(`Theme "${val}" updated`, EXT_DISPLAY); _clearDirty('theme');
           }
       });
       profileRow.querySelector('#scp-theme-create').addEventListener('click', async () => {
           const name = await showCustomDialog({ type: 'prompt', title: 'New Theme', message: 'Enter name for new theme:', placeholder: 'My New Theme' });
           if (!name?.trim()) return;
-          const s2 = getSettings(); s2.savedThemes[name.trim()] = { ...s2.customTheme }; s2.activeThemeProfile = name.trim(); saveSettings$1(); buildThemeEditor(containerOverride); toastr.success(`Created theme "${name.trim()}"`, EXT_DISPLAY);
+          const s2 = getSettings(); s2.savedThemes[name.trim()] = { ...s2.customTheme }; s2.activeThemeProfile = name.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success(`Created theme "${name.trim()}"`, EXT_DISPLAY);
       });
       profileRow.querySelector('#scp-theme-duplicate').addEventListener('click', async () => {
           const val = sel.value; if (!val) return;
@@ -9113,20 +9297,20 @@ ${scopeHtml}
           const name = await showCustomDialog({ type: 'prompt', title: 'Duplicate Theme', message: 'Name for the duplicated theme:', defaultValue: defaultName });
           if (!name?.trim()) return;
           const s2 = getSettings(); s2.savedThemes[name.trim()] = JSON.parse(JSON.stringify(baseTheme)); s2.activeThemeProfile = name.trim(); s2.customTheme = { ...s2.savedThemes[name.trim()] };
-          saveSettings$1(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(`Theme duplicated as "${name.trim()}"`, EXT_DISPLAY);
+          saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(`Theme duplicated as "${name.trim()}"`, EXT_DISPLAY);
       });
       profileRow.querySelector('#scp-theme-rename').addEventListener('click', async () => {
           const val = sel.value; if (!val || val.startsWith('__preset__')) { toastr.info('Select a custom theme to rename.', EXT_DISPLAY); return; }
           const newName = await showCustomDialog({ type: 'prompt', title: 'Rename Theme', message: 'Enter new name:', defaultValue: val });
           if (!newName?.trim() || newName.trim() === val) return;
-          const s2 = getSettings(); s2.savedThemes[newName.trim()] = s2.savedThemes[val]; delete s2.savedThemes[val]; s2.activeThemeProfile = newName.trim(); saveSettings$1(); buildThemeEditor(containerOverride); toastr.success('Theme renamed.', EXT_DISPLAY);
+          const s2 = getSettings(); s2.savedThemes[newName.trim()] = s2.savedThemes[val]; delete s2.savedThemes[val]; s2.activeThemeProfile = newName.trim(); saveSettings(); buildThemeEditor(containerOverride); toastr.success('Theme renamed.', EXT_DISPLAY);
       });
       profileRow.querySelector('#scp-theme-delete').addEventListener('click', async () => {
           const val = sel.value; if (!val || val.startsWith('__preset__')) { toastr.info('Select a custom theme to delete.', EXT_DISPLAY); return; }
           const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Theme', message: `Delete "${val}"?` }); if (!ok) return;
           const s2 = getSettings(); delete s2.savedThemes[val]; s2.activeThemeProfile = Object.keys(s2.savedThemes)[0] || '';
           s2.customTheme = s2.activeThemeProfile ? { ...s2.savedThemes[s2.activeThemeProfile] } : { ...THEME_PRESETS.default };
-          saveSettings$1(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success('Deleted.', EXT_DISPLAY);
+          saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success('Deleted.', EXT_DISPLAY);
       });
       profileRow.querySelector('#scp-theme-export').addEventListener('click', () => {
           const s2 = getSettings(); const val = sel.value;
@@ -9143,7 +9327,7 @@ ${scopeHtml}
                   if (typeof imported !== 'object' || Array.isArray(imported)) throw new Error('Invalid format');
                   const themeName = (data.name && typeof data.name === 'string') ? data.name : file.name.replace(/\.json$/i, '');
                   const s2 = getSettings(); s2.savedThemes[themeName] = { ...THEME_PRESETS.default, ...imported }; s2.activeThemeProfile = themeName; s2.customTheme = { ...s2.savedThemes[themeName] };
-                  saveSettings$1(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(`Theme "${escHtml(themeName)}" imported.`, EXT_DISPLAY);
+                  saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(`Theme "${escHtml(themeName)}" imported.`, EXT_DISPLAY);
               } catch (e) { toastr.error('Invalid theme file.', EXT_DISPLAY); }
           };
           inp.click();
@@ -9175,7 +9359,7 @@ ${scopeHtml}
           let _fontDebounce = null;
           const applyVal = val => {
               const s2 = getSettings(); if (!s2.customTheme) s2.customTheme = {};
-              s2.customTheme[def.key] = val; saveSettings$1(); _markDirty('theme');
+              s2.customTheme[def.key] = val; saveSettings(); _markDirty('theme');
               document.querySelectorAll(`input.scp-theme-var-input[data-key="${def.key}"]`).forEach(inp => { if (inp.value !== val) inp.value = val; });
               if (isColorKey) {
                   if (cssVar) [windowEl, document.getElementById('scp-lb-overlay'), document.getElementById('scp-diff-modal')].filter(Boolean).forEach(t => t.style.setProperty(cssVar, val));
@@ -9244,7 +9428,7 @@ ${scopeHtml}
               }
           }
       }
-      if (charChanged) saveSettings$1();
+      if (charChanged) saveSettings();
       
       document.querySelectorAll('.scp-char-ov-row').forEach(row => {
           if (typeof row._refreshOverride === 'function') row._refreshOverride();
@@ -9269,7 +9453,7 @@ ${scopeHtml}
 
       const apply = raw => {
           const val = def.toVal ? def.toVal(raw) : raw;
-          getSettings()[def.key] = val; saveSettings$1();
+          getSettings()[def.key] = val; saveSettings();
           _markDirty('config'); _pruneMatchingOverrides();
           if (def.onChange) def.onChange(val, getSettings());
           if (def.updCtx) Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession()));
@@ -9299,7 +9483,7 @@ ${scopeHtml}
       const spEl = document.getElementById(ceDef.spId);
       const apply = val => {
           const s = getSettings(); if (!s.charEditFields) s.charEditFields = {};
-          s.charEditFields[ceDef.fk] = val; saveSettings$1(); _markDirty('config'); _pruneMatchingOverrides();
+          s.charEditFields[ceDef.fk] = val; saveSettings(); _markDirty('config'); _pruneMatchingOverrides();
           Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession()));
           if (ceDef.altGreetingPicker) {
               ['scp-ce-alt-greetings-picker', 'scp-sp-ce-alt-greetings-picker'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = val ? '' : 'none'; });
@@ -9551,7 +9735,7 @@ ${scopeHtml}
       // ── forceStreaming button group ──
       document.querySelectorAll('#scp-st-stream-auto, #scp-st-stream-on, #scp-st-stream-off').forEach(btn => {
           btn.addEventListener('click', () => {
-              const val = btn.dataset.stream; getSettings().forceStreaming = val; saveSettings$1();
+              const val = btn.dataset.stream; getSettings().forceStreaming = val; saveSettings();
               syncOverlayUI('forceStreaming', val); _markDirty('config');
           });
       });
@@ -9559,8 +9743,8 @@ ${scopeHtml}
       // ── Reset buttons ──
       const _resetPrompt = async (key, defaultVal, stId, spId, label) => {
           const ok = await showCustomDialog({ type: 'confirm', title: `Reset ${label}`, message: `Reset to default?` }); if (!ok) return;
-          getSettings()[key] = undefined; getSettings()[key] = defaultVal;
-          saveSettings$1(); _markDirty('config');
+          getSettings()[key] = '';
+          saveSettings(); _markDirty('config');
           const displayVal = defaultVal;
           [stId, spId].forEach(id => { const el = document.getElementById(id); if (el) el.value = displayVal; });
           Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession()));
@@ -9569,19 +9753,19 @@ ${scopeHtml}
       document.getElementById('scp-reset-prompt')?.addEventListener('click', () => _resetPrompt('systemPrompt', DEFAULT_SYSTEM_PROMPT, 'scp-sysprompt', 'scp-sp-sysprompt', 'System Prompt'));
       document.getElementById('scp-reset-char-edit-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Char Edit Prompt', message: 'Reset to built-in default?' }); if (!ok) return;
-          getSettings().charEditPrompt = ''; saveSettings$1(); _markDirty('config');
+          getSettings().charEditPrompt = ''; saveSettings(); _markDirty('config');
           ['scp-char-edit-prompt', 'scp-sp-char-edit-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_CHAR_EDIT_DIRECTIVE.trim(); });
           Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Char edit prompt reset.', EXT_DISPLAY);
       });
       document.getElementById('scp-reset-lb-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Lorebook Prompt', message: 'Reset to default?' }); if (!ok) return;
-          getSettings().lorebookManagePrompt = DEFAULT_LB_MANAGE_PROMPT; saveSettings$1();
+          getSettings().lorebookManagePrompt = ''; saveSettings();
           ['scp-lb-manage-prompt', 'scp-sp-lb-manage-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_LB_MANAGE_PROMPT; });
           toastr.success('Lorebook prompt reset.', EXT_DISPLAY);
       });
       document.getElementById('scp-reset-memory-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset memory prompt to default?' }); if (!ok) return;
-          getSettings().memoryManagePrompt = DEFAULT_MEMORY_PROMPT; saveSettings$1();
+          getSettings().memoryManagePrompt = ''; saveSettings();
           ['scp-memory-prompt', 'scp-sp-memory-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_MEMORY_PROMPT; });
           Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Prompt reset.', EXT_DISPLAY);
       });
@@ -9605,7 +9789,7 @@ ${scopeHtml}
           const name = await showCustomDialog({ type: 'prompt', title: 'New Configuration', message: 'Enter a name for the new default profile:', placeholder: 'New Config' }); if (!name?.trim()) return;
           const n = name.trim(); const s = getSettings();
           s.profiles[n] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8200 };
-          saveSettings$1(); refreshProfilesDropdown(); loadProfile(n);
+          saveSettings(); refreshProfilesDropdown(); loadProfile(n);
           const sel = document.getElementById('scp-profile-select'); if (sel) sel.value = n;
           updateBindingSection(); toastr.success(`Created "${n}"`, EXT_DISPLAY);
       });
@@ -9613,7 +9797,7 @@ ${scopeHtml}
           const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return toastr.info('No configuration selected.', EXT_DISPLAY);
           const newName = await showCustomDialog({ type: 'prompt', title: 'Duplicate Configuration', message: 'Name for the new profile:', defaultValue: sel.value + ' (Copy)' }); if (!newName?.trim()) return;
           const n = newName.trim(); const s = getSettings(); const p = s.profiles[sel.value]; if (!p) return;
-          s.profiles[n] = JSON.parse(JSON.stringify(p)); saveSettings$1(); refreshProfilesDropdown(); refreshSPProfilesDropdown(); loadProfile(n);
+          s.profiles[n] = JSON.parse(JSON.stringify(p)); saveSettings(); refreshProfilesDropdown(); refreshSPProfilesDropdown(); loadProfile(n);
           const newSel = document.getElementById('scp-profile-select'); if (newSel) newSel.value = n;
           updateBindingSection(); toastr.success(`Duplicated as "${n}"`, EXT_DISPLAY);
       });
@@ -9624,7 +9808,7 @@ ${scopeHtml}
           s.profiles[newName.trim()] = p; delete s.profiles[sel.value];
           if (s.activeProfile === sel.value) s.activeProfile = newName.trim();
           for (const k in s.profileBindings) { if (s.profileBindings[k] === sel.value) s.profileBindings[k] = newName.trim(); }
-          saveSettings$1(); refreshProfilesDropdown();
+          saveSettings(); refreshProfilesDropdown();
           const newSel = document.getElementById('scp-profile-select'); if (newSel) newSel.value = newName.trim();
           updateBindingSection(); toastr.success('Renamed.', EXT_DISPLAY);
       });
@@ -9638,13 +9822,13 @@ ${scopeHtml}
           const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return;
           const s = getSettings(); const { charId } = getBindingKey(); const key = `char_${charId}`;
           if (s.profileBindings[key] === sel.value) delete s.profileBindings[key]; else s.profileBindings[key] = sel.value;
-          _dbgAdd(s.profileBindings[key] ? 'PROFILE_BIND' : 'PROFILE_UNBIND', { target: 'char', profile: sel.value }); saveSettings$1(); updateBindingSection();
+          _dbgAdd(s.profileBindings[key] ? 'PROFILE_BIND' : 'PROFILE_UNBIND', { target: 'char', profile: sel.value }); saveSettings(); updateBindingSection();
       });
       document.getElementById('scp-bind-chat')?.addEventListener('click', () => {
           const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return;
           const s = getSettings(); const { charId, chatId } = getBindingKey(); const key = `chat_${charId}_${chatId}`;
           if (s.profileBindings[key] === sel.value) delete s.profileBindings[key]; else s.profileBindings[key] = sel.value;
-          _dbgAdd(s.profileBindings[key] ? 'PROFILE_BIND' : 'PROFILE_UNBIND', { target: 'chat', profile: sel.value }); saveSettings$1(); updateBindingSection();
+          _dbgAdd(s.profileBindings[key] ? 'PROFILE_BIND' : 'PROFILE_UNBIND', { target: 'chat', profile: sel.value }); saveSettings(); updateBindingSection();
       });
 
       // ── Misc buttons ──
@@ -9656,7 +9840,7 @@ ${scopeHtml}
           const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete ALL Copilot sessions? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
           const { charId, chatId } = getBindingKey();
           _dbgAdd('SESSION_CLEAR_REQUESTED', { source: 'st-drawer', charId, chatId });
-          getSettings().sessions = {}; saveSettings$1();
+          getSettings().sessions = {}; saveSettings();
           try {
               await initChatBucket({ forceReset: true });
               _dbgAdd('SESSION_CLEAR_DONE', { source: 'st-drawer', charId, chatId });
@@ -9699,7 +9883,7 @@ ${scopeHtml}
       // ── SP forceStreaming ──
       document.querySelectorAll('.scp-stream-btn:not(.scp-ov-stream-btn)').forEach(btn => {
           btn.addEventListener('click', () => {
-              const val = btn.dataset.stream; getSettings().forceStreaming = val; saveSettings$1();
+              const val = btn.dataset.stream; getSettings().forceStreaming = val; saveSettings();
               syncOverlayUI('forceStreaming', val); _markDirty('config');
           });
       });
@@ -9723,7 +9907,7 @@ ${scopeHtml}
           const name = await showCustomDialog({ type: 'prompt', title: 'New Configuration', message: 'Name:', placeholder: 'New Config' }); if (!name?.trim()) return;
           const n = name.trim(); const s = getSettings();
           s.profiles[n] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8200, applyRegexToContext: true };
-          saveSettings$1(); refreshSPProfilesDropdown(); refreshProfilesDropdown(); loadProfile(n); syncSPFromSettings(); updateSettingsUI();
+          saveSettings(); refreshSPProfilesDropdown(); refreshProfilesDropdown(); loadProfile(n); syncSPFromSettings(); updateSettingsUI();
           const sel = document.getElementById('scp-sp-profile-select'); if (sel) sel.value = n;
           updateSPBindingSection(); toastr.success(`Created "${n}"`, EXT_DISPLAY);
       });
@@ -9731,7 +9915,7 @@ ${scopeHtml}
           const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return toastr.info('No configuration selected.', EXT_DISPLAY);
           const newName = await showCustomDialog({ type: 'prompt', title: 'Duplicate Configuration', message: 'Name for the new profile:', defaultValue: sel.value + ' (Copy)' }); if (!newName?.trim()) return;
           const n = newName.trim(); const s = getSettings(); const p = s.profiles[sel.value]; if (!p) return;
-          s.profiles[n] = JSON.parse(JSON.stringify(p)); saveSettings$1(); refreshSPProfilesDropdown(); refreshProfilesDropdown(); loadProfile(n); syncSPFromSettings(); updateSettingsUI();
+          s.profiles[n] = JSON.parse(JSON.stringify(p)); saveSettings(); refreshSPProfilesDropdown(); refreshProfilesDropdown(); loadProfile(n); syncSPFromSettings(); updateSettingsUI();
           const newSel = document.getElementById('scp-sp-profile-select'); if (newSel) newSel.value = n;
           updateSPBindingSection(); toastr.success(`Duplicated as "${n}"`, EXT_DISPLAY);
       });
@@ -9742,7 +9926,7 @@ ${scopeHtml}
           s.profiles[newName.trim()] = p; delete s.profiles[sel.value];
           if (s.activeProfile === sel.value) s.activeProfile = newName.trim();
           for (const k in s.profileBindings) { if (s.profileBindings[k] === sel.value) s.profileBindings[k] = newName.trim(); }
-          saveSettings$1(); refreshSPProfilesDropdown(); refreshProfilesDropdown();
+          saveSettings(); refreshSPProfilesDropdown(); refreshProfilesDropdown();
           const newSel = document.getElementById('scp-sp-profile-select'); if (newSel) newSel.value = newName.trim();
           updateSPBindingSection(); toastr.success('Renamed.', EXT_DISPLAY);
       });
@@ -9756,54 +9940,54 @@ ${scopeHtml}
           const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return;
           const s = getSettings(); const { charId } = getBindingKey(); const key = `char_${charId}`;
           if (s.profileBindings[key] === sel.value) delete s.profileBindings[key]; else s.profileBindings[key] = sel.value;
-          saveSettings$1(); updateSPBindingSection(); document.getElementById('scp-sp-bind-char')?.classList.toggle('active', s.profileBindings[key] === sel.value);
+          saveSettings(); updateSPBindingSection(); document.getElementById('scp-sp-bind-char')?.classList.toggle('active', s.profileBindings[key] === sel.value);
       });
       document.getElementById('scp-sp-bind-chat')?.addEventListener('click', () => {
           const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return;
           const s = getSettings(); const { charId, chatId } = getBindingKey(); const key = `chat_${charId}_${chatId}`;
           if (s.profileBindings[key] === sel.value) delete s.profileBindings[key]; else s.profileBindings[key] = sel.value;
-          saveSettings$1(); updateSPBindingSection(); document.getElementById('scp-sp-bind-chat')?.classList.toggle('active', s.profileBindings[key] === sel.value);
+          saveSettings(); updateSPBindingSection(); document.getElementById('scp-sp-bind-chat')?.classList.toggle('active', s.profileBindings[key] === sel.value);
       });
 
       // ── SP conn profile ──
       document.getElementById('scp-sp-conn-profile')?.addEventListener('change', e => {
-          getSettings().connectionProfileId = e.target.value; saveSettings$1(); syncOverlayUI('connectionProfileId', e.target.value); _markDirty('config');
+          getSettings().connectionProfileId = e.target.value; saveSettings(); syncOverlayUI('connectionProfileId', e.target.value); _markDirty('config');
       });
 
       // ── SP Reset buttons ──
       document.getElementById('scp-sp-reset-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset System Prompt', message: 'Reset to default?' }); if (!ok) return;
-          getSettings().systemPrompt = DEFAULT_SYSTEM_PROMPT; saveSettings$1();
+          getSettings().systemPrompt = ''; saveSettings();
           ['scp-sp-sysprompt', 'scp-sysprompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_SYSTEM_PROMPT; });
           Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success('System prompt reset.', EXT_DISPLAY);
       });
       document.getElementById('scp-sp-reset-lb-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset LB Prompt', message: 'Reset to default?' }); if (!ok) return;
-          getSettings().lorebookManagePrompt = DEFAULT_LB_MANAGE_PROMPT; saveSettings$1();
+          getSettings().lorebookManagePrompt = ''; saveSettings();
           ['scp-sp-lb-manage-prompt', 'scp-lb-manage-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_LB_MANAGE_PROMPT; });
           toastr.success('Lorebook prompt reset.', EXT_DISPLAY);
       });
       document.getElementById('scp-sp-reset-char-edit-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Char Edit Prompt', message: 'Reset to built-in default?' }); if (!ok) return;
-          getSettings().charEditPrompt = ''; saveSettings$1(); _markDirty('config');
+          getSettings().charEditPrompt = ''; saveSettings(); _markDirty('config');
           ['scp-sp-char-edit-prompt', 'scp-char-edit-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_CHAR_EDIT_DIRECTIVE.trim(); });
           Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Char edit prompt reset.', EXT_DISPLAY);
       });
       document.getElementById('scp-sp-reset-chat-edit-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Chat Edit Prompt', message: 'Reset to default?' }); if (!ok) return;
-          getSettings().chatEditPrompt = ''; saveSettings$1(); _markDirty('config');
+          getSettings().chatEditPrompt = ''; saveSettings(); _markDirty('config');
           ['scp-sp-chat-edit-prompt', 'scp-chat-edit-prompt-st'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_CHAT_EDIT_DIRECTIVE.trim(); });
           Promise.resolve().then(function () { return uiChat; }).then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Chat edit prompt reset.', EXT_DISPLAY);
       });
       document.getElementById('scp-sp-reset-memory-prompt')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset memory prompt to default?' }); if (!ok) return;
-          getSettings().memoryManagePrompt = DEFAULT_MEMORY_PROMPT; saveSettings$1();
+          getSettings().memoryManagePrompt = ''; saveSettings();
           ['scp-sp-memory-prompt', 'scp-memory-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_MEMORY_PROMPT; });
           toastr.success('Prompt reset.', EXT_DISPLAY);
       });
       document.getElementById('scp-sp-tools-reset')?.addEventListener('click', async () => {
           const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset tools prompt to default?' }); if (!ok) return;
-          getSettings().toolsSystemPrompt = DEFAULT_TOOLS_PROMPT; saveSettings$1();
+          getSettings().toolsSystemPrompt = ''; saveSettings();
           const ta = document.getElementById('scp-sp-tools-prompt'); if (ta) ta.value = DEFAULT_TOOLS_PROMPT;
           toastr.success('Tools prompt reset.', EXT_DISPLAY);
       });
@@ -9815,7 +9999,7 @@ ${scopeHtml}
           const ok = await showCustomDialog({ type: 'confirm', title: 'Clear All Sessions', message: 'Delete ALL Copilot sessions? This cannot be undone.', delayConfirm: 3 }); if (!ok) return;
           const { charId, chatId } = getBindingKey();
           _dbgAdd('SESSION_CLEAR_REQUESTED', { source: 'settings-overlay', charId, chatId });
-          getSettings().sessions = {}; saveSettings$1();
+          getSettings().sessions = {}; saveSettings();
           try {
               await initChatBucket({ forceReset: true });
               _dbgAdd('SESSION_CLEAR_DONE', { source: 'settings-overlay', charId, chatId });
@@ -9944,7 +10128,7 @@ ${scopeHtml}
               const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(null); r.readAsDataURL(file); });
               if (!dataUrl) return;
               const s2 = getSettings(); const id = 'bg_' + Date.now();
-              s2.customBackgrounds[id] = { name: file.name, dataUrl, isVideo: file.type.startsWith('video/'), fit: 'cover' }; s2.windowBg = id; saveSettings$1(); rebuildAll();
+              s2.customBackgrounds[id] = { name: file.name, dataUrl, isVideo: file.type.startsWith('video/'), fit: 'cover' }; s2.windowBg = id; saveSettings(); rebuildAll();
           };
           inp.click();
       }));
@@ -9952,18 +10136,18 @@ ${scopeHtml}
           const url = await showCustomDialog({ type: 'prompt', title: 'Add Background', message: 'Enter direct URL to image or video:', placeholder: 'https://...' });
           if (url?.trim()) {
               const s2 = getSettings(); const id = 'bg_' + Date.now();
-              s2.customBackgrounds[id] = { name: 'URL Background', dataUrl: url.trim(), isVideo: url.endsWith('.mp4') || url.endsWith('.webm'), fit: 'cover' }; s2.windowBg = id; saveSettings$1(); rebuildAll();
+              s2.customBackgrounds[id] = { name: 'URL Background', dataUrl: url.trim(), isVideo: url.endsWith('.mp4') || url.endsWith('.webm'), fit: 'cover' }; s2.windowBg = id; saveSettings(); rebuildAll();
           }
       }));
       actWrap.appendChild(mkBtn('pen', 'Rename', '', async () => {
           const val = typeSel.value; if (val === 'none') return;
           const newName = await showCustomDialog({ type: 'prompt', title: 'Rename Background', message: 'New name:', defaultValue: s.customBackgrounds[val]?.name });
-          if (newName?.trim()) { s.customBackgrounds[val].name = newName.trim(); saveSettings$1(); rebuildAll(); }
+          if (newName?.trim()) { s.customBackgrounds[val].name = newName.trim(); saveSettings(); rebuildAll(); }
       }));
       actWrap.appendChild(mkBtn('trash', 'Delete', isSP ? 'scp-sp-danger-btn' : '', async () => {
           const val = typeSel.value; if (val === 'none') return;
           const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Background', message: 'Delete this background?' }); if (!ok) return;
-          const s2 = getSettings(); delete s2.customBackgrounds[val]; s2.windowBg = 'none'; saveSettings$1(); rebuildAll();
+          const s2 = getSettings(); delete s2.customBackgrounds[val]; s2.windowBg = 'none'; saveSettings(); rebuildAll();
       }));
       container.appendChild(actWrap);
 
@@ -9972,7 +10156,7 @@ ${scopeHtml}
       const fitSel = document.createElement('select'); fitSel.className = isSP ? 'scp-sp-select text_pole' : 'text_pole'; fitSel.id = isSP ? 'scp-sp-fit-sel' : 'scp-fit-sel';
       ['cover','contain','fill','center'].forEach(f => { const o = document.createElement('option'); o.value = f; o.textContent = f; fitSel.appendChild(o); });
       fitSel.value = s.customBackgrounds[s.windowBg]?.fit || 'cover';
-      fitSel.addEventListener('change', () => { if (s.windowBg !== 'none' && s.customBackgrounds[s.windowBg]) { s.customBackgrounds[s.windowBg].fit = fitSel.value; saveSettings$1(); Promise.resolve().then(function () { return uiWindow; }).then(m => m.applyWindowBackground()); } });
+      fitSel.addEventListener('change', () => { if (s.windowBg !== 'none' && s.customBackgrounds[s.windowBg]) { s.customBackgrounds[s.windowBg].fit = fitSel.value; saveSettings(); Promise.resolve().then(function () { return uiWindow; }).then(m => m.applyWindowBackground()); } });
       fitRow.appendChild(fitLbl); fitRow.appendChild(fitSel); extraWrap.appendChild(fitRow);
 
       const dimRow = mkRow(); dimRow.style.marginTop = '8px'; const dimLbl = mkLbl('Darkness Overlay');
@@ -9980,13 +10164,13 @@ ${scopeHtml}
       const dimSlider = document.createElement('input'); dimSlider.type = 'range'; dimSlider.min = '0'; dimSlider.max = '100'; dimSlider.className = isSP ? 'scp-slider' : 'neo-range-slider'; dimSlider.style.flex = '1'; dimSlider.value = s.windowBgDim ?? 50;
       const dimVal = document.createElement('span'); dimVal.style.cssText = isSP ? 'min-width:32px;text-align:right;font-size:11px;color:var(--scp-accent)' : 'font-size:12px;min-width:34px;text-align:right;color:var(--SmartThemeQuoteColor,#a99bfb)'; dimVal.textContent = `${dimSlider.value}%`;
       dimSlider.addEventListener('input', () => { dimVal.textContent = `${dimSlider.value}%`; });
-      dimSlider.addEventListener('change', () => { getSettings().windowBgDim = parseInt(dimSlider.value); saveSettings$1(); Promise.resolve().then(function () { return uiWindow; }).then(m => m.applyWindowBackground()); _syncBgToOverlay(); });
+      dimSlider.addEventListener('change', () => { getSettings().windowBgDim = parseInt(dimSlider.value); saveSettings(); Promise.resolve().then(function () { return uiWindow; }).then(m => m.applyWindowBackground()); _syncBgToOverlay(); });
       dimFlex.appendChild(dimSlider); dimFlex.appendChild(dimVal); dimRow.appendChild(dimLbl); dimRow.appendChild(dimFlex); extraWrap.appendChild(dimRow);
       container.appendChild(extraWrap);
 
       const updateVis = () => { const isNone = typeSel.value === 'none'; extraWrap.style.display = isNone ? 'none' : 'block'; };
       updateVis();
-      typeSel.addEventListener('change', () => { getSettings().windowBg = typeSel.value; saveSettings$1(); updateVis(); rebuildAll(); });
+      typeSel.addEventListener('change', () => { getSettings().windowBg = typeSel.value; saveSettings(); updateVis(); rebuildAll(); });
   }
 
   // ─── Quick Prompts Settings UI ────────────────────────────────────────────────
@@ -10004,18 +10188,18 @@ ${scopeHtml}
               const row = document.createElement('div'); row.className = 'scp-qp-settings-row';
               const iconBtn = document.createElement('button'); iconBtn.className = 'scp-qp-settings-icon-btn'; iconBtn.textContent = qp.icon || '⚡'; iconBtn.title = 'Change icon';
               Promise.resolve().then(function () { return uiWidgets; }).then(mod => {
-                  iconBtn.addEventListener('click', e => { e.stopPropagation(); mod.showQPIconPicker(iconBtn, qp.icon || '⚡', emoji => { getSettings().quickPrompts[idx].icon = emoji; saveSettings$1(); iconBtn.textContent = emoji; mod.renderQuickPromptsBar(); }); });
+                  iconBtn.addEventListener('click', e => { e.stopPropagation(); mod.showQPIconPicker(iconBtn, qp.icon || '⚡', emoji => { getSettings().quickPrompts[idx].icon = emoji; saveSettings(); iconBtn.textContent = emoji; mod.renderQuickPromptsBar(); }); });
               });
               const labelInput = document.createElement('input'); labelInput.type = 'text'; labelInput.className = 'scp-qp-settings-label-input scp-sp-input'; labelInput.placeholder = 'Label'; labelInput.value = qp.label || '';
-              labelInput.addEventListener('input', () => { getSettings().quickPrompts[idx].label = labelInput.value; saveSettings$1(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
+              labelInput.addEventListener('input', () => { getSettings().quickPrompts[idx].label = labelInput.value; saveSettings(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
               const moveUpBtn = document.createElement('button'); moveUpBtn.className = 'scp-qp-settings-move'; moveUpBtn.textContent = '↑'; moveUpBtn.title = 'Move up'; moveUpBtn.disabled = idx === 0;
-              moveUpBtn.addEventListener('click', () => { if (idx === 0) return; const arr = getSettings().quickPrompts; [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]]; saveSettings$1(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
+              moveUpBtn.addEventListener('click', () => { if (idx === 0) return; const arr = getSettings().quickPrompts; [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]]; saveSettings(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
               const moveDnBtn = document.createElement('button'); moveDnBtn.className = 'scp-qp-settings-move'; moveDnBtn.textContent = '↓'; moveDnBtn.title = 'Move down'; moveDnBtn.disabled = idx === prompts.length - 1;
-              moveDnBtn.addEventListener('click', () => { const arr = getSettings().quickPrompts; if (idx >= arr.length - 1) return; [arr[idx], arr[idx+1]] = [arr[idx+1], arr[idx]]; saveSettings$1(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
+              moveDnBtn.addEventListener('click', () => { const arr = getSettings().quickPrompts; if (idx >= arr.length - 1) return; [arr[idx], arr[idx+1]] = [arr[idx+1], arr[idx]]; saveSettings(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
               const delBtn = document.createElement('button'); delBtn.className = 'scp-qp-settings-del'; delBtn.innerHTML = I.trash; delBtn.title = 'Delete';
-              delBtn.addEventListener('click', async () => { const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Prompt', message: `Delete "${qp.label || 'this prompt'}"?` }); if (!ok) return; getSettings().quickPrompts.splice(idx, 1); saveSettings$1(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
+              delBtn.addEventListener('click', async () => { const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Prompt', message: `Delete "${qp.label || 'this prompt'}"?` }); if (!ok) return; getSettings().quickPrompts.splice(idx, 1); saveSettings(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
               const textArea = document.createElement('textarea'); textArea.className = 'scp-qp-settings-text scp-sp-textarea'; textArea.placeholder = 'Prompt text… (supports {{user}}, {{char}} macros)'; textArea.rows = 2; textArea.value = qp.text || '';
-              textArea.addEventListener('input', () => { getSettings().quickPrompts[idx].text = textArea.value; saveSettings$1(); });
+              textArea.addEventListener('input', () => { getSettings().quickPrompts[idx].text = textArea.value; saveSettings(); });
               const controls = document.createElement('div'); controls.className = 'scp-qp-settings-controls'; controls.appendChild(moveUpBtn); controls.appendChild(moveDnBtn); controls.appendChild(delBtn);
               const top = document.createElement('div'); top.className = 'scp-qp-settings-row-top'; top.appendChild(iconBtn); top.appendChild(labelInput); top.appendChild(controls);
               row.appendChild(top); row.appendChild(textArea); list.appendChild(row);
@@ -10026,7 +10210,7 @@ ${scopeHtml}
       const addBtn = document.createElement('button'); addBtn.className = 'scp-action-btn'; addBtn.style.marginTop = '8px'; addBtn.innerHTML = `${I.plus}<span>Add Prompt</span>`;
       addBtn.addEventListener('click', async () => {
           const label = await showCustomDialog({ type: 'prompt', title: 'New Quick Prompt', message: 'Label for this prompt:', placeholder: 'My Prompt' }); if (label === null) return;
-          getSettings().quickPrompts.push({ id: 'qp_'+Date.now(), label: label.trim() || 'Prompt', icon: '⚡', text: '' }); saveSettings$1(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar());
+          getSettings().quickPrompts.push({ id: 'qp_'+Date.now(), label: label.trim() || 'Prompt', icon: '⚡', text: '' }); saveSettings(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar());
       });
       container.appendChild(list); container.appendChild(addBtn);
   }
@@ -10142,11 +10326,11 @@ ${tc.result !== undefined ? `<div class="scp-tool-call-section-label" style="mar
       const ta = document.getElementById('scp-sp-tools-prompt');
       if (ta) {
           ta.value = s.toolsSystemPrompt || ''; 
-          ta.addEventListener('input', () => { getSettings().toolsSystemPrompt = ta.value; saveSettings$1(); });
+          ta.addEventListener('input', () => { getSettings().toolsSystemPrompt = ta.value; saveSettings(); });
       }
       
       document.getElementById('scp-sp-tools-reset')?.addEventListener('click', () => {
-          getSettings().toolsSystemPrompt = DEFAULT_TOOLS_PROMPT; saveSettings$1();
+          getSettings().toolsSystemPrompt = ''; saveSettings();
           if (ta) ta.value = DEFAULT_TOOLS_PROMPT;
       });
 
@@ -10156,11 +10340,11 @@ ${tc.result !== undefined ? `<div class="scp-tool-call-section-label" style="mar
       setV('scp-sp-tools-max-rounds', s.toolsMaxRounds ?? 5);
 
       document.getElementById('scp-sp-tools-enabled')?.addEventListener('change', e => {
-          getSettings().toolsEnabled = e.target.checked; saveSettings$1();
+          getSettings().toolsEnabled = e.target.checked; saveSettings();
           const stEl = document.getElementById('scp-tools-enabled'); if (stEl) stEl.checked = e.target.checked;
       });
       document.getElementById('scp-sp-tools-max-rounds')?.addEventListener('input', e => {
-          getSettings().toolsMaxRounds = parseInt(e.target.value) || 5; saveSettings$1();
+          getSettings().toolsMaxRounds = parseInt(e.target.value) || 5; saveSettings();
       });
 
       const streamingOff = s.forceStreaming === 'off';
@@ -10182,7 +10366,7 @@ ${tc.result !== undefined ? `<div class="scp-tool-call-section-label" style="mar
           row.appendChild(descEl);
           if (!isDisabledByStream) {
               row.querySelector(`#scp-sp-tool-${tool.id}`)?.addEventListener('change', e => {
-                  getSettings()[tool.settingKey] = e.target.checked; saveSettings$1();
+                  getSettings()[tool.settingKey] = e.target.checked; saveSettings();
               });
           }
           listEl.appendChild(row);
@@ -11316,7 +11500,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           }
 
           const { text: rawText, reasoning: fullReasoning } = result;
-          const fullText = normalizeCharNamesInBlock(rawText);
+          const fullText = rawText;
 
           msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null };
           msgData.content = fullText;
@@ -11903,7 +12087,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       }
 
       if (settingsChanged) {
-          saveSettings$1();
+          saveSettings();
       }
 
       state.lastChatLen = maxVal;
@@ -12371,7 +12555,9 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
   // ─── Chat Events (SillyTavern) ──────────────────────────────────────────────
 
   async function onChatChanged() {
-      if (state.generating) {
+      // CHAT_CHANGED also fires for the same chat (e.g. after chat edits); only a real
+      // switch should cancel a Copilot generation.
+      if (state.generating && !isBucketForCurrentChat()) {
           state.abortController?.abort();
           state.generating = false;
           setGeneratingState(false);
@@ -12432,7 +12618,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               isCommitted = true;
 
               const val = Math.max(0, parseInt(input.value) || 0);
-              getSettings().contextDepth = val; saveSettings$1();
+              getSettings().contextDepth = val; saveSettings();
               
               updateDepthSlidersMax();
               Promise.resolve().then(function () { return uiSettings; }).then(m => m.syncOverlayUI('contextDepth', val));
@@ -13211,7 +13397,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       s.minimized = true; 
       if(windowEl) windowEl.style.display = 'none'; 
       state.copilotActive = false;
-      saveSettings$1(); 
+      saveSettings(); 
       updateIconVisibility(iconEl);
   }
 
@@ -13222,7 +13408,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       s.minimized = false; 
       if(windowEl) windowEl.style.display = 'flex'; 
       state.copilotActive = true;
-      saveSettings$1(); 
+      saveSettings(); 
       updateIconVisibility(iconEl);
       restoreScrollPosition(); 
       bringWindowToFront();
@@ -13238,7 +13424,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       s.minimized = false; 
       if(windowEl) windowEl.style.display = 'none'; 
       state.copilotActive = false;
-      saveSettings$1(); 
+      saveSettings(); 
       updateIconVisibility(iconEl);
   }
 
@@ -13251,7 +13437,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       s.minimized = false;
       if(windowEl) windowEl.style.display = 'flex';
       state.copilotActive = true;
-      saveSettings$1(); 
+      saveSettings(); 
       updateIconVisibility(iconEl);
       restoreScrollPosition();
       bringWindowToFront();
@@ -13298,7 +13484,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               const url = await _uploadBgToST(file).catch(() => null);
               if (url) {
                   getSettings().windowBgUrl = url;
-                  saveSettings$1();
+                  saveSettings();
                   const urlInput = document.getElementById(inputId);
                   if (urlInput) urlInput.value = url;
                   applyWindowBackground();
@@ -13467,7 +13653,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               e.stopPropagation();
               const wasIncluded = cb.classList.contains('checked');
               setCharacterExcluded(getSettings(), entity.id, wasIncluded);
-              saveSettings$1();
+              saveSettings();
               cb.classList.toggle('checked', !wasIncluded);
           });
           row.appendChild(cb);
@@ -13709,7 +13895,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           
           if (ov !== undefined && ov === globalDefault) {
               setCharFieldOverride(s, entity.id, fieldDef.key, undefined);
-              saveSettings$1();
+              saveSettings();
               ov = undefined;
           }
           
@@ -13731,13 +13917,13 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           } else {
               setCharFieldOverride(s, entity.id, fieldDef.key, cb.checked);
           }
-          saveSettings$1();
+          saveSettings();
           refresh();
       });
 
       resetBtn.addEventListener('click', () => {
           setCharFieldOverride(getSettings(), entity.id, fieldDef.key, undefined);
-          saveSettings$1();
+          saveSettings();
           refresh();
       });
 
@@ -13935,7 +14121,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                   return c ? c.name : m;
               }).filter(Boolean);
               if (memberNames.length > 0) {
-                  parts.push(`\n<chat_group_members>\nThats chat with multiple characters. Current group members: ${memberNames.join(', ')}\n</chat_group_members>`);
+                  parts.push(`\n<chat_group_members>\nThis is a group chat. Members: ${memberNames.join(', ')}\n</chat_group_members>`);
               }
           }
       }
@@ -13949,7 +14135,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       {
       const editXml = buildCharacterContextBlock(settings);
       if (ctx.groupId) {
-          if (editXml) parts.push('\n\n' + editXml);
+          if (editXml) parts.push(`\n\n<character_information>\n${editXml}\n</character_information>`);
       } else {
           let inner = `Name: ${charInfo ? charInfo.name : (ctx.name2 || 'Character')}\n`;
           if (editXml) inner += '\n' + editXml;
@@ -13976,7 +14162,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                   if (personaContent) inner += `\n${personaContent}`;
               }
           }
-          parts.push(`\n\n<{{user}}_persona>\n${inner}\n</{{user}}_persona>`);
+          parts.push(`\n\n<user_persona>\n${inner}\n</user_persona>`);
       }
 
       const aiInstructions = buildLBAIInstructions(settings).trim();
@@ -13987,7 +14173,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
       const modules = [memoryAIInstr, aiInstructions, charEditDirective, chatEditDirective, toolsBlock].filter(Boolean);
       if (modules.length > 0) {
-          const reminder = `\n\n[SYSTEM REMINDER: If you intend to modify anything you MUST write the appropriate structured markdown block containing your instructions. The system strictly relies on these blocks to parse and apply your changes automatically. Simply describing your changes in plain text without outputting the corresponding markdown block will result in failure to apply them.]`;
+          const reminder = `\n\n[Reminder: changes are only applied through the structured blocks described above. Describing a change in plain text does not apply it.]`;
           parts.push(`\n\n<modules>\n${modules.join('\n\n')}${reminder}\n</modules>`);
       }
 
@@ -14043,8 +14229,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       } catch(_) {}
       
       if (depth === 0) return [];
-      const total = ctx.chat.length;
-      return ctx.chat.slice(-depth).map((m, i) => extractData(m, total - depth + i));
+      const start = Math.max(0, ctx.chat.length - depth);
+      return ctx.chat.slice(start).map((m, i) => extractData(m, start + i));
   }
 
   async function assembleMessages(session, settings, pendingUserText, pendingAtts = null) {
@@ -14904,9 +15090,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           }
 
           const { text: rawFullText, reasoning: fullReasoning } = result;
-          const rawNormalized = normalizeCharNamesInBlock(rawFullText); 
-          processMemoryUpdates(rawNormalized, streamMsgId);
-          const fullText = stripMemoryBlock(rawNormalized);
+          processMemoryUpdates(rawFullText, streamMsgId);
+          const fullText = stripMemoryBlock(rawFullText);
 
           if (streamMsgId) {
               const msg = session.messages.find(m => m.id === streamMsgId);
@@ -15393,13 +15578,13 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const saveBtn = mkBtn('floppy-disk', 'Save preset', '', async () => {
           if (_activeName && _activeSource === 'custom') {
               s[dictKey][_activeName] = getTextFn();
-              saveSettings$1();
+              saveSettings();
               toastr.success(`Saved preset "${escHtml(_activeName)}"`, EXT_DISPLAY);
           } else {
               const name = await showCustomDialog({ type: 'prompt', title: 'Save Prompt Preset', message: 'Preset name:', placeholder: 'My Preset' });
               if (!name?.trim()) return;
               s[dictKey][name.trim()] = getTextFn();
-              saveSettings$1();
+              saveSettings();
               setActive(name.trim(), 'custom');
               toastr.success(`Saved preset "${escHtml(name.trim())}"`, EXT_DISPLAY);
           }
@@ -15411,7 +15596,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           if (!newName?.trim() || newName.trim() === _activeName) return;
           s[dictKey][newName.trim()] = s[dictKey][_activeName];
           delete s[dictKey][_activeName];
-          saveSettings$1();
+          saveSettings();
           setActive(newName.trim(), 'custom');
       });
 
@@ -15420,7 +15605,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Preset', message: `Delete "${_activeName}"?` });
           if (!ok) return;
           delete s[dictKey][_activeName];
-          saveSettings$1();
+          saveSettings();
           setActive('', '');
       });
 
@@ -15486,7 +15671,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               if (!s.quickPromptSets[value]) return;
               s.quickPrompts = JSON.parse(JSON.stringify(s.quickPromptSets[value]));
               s.activeQuickPromptSet = value;
-              saveSettings$1();
+              saveSettings();
               setActive(value);
               renderQuickPromptsBar();
               if (onSetLoaded) onSetLoaded();
@@ -15513,7 +15698,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           }
           s.quickPromptSets[name] = JSON.parse(JSON.stringify(s.quickPrompts));
           s.activeQuickPromptSet = name;
-          saveSettings$1();
+          saveSettings();
           setActive(name);
           toastr.success(`Saved set "${escHtml(name)}"`, EXT_DISPLAY);
       });
@@ -15524,7 +15709,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const n = name.trim();
           s.quickPromptSets[n] = JSON.parse(JSON.stringify(s.quickPrompts));
           s.activeQuickPromptSet = n;
-          saveSettings$1();
+          saveSettings();
           setActive(n);
           toastr.success(`Created set "${escHtml(n)}"`, EXT_DISPLAY);
       });
@@ -15537,7 +15722,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           s.quickPromptSets[n] = s.quickPromptSets[_activeName];
           delete s.quickPromptSets[_activeName];
           if (s.activeQuickPromptSet === _activeName) s.activeQuickPromptSet = n;
-          saveSettings$1();
+          saveSettings();
           setActive(n);
       });
 
@@ -15547,7 +15732,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           if (!ok) return;
           delete s.quickPromptSets[_activeName];
           if (s.activeQuickPromptSet === _activeName) s.activeQuickPromptSet = '';
-          saveSettings$1();
+          saveSettings();
           setActive('');
       });
 
@@ -15715,11 +15900,11 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const currentVersion = current?.version || '';
       if (s.changelogAutoShow && current?.announce !== false && s.lastSeenVersion !== currentVersion) {
           s.lastSeenVersion = currentVersion;
-          saveSettings$1();
+          saveSettings();
           setTimeout(openChangelog, 800);
       } else if (s.lastSeenVersion !== currentVersion) {
           s.lastSeenVersion = currentVersion;
-          saveSettings$1();
+          saveSettings();
       }
   }
 
@@ -16117,7 +16302,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           }
           delete s.completionSoundData;
           delete s.completionSoundFileName;
-          saveSettings$1();
+          saveSettings();
       }
 
       const isSP = container.id === 'scp-sp-sound-settings';
@@ -16166,7 +16351,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           if (!typeSel.value) {
               typeSel.value = 'none';
               s.completionSound = 'none';
-              saveSettings$1();
+              saveSettings();
           }
       };
       renderDropdown();
@@ -16206,7 +16391,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               const id = 'snd_' + Date.now();
               s2.customSounds[id] = { name: file.name, data: dataUrl };
               s2.completionSound = id;
-              saveSettings$1();
+              saveSettings();
               
               const allContainers = [document.getElementById('scp-sound-settings'), document.getElementById('scp-sp-sound-settings')].filter(Boolean);
               allContainers.forEach(c => buildSoundSettingsUI(c));
@@ -16227,7 +16412,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               const s2 = getSettings();
               delete s2.customSounds[val];
               s2.completionSound = 'none';
-              saveSettings$1();
+              saveSettings();
               renderDropdown();
               updateCustomActions();
               
@@ -16247,7 +16432,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
       typeSel.addEventListener('change', () => {
           getSettings().completionSound = typeSel.value;
-          saveSettings$1();
+          saveSettings();
           updateCustomActions();
           const otherContainers = [document.getElementById('scp-sound-settings'), document.getElementById('scp-sp-sound-settings')].filter(c => c && c !== container);
           otherContainers.forEach(c => buildSoundSettingsUI(c));
@@ -16287,7 +16472,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       volSlider.addEventListener('input', () => { volVal.textContent = `${volSlider.value}%`; });
       volSlider.addEventListener('change', () => { 
           getSettings().completionSoundVolume = parseInt(volSlider.value); 
-          saveSettings$1(); 
+          saveSettings(); 
           const otherContainers2 = [document.getElementById('scp-sound-settings'), document.getElementById('scp-sp-sound-settings')].filter(c => c && c !== container);
           otherContainers2.forEach(c => buildSoundSettingsUI(c));
       });
@@ -16657,7 +16842,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       document.getElementById('scp-fav-close')?.addEventListener('click', () => closeFavoritesPanel());
 
       document.getElementById('scp-qp-toggle-btn')?.addEventListener('click', () => {
-          const s = getSettings(); s.quickPromptsVisible = !s.quickPromptsVisible; saveSettings$1();
+          const s = getSettings(); s.quickPromptsVisible = !s.quickPromptsVisible; saveSettings();
           Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar());
       });
 
@@ -16792,7 +16977,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           depthSlider.addEventListener('change', () => {
               const val = parseInt(depthSlider.value);
               getSettings().contextDepth = val; 
-              saveSettings$1();
+              saveSettings();
               syncOverlayUI('contextDepth', val);
               updateMsgCount(getCurrentSession());
           });

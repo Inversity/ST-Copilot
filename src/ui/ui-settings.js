@@ -85,7 +85,8 @@ const _SETTINGS_DEF = [
 
     // ── Prompts ───────────────────────────────────────────────────────────────
     { key: 'systemPrompt', stId: 'scp-sysprompt', spId: 'scp-sp-sysprompt', type: 'textarea', updCtx: true, profileKey: true,
-      fromSetting: s => s.systemPrompt || DEFAULT_SYSTEM_PROMPT },
+      fromSetting: s => s.systemPrompt || DEFAULT_SYSTEM_PROMPT,
+      toVal: v => v.trim() === DEFAULT_SYSTEM_PROMPT.trim() ? '' : v },
 
     // ── Character Edit ────────────────────────────────────────────────────────
     { key: 'charEditAIEnabled', stId: 'scp-char-edit-enabled', spId: 'scp-sp-char-edit-enabled', type: 'checkbox', updCtx: true, profileKey: true },
@@ -108,7 +109,8 @@ const _SETTINGS_DEF = [
       }
     },
     { key: 'lorebookManagePrompt', stId: 'scp-lb-manage-prompt', spId: 'scp-sp-lb-manage-prompt', type: 'textarea', profileKey: true,
-      fromSetting: s => s.lorebookManagePrompt || DEFAULT_LB_MANAGE_PROMPT },
+      fromSetting: s => s.lorebookManagePrompt || DEFAULT_LB_MANAGE_PROMPT,
+      toVal: v => v.trim() === DEFAULT_LB_MANAGE_PROMPT.trim() ? '' : v },
     { key: 'lorebookSTScanDepth',     stId: 'scp-lb-st-scan-depth',      spId: 'scp-sp-lb-st-scan-depth',      type: 'input', toVal: Number, profileKey: true },
     { key: 'lorebookCopilotScanDepth', stId: 'scp-lb-copilot-scan-depth', spId: 'scp-sp-lb-copilot-scan-depth', type: 'input', toVal: Number, profileKey: true },
 
@@ -123,7 +125,8 @@ const _SETTINGS_DEF = [
     { key: 'memoryInject',       stId: 'scp-memory-inject',  spId: 'scp-sp-memory-inject',  type: 'checkbox', updCtx: true },
     { key: 'memoryNotify',       stId: null,                 spId: 'scp-sp-memory-notify',  type: 'checkbox' },
     { key: 'memoryManagePrompt', stId: 'scp-memory-prompt',  spId: 'scp-sp-memory-prompt',  type: 'textarea', updCtx: true,
-      fromSetting: s => s.memoryManagePrompt || DEFAULT_MEMORY_PROMPT },
+      fromSetting: s => s.memoryManagePrompt || DEFAULT_MEMORY_PROMPT,
+      toVal: v => v.trim() === DEFAULT_MEMORY_PROMPT.trim() ? '' : v },
 
     // ── Tools ─────────────────────────────────────────────────────────────────
     { key: 'toolsEnabled', stId: 'scp-tools-enabled', spId: 'scp-sp-tools-enabled', type: 'checkbox', updCtx: true },
@@ -876,7 +879,7 @@ export function setupSettingsHandlers() {
     // ── Reset buttons ──
     const _resetPrompt = async (key, defaultVal, stId, spId, label) => {
         const ok = await showCustomDialog({ type: 'confirm', title: `Reset ${label}`, message: `Reset to default?` }); if (!ok) return;
-        getSettings()[key] = defaultVal === '' ? '' : undefined; if (defaultVal !== '') getSettings()[key] = defaultVal;
+        getSettings()[key] = '';
         saveSettings(); _markDirty('config');
         const displayVal = defaultVal || (key === 'charEditPrompt' ? DEFAULT_CHAR_EDIT_DIRECTIVE.trim() : key === 'chatEditPrompt' ? DEFAULT_CHAT_EDIT_DIRECTIVE.trim() : key === 'lorebookManagePrompt' ? DEFAULT_LB_MANAGE_PROMPT : key === 'memoryManagePrompt' ? DEFAULT_MEMORY_PROMPT : DEFAULT_SYSTEM_PROMPT);
         [stId, spId].forEach(id => { const el = document.getElementById(id); if (el) el.value = displayVal; });
@@ -892,13 +895,13 @@ export function setupSettingsHandlers() {
     });
     document.getElementById('scp-reset-lb-prompt')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Lorebook Prompt', message: 'Reset to default?' }); if (!ok) return;
-        getSettings().lorebookManagePrompt = DEFAULT_LB_MANAGE_PROMPT; saveSettings();
+        getSettings().lorebookManagePrompt = ''; saveSettings();
         ['scp-lb-manage-prompt', 'scp-sp-lb-manage-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_LB_MANAGE_PROMPT; });
         toastr.success('Lorebook prompt reset.', EXT_DISPLAY);
     });
     document.getElementById('scp-reset-memory-prompt')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset memory prompt to default?' }); if (!ok) return;
-        getSettings().memoryManagePrompt = DEFAULT_MEMORY_PROMPT; saveSettings();
+        getSettings().memoryManagePrompt = ''; saveSettings();
         ['scp-memory-prompt', 'scp-sp-memory-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_MEMORY_PROMPT; });
         import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success('Prompt reset.', EXT_DISPLAY);
     });
@@ -1090,13 +1093,13 @@ export function setupSettingsPanelListeners() {
     // ── SP Reset buttons ──
     document.getElementById('scp-sp-reset-prompt')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset System Prompt', message: 'Reset to default?' }); if (!ok) return;
-        getSettings().systemPrompt = DEFAULT_SYSTEM_PROMPT; saveSettings();
+        getSettings().systemPrompt = ''; saveSettings();
         ['scp-sp-sysprompt', 'scp-sysprompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_SYSTEM_PROMPT; });
         import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success('System prompt reset.', EXT_DISPLAY);
     });
     document.getElementById('scp-sp-reset-lb-prompt')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset LB Prompt', message: 'Reset to default?' }); if (!ok) return;
-        getSettings().lorebookManagePrompt = DEFAULT_LB_MANAGE_PROMPT; saveSettings();
+        getSettings().lorebookManagePrompt = ''; saveSettings();
         ['scp-sp-lb-manage-prompt', 'scp-lb-manage-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_LB_MANAGE_PROMPT; });
         toastr.success('Lorebook prompt reset.', EXT_DISPLAY);
     });
@@ -1114,13 +1117,13 @@ export function setupSettingsPanelListeners() {
     });
     document.getElementById('scp-sp-reset-memory-prompt')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset memory prompt to default?' }); if (!ok) return;
-        getSettings().memoryManagePrompt = DEFAULT_MEMORY_PROMPT; saveSettings();
+        getSettings().memoryManagePrompt = ''; saveSettings();
         ['scp-sp-memory-prompt', 'scp-memory-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_MEMORY_PROMPT; });
         toastr.success('Prompt reset.', EXT_DISPLAY);
     });
     document.getElementById('scp-sp-tools-reset')?.addEventListener('click', async () => {
         const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset tools prompt to default?' }); if (!ok) return;
-        getSettings().toolsSystemPrompt = DEFAULT_TOOLS_PROMPT; saveSettings();
+        getSettings().toolsSystemPrompt = ''; saveSettings();
         const ta = document.getElementById('scp-sp-tools-prompt'); if (ta) ta.value = DEFAULT_TOOLS_PROMPT;
         toastr.success('Tools prompt reset.', EXT_DISPLAY);
     });

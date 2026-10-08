@@ -245,20 +245,22 @@ export function reconstructCharChangesBlock(pendingChanges) {
     if (!pendingChanges.length) return '';
     let xml = '```character-changes\n';
     for (const c of pendingChanges) {
+        // Keep the routing attribute, or group-chat edits lose their target after a reload.
+        const ch = c.char ? ` char="${String(c.char).replace(/"/g, "'")}"` : '';
         if (c.action === 'replace') {
-            xml += `<replace field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>\n`;
+            xml += `<replace${ch} field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>\n`;
             for (const p of c.patches) {
                 xml += `<<<<<<< SEARCH\n${p.search}\n=======\n${p.replace}\n>>>>>>> REPLACE\n`;
             }
             xml += `</replace>\n`;
         } else if (c.action === 'overwrite') {
-            xml += `<overwrite field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>${c.value}</overwrite>\n`;
+            xml += `<overwrite${ch} field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>${c.value}</overwrite>\n`;
         } else if (c.action === 'append') {
-            xml += `<append field="${c.field}">${c.value}</append>\n`;
+            xml += `<append${ch} field="${c.field}">${c.value}</append>\n`;
         } else if (c.action === 'prepend') {
-            xml += `<prepend field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>${c.value}</prepend>\n`;
+            xml += `<prepend${ch} field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>${c.value}</prepend>\n`;
         } else if (c.action === 'append_text') {
-            xml += `<append_text field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>${c.value}</append_text>\n`;
+            xml += `<append_text${ch} field="${c.field}"${c.index ? ` index="${c.index}"` : ''}>${c.value}</append_text>\n`;
         }
     }
     xml += '```';
@@ -470,6 +472,7 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
 
     const getAppliedResult = (change) => {
         if (change.action === 'overwrite') return change.value || '';
+        if (change.action === 'append' && change.field === 'alternate_greetings') return change.value || '';
         let current;
         if (change.field === 'alternate_greetings') {
             const idx = (change.index || 1) - 1;
@@ -477,6 +480,9 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
         } else {
             current = String(getCharFieldValue(char, change.field));
         }
+        // Must mirror applyCharChanges.
+        if (change.action === 'prepend') return (change.value || '') + (current ? '\n\n' + current : '');
+        if (change.action === 'append_text') return (current ? current + '\n\n' : '') + (change.value || '');
         for (const patch of (change.patches || [])) {
             const { result } = applySearchReplaceToField(current, patch.search || patch.anchor || '', patch.replace || '');
             current = result;

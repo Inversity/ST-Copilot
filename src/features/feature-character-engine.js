@@ -1,5 +1,5 @@
 import { EXT_DISPLAY, CHAR_EDIT_FORMAT_BLOCK, CHAR_CREATE_FORMAT_BLOCK, DEFAULT_CHAR_EDIT_DIRECTIVE } from '../constants.js';
-import { getSettings, getCurrentSession } from '../session.js';
+import { getSettings, saveSettings, getCurrentSession } from '../session.js';
 import { _dbgAdd } from '../utils/util-debug.js';
 import { escHtml } from '../utils/util-dom.js';
 import { _sanitizeProposedTags, applySearchReplaceToField, _repairJSON, _ensureWrapped } from '../utils/util-text.js';
@@ -219,6 +219,12 @@ export function groupChangesByCharacter(changes) {
 
     for (const change of changes) {
         let resolvedChar = change.char ? resolveCharacterByName(change.char, entities) : null;
+        if (!resolvedChar && change.char && entities.length > 1 && change.field !== 'user_persona') {
+            // Guessing in a group chat could write one member's text into another member's card.
+            _dbgAdd('CHAR_ROUTE_UNRESOLVED', { char: change.char, field: change.field });
+            if (typeof toastr !== 'undefined') toastr.warning(`[CharEdit] No group member named "${escHtml(change.char)}"; skipped its "${escHtml(change.field)}" change.`, EXT_DISPLAY, { timeOut: 8000 });
+            continue;
+        }
         if (!resolvedChar) {
             if (entities.length === 1) resolvedChar = entities[0].char;
             else resolvedChar = ctx.characters?.[ctx.characterId] || entities[0]?.char || null;
@@ -231,30 +237,73 @@ export function groupChangesByCharacter(changes) {
     return Array.from(groups.values());
 }
 
+// Accepts double-quoted, single-quoted and unquoted attribute values.
 function _parseTagAttrs(attrStr) {
     const attrs = {};
-    const re = /([\w-]+)="([^"]*)"/g;
+    const re = /([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g;
     let m;
-    while ((m = re.exec(attrStr || '')) !== null) attrs[m[1]] = m[2];
+    while ((m = re.exec(attrStr || '')) !== null) attrs[m[1]] = m[2] ?? m[3] ?? m[4];
+    if (attrs.field) attrs.field = _normalizeFieldName(attrs.field);
     return attrs;
 }
 
+// Common names models use for card fields, mapped to the internal field ids.
+const FIELD_ALIASES = {
+    first_message: 'first_mes', greeting: 'first_mes',
+    example_dialogue: 'mes_example', example_dialogues: 'mes_example', mes_examples: 'mes_example', examples: 'mes_example',
+    main_prompt: 'system_prompt', system_prompt_override: 'system_prompt',
+    post_history: 'post_history_instructions', jailbreak: 'post_history_instructions',
+    persona: 'user_persona', persona_description: 'user_persona',
+    alternate_greeting: 'alternate_greetings', alt_greetings: 'alternate_greetings',
+    author_note: 'authors_note', authors_notes: 'authors_note',
+};
+
+function _normalizeFieldName(field) {
+    const f = String(field).trim();
+    if (/^evolutia_(char|user):/.test(f)) return f;
+    const key = f.toLowerCase().replace(/[\s-]+/g, '_');
+    return FIELD_ALIASES[key] || key;
+}
+
 function _matchTagsWithAttrs(xml, tagName) {
-    const re = new RegExp(`<${tagName}((?:\\s+[\\w-]+="[^"]*")*)\\s*>([\\s\\S]*?)<\\/${tagName}>`, 'g');
+    const re = new RegExp(`<${tagName}(\\s[^>]*)?>([\\s\\S]*?)<\\/${tagName}\\s*>`, 'g');
     const out = [];
     let m;
     while ((m = re.exec(xml)) !== null) out.push({ attrs: _parseTagAttrs(m[1]), content: m[2] });
     return out;
 }
 
-export function parseCharChangesFromText(text) {
-    let raw = null;
-    const strict = text.match(/```character-changes\s*([\s\S]*?)```/);
-    if (strict) raw = strict[1];
-    else {
-        const open = text.match(/```character-changes\s*([\s\S]*?)(?=```|$)/);
-        if (open) raw = open[1];
+// Block names the model may use. The prompt asks for the first one; the others are
+// tolerated because older prompts (and some models) use them.
+const CHAR_CHANGES_BLOCK = '(?:character-changes|character-edits?)(?![\\w-])';
+const CHAR_CREATE_BLOCK = '(?:character-creation|character-create)(?![\\w-])';
+
+function _extractFencedBlock(text, namePattern) {
+    const strict = text.match(new RegExp('```' + namePattern + '[^\\S\\r\\n]*\\r?\\n?([\\s\\S]*?)```'));
+    if (strict) return strict[1];
+    const open = text.match(new RegExp('```' + namePattern + '[^\\S\\r\\n]*\\r?\\n?([\\s\\S]*)$'));
+    return open ? open[1] : null;
+}
+
+const HAS_DIFF_MARKER_RE = /<{5,}[ \t]*(?:SEARCH|ANCHOR)/;
+
+// Parses "<<<<<<< ANCHOR / ======= / >>>>>>> REPLACE" patches. Tolerates the anchor on the
+// same line as the marker, extra spaces, and a missing closing marker.
+export function parseAnchorPatches(content) {
+    const re = /<{5,}[ \t]*(?:SEARCH|ANCHOR)[ \t]*\r?\n?([\s\S]*?)\r?\n?[ \t]*={5,}[ \t]*\r?\n?([\s\S]*?)(?:\r?\n?[ \t]*>{5,}[ \t]*REPLACE[ \t]*|(?=<{5,}[ \t]*(?:SEARCH|ANCHOR))|$)/g;
+    const patches = [];
+    let m;
+    while ((m = re.exec(content)) !== null) {
+        if (m[0] === '') { re.lastIndex++; continue; }
+        const search = m[1].trim();
+        if (!search) continue;
+        patches.push({ search, replace: m[2].replace(/^\r?\n/, '').replace(/\r?\n[ \t]*$/, '') });
     }
+    return patches;
+}
+
+export function parseCharChangesFromText(text) {
+    const raw = _extractFencedBlock(text, CHAR_CHANGES_BLOCK);
     if (!raw) return null;
     const xml = _repairCharChangesXML(raw);
     const changes = [];
@@ -267,22 +316,14 @@ export function parseCharChangesFromText(text) {
         const index = attrs.index ? parseInt(attrs.index, 10) : undefined;
         const key = `${charName || ''}::${field}${index !== undefined ? `_${index}` : ''}`;
 
-        const diffRe = /<<<<<<< (?:SEARCH|ANCHOR)\r?\n([\s\S]*?)\r?\n=+\r?\n([\s\S]*?)\r?\n>>>>>>> REPLACE/g;
-        let diffMatch;
-        const patches = [];
-        while ((diffMatch = diffRe.exec(content)) !== null) {
-            let searchVal = diffMatch[1];
-            let replaceVal = diffMatch[2];
-            if (field === 'tags') { searchVal = _sanitizeProposedTags(searchVal); replaceVal = _sanitizeProposedTags(replaceVal); }
-            patches.push({ search: searchVal, replace: replaceVal });
-        }
-        if (!patches.length) {
-            const searchOnly = content.match(/<<<<<<< (?:SEARCH|ANCHOR)\r?\n([\s\S]*?)\r?\n=+/);
-            if (searchOnly) {
-                let searchVal = searchOnly[1];
-                if (field === 'tags') searchVal = _sanitizeProposedTags(searchVal);
-                patches.push({ search: searchVal, replace: '' });
-            }
+        const patches = parseAnchorPatches(content).map(p => field === 'tags'
+            ? { search: _sanitizeProposedTags(p.search), replace: _sanitizeProposedTags(p.replace) }
+            : p);
+        if (!patches.length && HAS_DIFF_MARKER_RE.test(content)) {
+            // A broken patch must never fall through to a full overwrite of the field.
+            // (Also the normal state of a patch that is still streaming in.)
+            _dbgAdd('CHAR_PATCH_UNPARSEABLE', { field, content: content.slice(0, 300) });
+            continue;
         }
         if (!patches.length) {
             let val = content.trim();
@@ -315,7 +356,9 @@ export function parseCharChangesFromText(text) {
         if (!attrs.field) continue;
         let val = content.trim();
         if (attrs.field === 'tags') val = _sanitizeProposedTags(val);
-        changes.push({ field: attrs.field, action: 'append', value: val, char: attrs.char || null });
+        // <append> adds a new entry for alternate_greetings; for text fields it means append_text.
+        const action = attrs.field === 'alternate_greetings' ? 'append' : 'append_text';
+        changes.push({ field: attrs.field, action, value: val, char: attrs.char || null });
     }
 
     for (const { attrs, content } of _matchTagsWithAttrs(xml, 'prepend')) {
@@ -379,31 +422,18 @@ export function _repairCharChangesXML(raw) {
         }
     }
 
-    s = s.replace(/(<<<<<<< (?:SEARCH|ANCHOR)\r?\n[\s\S]*?)(?=<<<<<<< (?:SEARCH|ANCHOR)|$)/g, (m) => {
-        if (!/=+\r?\n/.test(m) && !m.includes('=======')) return m + '\n=======\n>>>>>>> REPLACE\n';
-        if (!m.includes('>>>>>>> REPLACE')) return m + '\n>>>>>>> REPLACE\n';
-        return m;
-    });
-
     return s;
 }
 
 export function stripCharChangesBlock(text) {
     return text
-        .replace(/```character-changes[\s\S]*?```/g, '')
-        .replace(/```character-changes[\s\S]*/g, '')
+        .replace(new RegExp('```' + CHAR_CHANGES_BLOCK + '[\\s\\S]*?```', 'g'), '')
+        .replace(new RegExp('```' + CHAR_CHANGES_BLOCK + '[\\s\\S]*', 'g'), '')
         .trim();
 }
 
 export function parseCharCreationFromText(text) {
-    let raw = null;
-    const strict = text.match(/```character-create\s*([\s\S]*?)```/);
-    if (strict) {
-        raw = strict[1].trim();
-    } else {
-        const open = text.match(/```character-create\s*([\s\S]*?)(?=```|$)/);
-        if (open) raw = open[1].trim();
-    }
+    const raw = _extractFencedBlock(text, CHAR_CREATE_BLOCK)?.trim();
     if (!raw) return null;
     try {
         const data = JSON.parse(raw);
@@ -425,8 +455,8 @@ export function parseCharCreationFromText(text) {
 
 export function stripCharCreationBlock(text) {
     return text
-        .replace(/```character-create[\s\S]*?```/g, '')
-        .replace(/```character-create[\s\S]*/g, '')
+        .replace(new RegExp('```' + CHAR_CREATE_BLOCK + '[\\s\\S]*?```', 'g'), '')
+        .replace(new RegExp('```' + CHAR_CREATE_BLOCK + '[\\s\\S]*', 'g'), '')
         .trim();
 }
 
@@ -454,6 +484,24 @@ export function getCharFieldValue(char, fieldId) {
     if (fieldId === 'system_prompt') return d.system_prompt || char.system_prompt || '';
     if (fieldId === 'post_history_instructions') return d.post_history_instructions || char.post_history_instructions || '';
     return d[fieldId] || char[fieldId] || '';
+}
+
+// True when `char` is the character loaded in SillyTavern's character editor. Writing into
+// the editor's textareas (and firing input) makes ST autosave the form for that character,
+// so doing it for any other character would overwrite the wrong card.
+function _isOpenInEditor(ctx, char) {
+    if (ctx.menuType === 'create') return false;
+    if (typeof document !== 'undefined' && document.getElementById('form_create')?.getAttribute('actiontype') === 'createcharacter') return false;
+    const open = ctx.characterId !== undefined && ctx.characterId !== null ? ctx.characters?.[ctx.characterId] : null;
+    return !!open && open.avatar === char.avatar;
+}
+
+function _emitCharacterEdited(ctx, char) {
+    const es = ctx.eventSource || window.eventSource;
+    const et = ctx.event_types || window.event_types;
+    if (!es || !et?.CHARACTER_EDITED) return;
+    const id = (ctx.characters || []).findIndex(c => c.avatar === char.avatar);
+    es.emit(et.CHARACTER_EDITED, { detail: { id: id >= 0 ? id : ctx.characterId, character: char } });
 }
 
 export async function saveCharacterField(char, fieldId, newValue) {
@@ -501,12 +549,7 @@ export async function saveCharacterField(char, fieldId, newValue) {
             throw new Error(`HTTP ${res.status}: ${errText}`);
         }
         
-        const es = ctx.eventSource || window.eventSource;
-        const et = ctx.event_types || window.event_types;
-        if (es && et?.CHARACTER_EDITED) {
-            es.emit(et.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: char } });
-            es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
-        }
+        _emitCharacterEdited(ctx, char);
         return;
     }
 
@@ -547,7 +590,9 @@ export async function saveCharacterField(char, fieldId, newValue) {
         const trimmedName = (newValue || '').trim();
         if (!trimmedName) throw new Error('Character name cannot be empty');
         
-        if (typeof ctx.executeSlashCommandsWithOptions === 'function') {
+        // /rename-char renames the selected character, so only use it for that one.
+        const isSelected = ctx.characters?.[ctx.characterId]?.avatar === char.avatar;
+        if (isSelected && typeof ctx.executeSlashCommandsWithOptions === 'function') {
             const safeName = trimmedName.replace(/"/g, '\\"');
             await ctx.executeSlashCommandsWithOptions(`/rename-char silent=true chats=true "${safeName}"`);
             return;
@@ -566,12 +611,7 @@ export async function saveCharacterField(char, fieldId, newValue) {
         if (char.data) char.data.name = trimmedName;
         if (typeof ctx.getCharacters === 'function') await ctx.getCharacters().catch(() => {});
         else if (typeof window.getCharacters === 'function') await window.getCharacters().catch(() => {});
-        const es = ctx.eventSource || window.eventSource;
-        const et = ctx.event_types || window.event_types;
-        if (es && et?.CHARACTER_EDITED) {
-            es.emit(et.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: char } });
-            es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
-        }
+        _emitCharacterEdited(ctx, char);
         if (typeof window.PrintCharacterList === 'function') window.PrintCharacterList();
         return;
     }
@@ -679,12 +719,7 @@ export async function saveCharacterField(char, fieldId, newValue) {
             } catch(e) { console.warn("[ST-Copilot] Failed to import tags via core context:", e); }
         }
 
-        const es = ctx.eventSource || window.eventSource;
-        const et = ctx.event_types || window.event_types;
-        if (es && et?.CHARACTER_EDITED) {
-            es.emit(et.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: char } });
-            es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
-        }
+        _emitCharacterEdited(ctx, char);
         return;
     }
     
@@ -709,7 +744,21 @@ export async function saveCharacterField(char, fieldId, newValue) {
         headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+        // edit-attribute rejects fields missing from the stored card (e.g. older cards
+        // without system_prompt); merge-attributes can add them.
+        const errText = await res.text().catch(() => '');
+        if (res.status !== 400 || !/invalid field/i.test(errText)) throw new Error(`HTTP ${res.status}: ${errText}`);
+        const mergeRes = await fetch('/api/characters/merge-attributes', {
+            method: 'POST',
+            headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ avatar: char.avatar, data: { [fieldId]: newValue } }),
+        });
+        if (!mergeRes.ok) {
+            const mergeErr = await mergeRes.text().catch(() => mergeRes.statusText);
+            throw new Error(`HTTP ${mergeRes.status}: ${mergeErr}`);
+        }
+    }
 
     const domMap = {
         description: 'description_textarea',
@@ -721,24 +770,21 @@ export async function saveCharacterField(char, fieldId, newValue) {
         post_history_instructions: 'post_history_instructions_textarea',
     };
 
-    if (domMap[fieldId]) {
-        const el = document.getElementById(domMap[fieldId]);
-        if (el) {
-            el.value = newValue;
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-    } else if (fieldId === 'alternate_greetings') {
-        if (typeof window.printAlternateGreetings === 'function') {
-            window.printAlternateGreetings();
+    if (_isOpenInEditor(ctx, char)) {
+        if (domMap[fieldId]) {
+            const el = document.getElementById(domMap[fieldId]);
+            if (el) {
+                el.value = newValue;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        } else if (fieldId === 'alternate_greetings') {
+            if (typeof window.printAlternateGreetings === 'function') {
+                window.printAlternateGreetings();
+            }
         }
     }
 
-    const es = ctx.eventSource || window.eventSource;
-    const et = ctx.event_types || window.event_types;
-    if (es && et?.CHARACTER_EDITED) {
-        es.emit(et.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: char } });
-        es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
-    }
+    _emitCharacterEdited(ctx, char);
 }
 
 export async function createCharacterAPI(data) {

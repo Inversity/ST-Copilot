@@ -511,7 +511,7 @@ export function setupMemorySettingsUI() {
         newResetBtn.addEventListener('click', async () => {
             const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset memory prompt to default?' });
             if (!ok) return;
-            getSettings().memoryManagePrompt = DEFAULT_MEMORY_PROMPT;
+            getSettings().memoryManagePrompt = '';
             saveSettings();
             const el = document.getElementById('scp-sp-memory-prompt'); if (el) el.value = DEFAULT_MEMORY_PROMPT;
             const stEl = document.getElementById('scp-memory-prompt'); if (stEl) stEl.value = DEFAULT_MEMORY_PROMPT;
