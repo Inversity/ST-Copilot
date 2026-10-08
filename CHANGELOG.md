@@ -2,6 +2,13 @@
 
 This fork continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker, whose last release was 2.9.0 (2026-07-02). Versions before 3.0.0 are upstream's and are listed in the extension's "What's New" panel.
 
+## 3.0.1 (2026-10-08)
+
+- **Swipes run tool calls.** A swipe that called a tool (reading prompts, card fields, lorebook entries) used to stop there with a tool card that never ran. Swipes now use the same tool loop as new replies, and each swipe keeps its own tool cards.
+- **Reasoning timer** no longer stops at the first stray newline. Some providers send one before the reply, which froze the timer ("Thought for 10s") and left the reply area blank while the model kept thinking. Reasoning that resumes after the reply starts is counted too.
+- **Stream render errors are logged** to the console and the debug log (`STREAM_RENDER_ERROR`) instead of freezing the reply silently.
+- A finished reasoning block is no longer re-rendered on every frame.
+
 ## 3.0.0 (2026-10-08)
 
 First release of the fork. It merges the useful work from other forks, fixes the bugs behind unreliable card edits, and adds a Prompt Manager.

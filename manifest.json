@@ -6,7 +6,7 @@
     "js": "index.js",
     "css": "style.css",
     "author": "Inversity (fork of ST-Copilot by QQ-Corporation)",
-    "version": "3.0.0",
+    "version": "3.0.1",
     "homePage": "https://github.com/Inversity/ST-Copilot",
     "auto_update": true
 }

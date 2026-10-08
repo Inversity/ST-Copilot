@@ -287,6 +287,16 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     // ─── Changelog Data ──────────────────────────────────────────────────────────
 export const CHANGELOG = [
     {
+        version: '3.0.1',
+        date: '10/8/2026',
+        announce: true,
+        notes: [
+            '<strong>Swipes run tool calls</strong>: a swipe that called a tool used to stop with a tool card that never ran. Swipes now use the same tool loop as new replies.',
+            '<strong>Reasoning timer</strong>: no longer stops at a stray newline before the reply (it froze at "Thought for Ns" while the model kept thinking), and counts reasoning that resumes.',
+            '<strong>Streaming</strong>: render errors are logged instead of freezing the reply silently; finished reasoning is not re-rendered every frame.',
+        ],
+    },
+    {
         version: '3.0.0',
         date: '10/8/2026',
         announce: true,

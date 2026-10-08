@@ -17,7 +17,7 @@ import { renderChatProposalCard } from '../features/feature-chatedit-ui.js';
 import { parsePromptChangesFromText, stripPromptChangesBlock, PROMPT_CHANGES_BLOCK } from '../features/feature-prompt-engine.js';
 import { renderPromptProposalCard } from '../features/feature-prompt-manager-ui.js';
 import { stripMemoryBlock } from '../features/feature-memory.js';
-import { parseToolCallsFromText } from '../features/feature-tools-engine.js';
+import { parseToolCallsFromText, getEnabledTools } from '../features/feature-tools-engine.js';
 import { postProcessToolCalls } from '../features/feature-tools-ui.js';
 import { recordStat, SM } from '../features/feature-stats.js';
 import { _processAttachmentsBeforeSend, _mergeContent, _renderAttachmentPreviews, _openImageLightbox, _openTextLightbox } from '../features/feature-attachments.js';
@@ -872,6 +872,7 @@ export function navigateSwipe(session, msgId, dir) {
     msg.content = msg.swipes[newIdx].content;
     msg.reasoning = msg.swipes[newIdx].reasoning || null;
     msg.gen = msg.swipes[newIdx].gen || null;
+    msg.toolCalls = msg.swipes[newIdx].toolCalls;
     saveSessionsToMetadata();
     updateMsgCount(session);
     return true;
@@ -889,6 +890,7 @@ export function deleteCurrentSwipe(session, msgId) {
     msg.content = msg.swipes[newIdx].content;
     msg.reasoning = msg.swipes[newIdx].reasoning || null;
     msg.gen = msg.swipes[newIdx].gen || null;
+    msg.toolCalls = msg.swipes[newIdx].toolCalls;
     _dbgAdd('SWIPE_DELETE', { msgId, deletedIdx: idx, newIdx, remaining: msg.swipes.length });
     saveSessionsToMetadata();
     updateMsgCount(session);
@@ -1050,12 +1052,26 @@ export async function _runSwipeRegen(session, msgId, wrapEl) {
             return;
         }
 
-        const { text: rawText, reasoning: fullReasoning } = result;
+        // Same tool loop as a new reply: a swipe that calls a tool used to stop there, with a
+        // tool card that never ran.
+        let finalResult = result;
+        if (settings.toolsEnabled && getEnabledTools().length > 0) {
+            finalResult = await apiMod.runToolRounds({
+                session, settings, result,
+                msgEl: wrapEl, contentEl: streamContentEl, excludeMsgId: msgId,
+                getReasoningMs: () => regenReasoningMs,
+            });
+            cancelStreamRender();
+        }
+
+        const { text: rawText, reasoning: fullReasoning } = finalResult;
         const fullText = rawText;
+        const toolCalls = state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined;
 
         msgData.gen = apiMod.getGenStamp();
         msgData.reasoningMs = fullReasoning ? regenReasoningMs : null;
-        msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null, reasoningMs: msgData.reasoningMs, gen: msgData.gen };
+        msgData.toolCalls = toolCalls;
+        msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null, reasoningMs: msgData.reasoningMs, gen: msgData.gen, toolCalls };
         msgData.content = fullText;
         msgData.reasoning = fullReasoning || null;
         saveSessionsToMetadata();

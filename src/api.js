@@ -828,6 +828,112 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
     return { text: text.trim(), reasoning, isMaxTokens };
 }
 
+// The text-based tool loop, shared by new replies and swipes: runs the tool calls in the
+// reply, feeds the results back, and continues generating, up to toolsMaxRounds. Rounds
+// render live into msgEl/contentEl. excludeMsgId is the message being written (left out of
+// the context while it is rewritten). Returns the combined { text, reasoning }; a cancelled
+// later round keeps what was generated before it.
+export async function runToolRounds({ session, settings, result, msgEl, contentEl, excludeMsgId, getReasoningMs = () => null }) {
+    const maxRounds = settings.toolsMaxRounds ?? 5;
+    let roundText = result.text || '';
+    let accumulatedText = roundText;
+    let accumulatedReasoning = result.reasoning || null;
+    const extraHistory = [];
+
+    const updateLiveUI = (tempText = '', tempReasoning = null, appendEl = null) => {
+        if (!msgEl || !contentEl) return;
+        const combinedText = tempText ? accumulatedText + '\n\n' + tempText : accumulatedText;
+        let combinedReasoning = accumulatedReasoning || '';
+        if (tempReasoning) combinedReasoning = combinedReasoning ? combinedReasoning + '\n\n' + tempReasoning : tempReasoning;
+
+        scheduleStreamRender(() => {
+            let tcIndex = 0;
+            if (combinedReasoning) tcIndex = extractToolCallPlaceholders(combinedReasoning, tcIndex).nextIndex;
+            const procText = extractToolCallPlaceholders(stripMemoryBlock(combinedText), tcIndex).text;
+
+            if (combinedReasoning) renderStreamingReasoning(msgEl, combinedReasoning, getReasoningMs(), true);
+            contentEl.innerHTML = renderMarkdown(procText);
+            if (appendEl) contentEl.appendChild(appendEl);
+            postProcessHTMLBlocks(contentEl, true);
+            if (state.activeToolCalls.length || tcIndex > 0) postProcessToolCalls(msgEl, state.activeToolCalls);
+            smartScrollToBottom();
+        });
+    };
+
+    let ranRounds = false;
+    for (let round = 0; round < maxRounds; round++) {
+        const tcs = parseToolCallsFromText(roundText);
+        if (!tcs.length) break;
+        ranRounds = true;
+
+        const roundEntries = [];
+        for (const tc of tcs) {
+            const entry = { id: `tc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, name: tc.name, input: tc.input, status: 'running', result: undefined };
+            state.activeToolCalls.push(entry);
+            roundEntries.push(entry);
+            updateLiveUI();
+
+            try {
+                const res = await executeTool(tc.name, tc.input);
+                if (res?.__ask_user) {
+                    if (!msgEl) {
+                        entry.result = { warning: 'ask_user requires streaming to be enabled.' };
+                        entry.status = 'warning';
+                    } else {
+                        entry.result = await executeAskUser(res, msgEl);
+                        entry.status = 'done';
+                    }
+                } else {
+                    entry.result = res;
+                    entry.status = 'done';
+                }
+            } catch (e) {
+                _dbgAdd('TOOL_EXECUTION_FAILED', { toolName: tc.name, error: e.message });
+                entry.result = { error: e.message };
+                entry.status = 'error';
+            }
+            updateLiveUI();
+        }
+
+        extraHistory.push({ role: 'assistant', content: stripMemoryBlock(roundText) });
+        const toolResultsText = roundEntries.map(e =>
+            `<tool_result name="${e.name}" status="${e.status}">\n${typeof e.result === 'string' ? e.result : JSON.stringify(e.result, null, 2)}\n</tool_result>`
+        ).join('\n');
+        extraHistory.push({ role: 'user', content: `<tool_results>\n${toolResultsText}\n</tool_results>\n\nCONTINUE your response using these results. Write exactly where you left off.` });
+
+        const thinkingText = document.getElementById('scp-thinking-text');
+        if (thinkingText) thinkingText.textContent = `Round ${round + 2}/${maxRounds + 1}…`;
+        const bar = document.getElementById('scp-thinking-bar');
+        if (bar) bar.style.display = 'flex';
+
+        for (const eh of extraHistory) {
+            session.messages.push({ id: `tc_hist_${Date.now()}`, role: eh.role, content: eh.content, timestamp: Date.now(), _tcTemp: true });
+        }
+
+        const cursor2 = document.createElement('span');
+        cursor2.className = 'scp-stream-cursor';
+        const tempSession = { ...session, messages: session.messages.filter(m => m.id !== excludeMsgId) };
+
+        let nextResult;
+        try {
+            nextResult = await callGenerate(tempSession, settings, null, (t, r) => updateLiveUI(t, r, cursor2));
+        } finally {
+            cancelStreamRender();
+            session.messages = session.messages.filter(m => !m._tcTemp);
+            cursor2.remove();
+        }
+        if (nextResult === null) break;
+
+        roundText = nextResult.text || '';
+        accumulatedText += '\n\n' + roundText;
+        if (nextResult.reasoning) {
+            accumulatedReasoning = accumulatedReasoning ? accumulatedReasoning + '\n\n' + nextResult.reasoning : nextResult.reasoning;
+        }
+    }
+
+    return ranRounds ? { text: accumulatedText, reasoning: accumulatedReasoning } : result;
+}
+
 export async function runGenerate(session, userText, addUserMsg = true, processedAtts = null) {
     if (state.generating) return;
     state.generating = true;
@@ -948,129 +1054,11 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
         }
 
         if (result !== null && settings.toolsEnabled && getEnabledTools().length > 0) {
-            const maxRounds = settings.toolsMaxRounds ?? 5;
-            let roundText = result.text || '';
-            let roundReasoning = result.reasoning;
-            let extraHistory = [];
-
-            let accumulatedText = roundText;
-            let accumulatedReasoning = roundReasoning || null;
-
-            const _updateLiveUI = (tempText = '', tempReasoning = null, appendEl = null) => {
-                if (!streamMsgEl || !streamContentEl) return;
-                let combinedText = tempText ? accumulatedText + '\n\n' + tempText : accumulatedText;
-                let combinedReasoning = accumulatedReasoning || '';
-                if (tempReasoning) {
-                    combinedReasoning = combinedReasoning ? combinedReasoning + '\n\n' + tempReasoning : tempReasoning;
-                }
-                
-                scheduleStreamRender(() => {
-                    let procReasoning = combinedReasoning;
-                    let procText = stripMemoryBlock(combinedText);
-                    let tcIndex = 0;
-
-                    if (procReasoning) {
-                        const resR = extractToolCallPlaceholders(procReasoning, tcIndex);
-                        procReasoning = resR.text;
-                        tcIndex = resR.nextIndex;
-                    }
-                    const resC = extractToolCallPlaceholders(procText, tcIndex);
-                    procText = resC.text;
-
-                    if (combinedReasoning) renderStreamingReasoning(streamMsgEl, combinedReasoning, streamReasoningMs, true);
-                    streamContentEl.innerHTML = renderMarkdown(procText);
-                    if (appendEl) streamContentEl.appendChild(appendEl);
-                    postProcessHTMLBlocks(streamContentEl, true);
-
-                    if (state.activeToolCalls.length || tcIndex > 0) {
-                        postProcessToolCalls(streamMsgEl, state.activeToolCalls);
-                    }
-                    smartScrollToBottom();
-                });
-            };
-
-            for (let round = 0; round < maxRounds; round++) {
-                let tcs = parseToolCallsFromText(roundText);
-                if (!tcs.length) break;
-
-                const roundEntries = [];
-                for (const tc of tcs) {
-                    const tcId = `tc_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
-                    const entry = { id: tcId, name: tc.name, input: tc.input, status: 'running', result: undefined };
-                    state.activeToolCalls.push(entry);
-                    roundEntries.push(entry);
-                    
-                    _updateLiveUI();
-
-                    try {
-                        const res = await executeTool(tc.name, tc.input);
-                        if (res?.__ask_user) {
-                            if (!streamMsgEl) {
-                                entry.result = { warning: 'ask_user requires streaming to be enabled.' };
-                                entry.status = 'warning';
-                            } else {
-                                entry.result = await executeAskUser(res, streamMsgEl);
-                                entry.status = 'done';
-                            }
-                        } else {
-                            entry.result = res;
-                            entry.status = 'done';
-                        }
-                    } catch (e) {
-                        _dbgAdd('TOOL_EXECUTION_FAILED', { toolName: tc.name, error: e.message });
-                        entry.result = { error: e.message };
-                        entry.status = 'error';
-                    }
-                    
-                    _updateLiveUI();
-                }
-
-                extraHistory.push({ role: 'assistant', content: stripMemoryBlock(roundText) });
-                const toolResultsText = roundEntries.map(e =>
-                    `<tool_result name="${e.name}" status="${e.status}">\n${typeof e.result === 'string' ? e.result : JSON.stringify(e.result, null, 2)}\n</tool_result>`
-                ).join("\n");
-
-                extraHistory.push({ role: 'user', content: `<tool_results>\n${toolResultsText}\n</tool_results>\n\nCONTINUE your response using these results. Write exactly where you left off.` });
-
-                const thinkingText = document.getElementById('scp-thinking-text');
-                if (thinkingText) thinkingText.textContent = `Round ${round + 2}/${maxRounds + 1}…`;
-                const bar = document.getElementById('scp-thinking-bar');
-                if (bar) bar.style.display = 'flex';
-
-                for (const eh of extraHistory) {
-                    session.messages.push({ id: `tc_hist_${Date.now()}`, role: eh.role, content: eh.content, timestamp: Date.now(), _tcTemp: true });
-                }
-
-                isStreaming = false;
-                streamAccumText = '';
-                const cursor2 = document.createElement('span');
-                cursor2.className = 'scp-stream-cursor';
-                
-                const tempSession = { 
-                    ...session, 
-                    messages: session.messages.filter(m => m.id !== streamMsgId) 
-                };
-
-                const nextResult = await callGenerate(tempSession, settings, null, (t, r) => {
-                    _updateLiveUI(t, r, cursor2);
-                });
-
-                cancelStreamRender();
-                session.messages = session.messages.filter(m => !m._tcTemp);
-                cursor2.remove();
-
-                if (nextResult === null) break;
-
-                roundText = nextResult.text || '';
-                roundReasoning = nextResult.reasoning || null;
-                
-                accumulatedText += '\n\n' + roundText;
-                if (roundReasoning) {
-                    accumulatedReasoning = accumulatedReasoning ? accumulatedReasoning + '\n\n' + roundReasoning : roundReasoning;
-                }
-                
-                result = { text: accumulatedText, reasoning: accumulatedReasoning };
-            }
+            result = await runToolRounds({
+                session, settings, result,
+                msgEl: streamMsgEl, contentEl: streamContentEl, excludeMsgId: streamMsgId,
+                getReasoningMs: () => streamReasoningMs,
+            });
         }
 
         // No queued frame may survive into finalization; everything below
@@ -1113,7 +1101,7 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
             }
 
             if (msg) {
-                msg.swipes = [{ content: fullText, reasoning: fullReasoning || null, reasoningMs: msg.reasoningMs, gen: msg.gen }];
+                msg.swipes = [{ content: fullText, reasoning: fullReasoning || null, reasoningMs: msg.reasoningMs, gen: msg.gen, toolCalls: msg.toolCalls }];
                 msg.swipeIndex = 0;
                 saveSessionsToMetadata();
             }
@@ -1121,7 +1109,7 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
             const newMsg = addMessage(session, 'assistant', fullText, { reasoning: fullReasoning || null, toolCalls: state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined });
             newMsg.gen = getGenStamp();
             newMsg.reasoningMs = fullReasoning ? streamReasoningMs : null;
-            newMsg.swipes = [{ content: fullText, reasoning: fullReasoning || null, reasoningMs: newMsg.reasoningMs, gen: newMsg.gen }];
+            newMsg.swipes = [{ content: fullText, reasoning: fullReasoning || null, reasoningMs: newMsg.reasoningMs, gen: newMsg.gen, toolCalls: newMsg.toolCalls }];
             newMsg.swipeIndex = 0;
             saveSessionsToMetadata();
             appendMsgEl(newMsg);
