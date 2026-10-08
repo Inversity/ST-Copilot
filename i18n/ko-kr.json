@@ -79,7 +79,7 @@
     "Copilot keytriggers scan depth": "Copilot 키트리거 스캔 깊이",
     "Keyword Scan Depth": "키워드 스캔 깊이",
     "Trigger Keys": "트리거 키",
-    "Include ST System Prompt": "ST 시스템 프롬프트 포함",
+    "Include my ST roleplay prompt (Prompt Manager)": "ST 시스템 프롬프트 포함",
     "Include User Persona": "유저 페르소나 포함",
     "Include hidden messages in context": "숨겨진 메시지도 컨텍스트에 포함",
     "Include alternate swipes of last message": "마지막 메시지의 다른 스와이프 포함",

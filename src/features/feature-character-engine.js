@@ -496,6 +496,34 @@ function _isOpenInEditor(ctx, char) {
     return !!open && open.avatar === char.avatar;
 }
 
+// ST's Alternate Greetings popup renders its textareas once and has no refresh hook. Left
+// stale, typing into one writes the old text back over our edit (its input handler stores
+// the whole textarea into that slot). Update the open textareas in place; if a greeting was
+// added, close the popup (ST saves on close, as when the user closes it) and reopen it.
+function _refreshOpenAltGreetingsPopup(greetings) {
+    if (typeof document === 'undefined') return;
+    const list = document.querySelector('dialog[open] .alternate_greetings_list');
+    if (!list) return;
+    const blocks = list.querySelectorAll('.alternate_greeting');
+    if (blocks.length !== greetings.length) {
+        const okBtn = list.closest('dialog')?.querySelector('.popup-button-ok');
+        if (!okBtn) return;
+        okBtn.click();
+        let tries = 0;
+        const reopen = () => {
+            if (document.querySelector('dialog[open] .alternate_greetings_list') && ++tries < 40) return setTimeout(reopen, 50);
+            document.querySelector('.open_alternate_greetings')?.click();
+        };
+        setTimeout(reopen, 50);
+        return;
+    }
+    blocks.forEach(block => {
+        const i = Number(block.getAttribute('data-index'));
+        const ta = block.querySelector('.alternate_greeting_text');
+        if (ta && typeof greetings[i] === 'string' && ta.value !== greetings[i]) ta.value = greetings[i];
+    });
+}
+
 function _emitCharacterEdited(ctx, char) {
     const es = ctx.eventSource || window.eventSource;
     const et = ctx.event_types || window.event_types;
@@ -778,9 +806,7 @@ export async function saveCharacterField(char, fieldId, newValue) {
                 el.dispatchEvent(new Event('input', { bubbles: true }));
             }
         } else if (fieldId === 'alternate_greetings') {
-            if (typeof window.printAlternateGreetings === 'function') {
-                window.printAlternateGreetings();
-            }
+            _refreshOpenAltGreetingsPopup(newValue);
         }
     }
 

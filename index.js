@@ -3128,6 +3128,36 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       }).filter(Boolean);
   }
 
+  // ST's Prompt Manager runs with the 'global' order strategy; this is the id of that order.
+  const ST_GLOBAL_PROMPT_ORDER_ID = '100001';
+
+  // The prompts SillyTavern itself sends for roleplay, as stored (macros unexpanded).
+  // Chat Completion: the Prompt Manager's enabled prompts in their global order. Markers
+  // (chatHistory, charDescription, ...) are slots ST fills in; they are kept with
+  // marker: true and no content, so wrapper prompts around them still read in place.
+  // Text Completion: the System Prompt from Advanced Formatting, when enabled.
+  function getStRoleplayPrompts() {
+      const ctx = SillyTavern.getContext();
+      if (ctx.mainApi === 'openai') {
+          const cc = ctx.chatCompletionSettings || {};
+          const prompts = cc.prompts || [];
+          const order = (cc.prompt_order || []).find(o => String(o.character_id) === ST_GLOBAL_PROMPT_ORDER_ID)?.order || [];
+          const list = order
+              .filter(o => o.enabled)
+              .map(o => prompts.find(p => p.identifier === o.identifier))
+              .filter(p => p && (p.marker || String(p.content || '').trim()))
+              .map(p => p.marker
+                  ? { id: p.identifier, name: p.name || p.identifier, marker: true, content: '' }
+                  : { id: p.identifier, name: p.name || p.identifier, role: p.role || 'system', content: p.content });
+          return { source: `Chat Completion preset "${cc.preset_settings_openai || 'Default'}"`, prompts: list };
+      }
+      const sp = ctx.powerUserSettings?.sysprompt;
+      const list = sp?.enabled && String(sp.content || '').trim()
+          ? [{ id: 'sysprompt', name: sp.name || 'System Prompt', role: 'system', content: sp.content }]
+          : [];
+      return { source: `Text Completion system prompt "${sp?.name || ''}"`, prompts: list };
+  }
+
   function getCharInfo() {
       const ctx = SillyTavern.getContext();
       const char = ctx.characters?.[ctx.characterId];
@@ -5749,6 +5779,34 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       return !!open && open.avatar === char.avatar;
   }
 
+  // ST's Alternate Greetings popup renders its textareas once and has no refresh hook. Left
+  // stale, typing into one writes the old text back over our edit (its input handler stores
+  // the whole textarea into that slot). Update the open textareas in place; if a greeting was
+  // added, close the popup (ST saves on close, as when the user closes it) and reopen it.
+  function _refreshOpenAltGreetingsPopup(greetings) {
+      if (typeof document === 'undefined') return;
+      const list = document.querySelector('dialog[open] .alternate_greetings_list');
+      if (!list) return;
+      const blocks = list.querySelectorAll('.alternate_greeting');
+      if (blocks.length !== greetings.length) {
+          const okBtn = list.closest('dialog')?.querySelector('.popup-button-ok');
+          if (!okBtn) return;
+          okBtn.click();
+          let tries = 0;
+          const reopen = () => {
+              if (document.querySelector('dialog[open] .alternate_greetings_list') && ++tries < 40) return setTimeout(reopen, 50);
+              document.querySelector('.open_alternate_greetings')?.click();
+          };
+          setTimeout(reopen, 50);
+          return;
+      }
+      blocks.forEach(block => {
+          const i = Number(block.getAttribute('data-index'));
+          const ta = block.querySelector('.alternate_greeting_text');
+          if (ta && typeof greetings[i] === 'string' && ta.value !== greetings[i]) ta.value = greetings[i];
+      });
+  }
+
   function _emitCharacterEdited(ctx, char) {
       const es = ctx.eventSource || window.eventSource;
       const et = ctx.event_types || window.event_types;
@@ -6031,9 +6089,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   el.dispatchEvent(new Event('input', { bubbles: true }));
               }
           } else if (fieldId === 'alternate_greetings') {
-              if (typeof window.printAlternateGreetings === 'function') {
-                  window.printAlternateGreetings();
-              }
+              _refreshOpenAltGreetingsPopup(newValue);
           }
       }
 
@@ -14351,9 +14407,17 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const charInfo = getCharInfo();
       const ctx = SillyTavern.getContext();
 
+      // Was ctx.systemPrompt, which ST's context never exposed, so the toggle sent nothing.
       if (settings.includeSystemPrompt) {
-          const sp = ctx.systemPrompt || ctx.system_prompt || '';
-          if (sp) parts.push(`\n\n<st_system_prompt>\n${sp}\n</st_system_prompt>`);
+          const { source, prompts } = getStRoleplayPrompts();
+          if (prompts.some(p => !p.marker)) {
+              const body = prompts
+                  .map(p => p.marker
+                      ? `<slot name="${escHtml(p.name)}" id="${escHtml(p.id)}"/>`
+                      : `<prompt name="${escHtml(p.name)}" id="${escHtml(p.id)}" role="${escHtml(p.role)}">\n${p.content}\n</prompt>`)
+                  .join('\n');
+              parts.push(`\n\n<st_roleplay_prompt source="${escHtml(source)}" note="The user's own roleplay prompt as stored in SillyTavern, macros unexpanded, in send order. Each slot is where SillyTavern inserts that content (card fields, chat history, lorebook). Read-only.">\n${body}\n</st_roleplay_prompt>`);
+          }
       }
 
       if (ctx.groupId && ctx.groups) {

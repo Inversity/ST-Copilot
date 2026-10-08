@@ -4,7 +4,7 @@ import { getSettings, getEffectiveSettings, saveSettings, getCurrentSession, sav
 import { _dbgAdd } from './utils/util-debug.js';
 import { escHtml } from './utils/util-dom.js';
 import { _ensureWrapped } from './utils/util-text.js';
-import { getCharInfo, getUserPersona } from './utils/util-st.js';
+import { getCharInfo, getUserPersona, getStRoleplayPrompts } from './utils/util-st.js';
 import { recordStat, SM } from './features/feature-stats.js';
 import { _mergeContent } from './features/feature-attachments.js';
 import { translate } from './utils/util-i18n.js';
@@ -30,9 +30,17 @@ export async function buildSystemContent(settings) {
     const charInfo = getCharInfo();
     const ctx = SillyTavern.getContext();
 
+    // Was ctx.systemPrompt, which ST's context never exposed, so the toggle sent nothing.
     if (settings.includeSystemPrompt) {
-        const sp = ctx.systemPrompt || ctx.system_prompt || '';
-        if (sp) parts.push(`\n\n<st_system_prompt>\n${sp}\n</st_system_prompt>`);
+        const { source, prompts } = getStRoleplayPrompts();
+        if (prompts.some(p => !p.marker)) {
+            const body = prompts
+                .map(p => p.marker
+                    ? `<slot name="${escHtml(p.name)}" id="${escHtml(p.id)}"/>`
+                    : `<prompt name="${escHtml(p.name)}" id="${escHtml(p.id)}" role="${escHtml(p.role)}">\n${p.content}\n</prompt>`)
+                .join('\n');
+            parts.push(`\n\n<st_roleplay_prompt source="${escHtml(source)}" note="The user's own roleplay prompt as stored in SillyTavern, macros unexpanded, in send order. Each slot is where SillyTavern inserts that content (card fields, chat history, lorebook). Read-only.">\n${body}\n</st_roleplay_prompt>`);
+        }
     }
 
     if (ctx.groupId && ctx.groups) {

@@ -17,6 +17,36 @@ export function getTagsForCharacter(char) {
     }).filter(Boolean);
 }
 
+// ST's Prompt Manager runs with the 'global' order strategy; this is the id of that order.
+export const ST_GLOBAL_PROMPT_ORDER_ID = '100001';
+
+// The prompts SillyTavern itself sends for roleplay, as stored (macros unexpanded).
+// Chat Completion: the Prompt Manager's enabled prompts in their global order. Markers
+// (chatHistory, charDescription, ...) are slots ST fills in; they are kept with
+// marker: true and no content, so wrapper prompts around them still read in place.
+// Text Completion: the System Prompt from Advanced Formatting, when enabled.
+export function getStRoleplayPrompts() {
+    const ctx = SillyTavern.getContext();
+    if (ctx.mainApi === 'openai') {
+        const cc = ctx.chatCompletionSettings || {};
+        const prompts = cc.prompts || [];
+        const order = (cc.prompt_order || []).find(o => String(o.character_id) === ST_GLOBAL_PROMPT_ORDER_ID)?.order || [];
+        const list = order
+            .filter(o => o.enabled)
+            .map(o => prompts.find(p => p.identifier === o.identifier))
+            .filter(p => p && (p.marker || String(p.content || '').trim()))
+            .map(p => p.marker
+                ? { id: p.identifier, name: p.name || p.identifier, marker: true, content: '' }
+                : { id: p.identifier, name: p.name || p.identifier, role: p.role || 'system', content: p.content });
+        return { source: `Chat Completion preset "${cc.preset_settings_openai || 'Default'}"`, prompts: list };
+    }
+    const sp = ctx.powerUserSettings?.sysprompt;
+    const list = sp?.enabled && String(sp.content || '').trim()
+        ? [{ id: 'sysprompt', name: sp.name || 'System Prompt', role: 'system', content: sp.content }]
+        : [];
+    return { source: `Text Completion system prompt "${sp?.name || ''}"`, prompts: list };
+}
+
 export function getCharInfo() {
     const ctx = SillyTavern.getContext();
     const char = ctx.characters?.[ctx.characterId];
