@@ -483,6 +483,12 @@
     position: absolute; bottom: 0; left: 0; 
 }
 .scp-msg:hover .scp-msg-meta { opacity: 1; }
+/* Assistant meta carries the model name; keep it clear of the centered swipe bar
+   (half its width is ~70px). The full text is in the title tooltip. */
+.scp-msg-assistant .scp-msg-meta {
+    max-width: calc(50% - 70px);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .scp-msg-actions {
     display: flex; gap: 3px; opacity: 0; pointer-events: none;
@@ -3902,6 +3908,9 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
     color: var(--scp-accent); background: var(--scp-accent-bg); border-color: var(--scp-accent-dim);
 }
 .scp-swipe-btn:disabled { opacity: 0.2; cursor: default; }
+.scp-swipe-btn.scp-swipe-del:hover:not(:disabled) {
+    color: var(--scp-danger, #ff5c5c); background: rgba(255,92,92,0.1); border-color: rgba(255,92,92,0.4);
+}
 
 .scp-swipe-counter {
     font-size: 10px; color: var(--scp-text-muted); min-width: 36px;

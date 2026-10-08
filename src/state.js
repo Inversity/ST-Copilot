@@ -4,6 +4,8 @@ export const state = {
     configDirty: false,
     themeDirty: false,
     activeToolCalls: [],
+    // Model and connection profile of the generation in flight; stamped onto each reply/swipe.
+    genMeta: null,
     searchQuery: '',
     searchMatches: [],
     searchIdx: -1,

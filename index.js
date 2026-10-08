@@ -866,6 +866,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       configDirty: false,
       themeDirty: false,
       activeToolCalls: [],
+      // Model and connection profile of the generation in flight; stamped onto each reply/swipe.
+      genMeta: null,
       searchQuery: '',
       searchMatches: [],
       searchIdx: -1,
@@ -11434,6 +11436,16 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           else body.appendChild(hw);
       }
 
+      // Meta line: time, plus which model (and connection profile) wrote the swipe on screen.
+      const metaEl = msgEl.querySelector('.scp-msg-meta');
+      if (metaEl && msg.role !== 'user') {
+          const gen = msg.swipes?.[msg.swipeIndex || 0]?.gen || msg.gen || null;
+          const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const label = _genLabel(gen);
+          metaEl.textContent = label ? `${time} · ${label}` : time;
+          metaEl.title = gen ? `Model: ${gen.model || 'unknown'}\nConnection profile: ${gen.profile || 'none'}` : '';
+      }
+
       _updateMsgTokenCount(msgEl, msg.content, true);
 
       let liveTCs = msg.toolCalls || [];
@@ -11606,9 +11618,31 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               }
           });
 
+          const delBtn = document.createElement('button');
+          delBtn.className = 'scp-swipe-btn scp-swipe-del';
+          delBtn.innerHTML = I.trash;
+          delBtn.title = translate('Delete this swipe');
+          delBtn.addEventListener('click', async () => {
+              if (delBtn.disabled || state.generating) return;
+              const session = getCurrentSession();
+              const msgData = session.messages.find(m => m.id === msg.id);
+              if (!msgData?.swipes || msgData.swipes.length < 2) return;
+              const ok = await showCustomDialog({
+                  type: 'confirm',
+                  title: translate('Delete swipe'),
+                  message: t`Delete swipe ${(msgData.swipeIndex ?? 0) + 1} of ${msgData.swipes.length}? The other swipes are kept.`,
+              });
+              if (!ok) return;
+              if (deleteCurrentSwipe(session, msg.id)) {
+                  _renderMsgBodyContent(wrap, session.messages.find(m => m.id === msg.id));
+                  updateSwipeBar(wrap, session, msg.id);
+              }
+          });
+
           swipeBar.appendChild(prevBtn);
           swipeBar.appendChild(counter);
           swipeBar.appendChild(nextBtn);
+          swipeBar.appendChild(delBtn);
           body.appendChild(swipeBar);
       }
 
@@ -11660,9 +11694,35 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       msg.swipeIndex = newIdx;
       msg.content = msg.swipes[newIdx].content;
       msg.reasoning = msg.swipes[newIdx].reasoning || null;
+      msg.gen = msg.swipes[newIdx].gen || null;
       saveSessionsToMetadata();
       updateMsgCount(session);
       return true;
+  }
+
+  // Removes the swipe being viewed and shows its neighbor (the previous one, or the next
+  // when deleting the first). Refuses when it is the only swipe.
+  function deleteCurrentSwipe(session, msgId) {
+      const msg = getSwipesForMsg(session, msgId);
+      if (!msg || msg.swipes.length < 2) return false;
+      const idx = msg.swipeIndex ?? 0;
+      msg.swipes.splice(idx, 1);
+      const newIdx = Math.max(0, idx - 1);
+      msg.swipeIndex = newIdx;
+      msg.content = msg.swipes[newIdx].content;
+      msg.reasoning = msg.swipes[newIdx].reasoning || null;
+      msg.gen = msg.swipes[newIdx].gen || null;
+      _dbgAdd('SWIPE_DELETE', { msgId, deletedIdx: idx, newIdx, remaining: msg.swipes.length });
+      saveSessionsToMetadata();
+      updateMsgCount(session);
+      return true;
+  }
+
+  // "model · profile" for the meta line; the profile is left out when it is the model name.
+  function _genLabel(gen) {
+      if (!gen) return '';
+      if (gen.model && gen.profile && gen.profile !== gen.model) return `${gen.model} · ${gen.profile}`;
+      return gen.model || gen.profile || '';
   }
 
   function updateSwipeBar(msgEl, session, msgId) {
@@ -11679,8 +11739,13 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const prevBtn = bar.querySelector('.scp-swipe-prev');
       const nextBtn = bar.querySelector('.scp-swipe-next');
       const counter = bar.querySelector('.scp-swipe-counter');
+      const delBtn = bar.querySelector('.scp-swipe-del');
       if (prevBtn) prevBtn.disabled = cur <= 1 || state.generating;
       if (nextBtn) nextBtn.disabled = state.generating;
+      if (delBtn) {
+          delBtn.style.display = total > 1 ? '' : 'none';
+          delBtn.disabled = state.generating;
+      }
       if (counter) counter.innerHTML = `<span>${cur}</span>/${total}`;
       bar.style.display = '';
   }
@@ -11797,7 +11862,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const { text: rawText, reasoning: fullReasoning } = result;
           const fullText = rawText;
 
-          msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null };
+          msgData.gen = apiMod.getGenStamp();
+          msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null, gen: msgData.gen };
           msgData.content = fullText;
           msgData.reasoning = fullReasoning || null;
           saveSessionsToMetadata();
@@ -12996,6 +13062,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
     createHTMLBlockEl: createHTMLBlockEl,
     createMsgEl: createMsgEl,
     createStreamingHTMLBlockEl: createStreamingHTMLBlockEl,
+    deleteCurrentSwipe: deleteCurrentSwipe,
     extractToolCallPlaceholders: extractToolCallPlaceholders,
     flushStreamRender: flushStreamRender,
     getDisplayContent: getDisplayContent,
@@ -14721,6 +14788,18 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       }
   }
 
+  // { model, profile } of the generation that just finished, for the reply/swipe it produced.
+  function getGenStamp() {
+      const meta = { ...(state.genMeta || {}) };
+      if (!meta.model) {
+          const ctx = SillyTavern.getContext();
+          if (ctx.mainApi === 'openai' && typeof ctx.getChatCompletionModel === 'function') {
+              try { meta.model = ctx.getChatCompletionModel() || null; } catch (_) {}
+          }
+      }
+      return meta.model || meta.profile ? { model: meta.model || null, profile: meta.profile || null } : null;
+  }
+
   async function callGenerate(session, settings, pendingText, onChunk) {
       const ctx = SillyTavern.getContext();
       const messages = await assembleMessages(session, settings, pendingText);
@@ -14728,6 +14807,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
       const abort = new AbortController();
       state.abortController = abort;
+      // Filled in below: the custom model, or the model in the request body ST builds for us.
+      state.genMeta = { model: settings.connectionSource === 'custom' ? (settings.customModel || null) : null, profile: null };
 
       const streamSetting = settings.forceStreaming;
       let useStream;
@@ -14938,6 +15019,12 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           }
       }
 
+      if (profileId) {
+          const prof = profiles.find(p => p.id === profileId);
+          state.genMeta.profile = prof?.name || null;
+          state.genMeta.model = prof?.model || null;
+      }
+
       let asyncGeneratorFn;
       const origFetch = window.fetch;
       
@@ -14947,7 +15034,9 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               try {
                   let reqBody = JSON.parse(args[1].body);
                   let changed = false;
-                  
+                  // The model ST actually requested wins over the profile's stored model.
+                  if (typeof reqBody.model === 'string' && reqBody.model && state.genMeta) state.genMeta.model = reqBody.model;
+
                   if (reqBody.reasoning_effort === 'auto') { delete reqBody.reasoning_effort; changed = true; }
                   else if (reqBody.reasoning_effort === 'min') { reqBody.reasoning_effort = 'low'; changed = true; }
                   else if (reqBody.reasoning_effort === 'max') { reqBody.reasoning_effort = 'high'; changed = true; }
@@ -15415,7 +15504,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               if (msg) { 
                   msg.content = fullText; 
                   msg.reasoning = fullReasoning || null; 
-                  msg.toolCalls = state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined; 
+                  msg.toolCalls = state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined;
+                  msg.gen = getGenStamp();
               }
               saveSessionsToMetadata();
 
@@ -15424,13 +15514,14 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               }
 
               if (msg) {
-                  msg.swipes = [{ content: fullText, reasoning: fullReasoning || null }];
+                  msg.swipes = [{ content: fullText, reasoning: fullReasoning || null, gen: msg.gen }];
                   msg.swipeIndex = 0;
                   saveSessionsToMetadata();
               }
           } else {
               const newMsg = addMessage(session, 'assistant', fullText, { reasoning: fullReasoning || null, toolCalls: state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined });
-              newMsg.swipes = [{ content: fullText, reasoning: fullReasoning || null }];
+              newMsg.gen = getGenStamp();
+              newMsg.swipes = [{ content: fullText, reasoning: fullReasoning || null, gen: newMsg.gen }];
               newMsg.swipeIndex = 0;
               saveSessionsToMetadata();
               appendMsgEl(newMsg);
@@ -15628,6 +15719,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
     callGenerate: callGenerate,
     estimateTokens: estimateTokens,
     formatPayloadAsText: formatPayloadAsText,
+    getGenStamp: getGenStamp,
     getMainChatSlice: getMainChatSlice,
     runContinue: runContinue,
     runGenerate: runGenerate

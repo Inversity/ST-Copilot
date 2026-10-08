@@ -344,6 +344,18 @@ export async function estimateTokens(text) {
     }
 }
 
+// { model, profile } of the generation that just finished, for the reply/swipe it produced.
+export function getGenStamp() {
+    const meta = { ...(state.genMeta || {}) };
+    if (!meta.model) {
+        const ctx = SillyTavern.getContext();
+        if (ctx.mainApi === 'openai' && typeof ctx.getChatCompletionModel === 'function') {
+            try { meta.model = ctx.getChatCompletionModel() || null; } catch (_) {}
+        }
+    }
+    return meta.model || meta.profile ? { model: meta.model || null, profile: meta.profile || null } : null;
+}
+
 export async function callGenerate(session, settings, pendingText, onChunk) {
     const ctx = SillyTavern.getContext();
     const messages = await assembleMessages(session, settings, pendingText);
@@ -351,6 +363,8 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
 
     const abort = new AbortController();
     state.abortController = abort;
+    // Filled in below: the custom model, or the model in the request body ST builds for us.
+    state.genMeta = { model: settings.connectionSource === 'custom' ? (settings.customModel || null) : null, profile: null };
 
     const streamSetting = settings.forceStreaming;
     let useStream;
@@ -561,6 +575,12 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
         }
     }
 
+    if (profileId) {
+        const prof = profiles.find(p => p.id === profileId);
+        state.genMeta.profile = prof?.name || null;
+        state.genMeta.model = prof?.model || null;
+    }
+
     let asyncGeneratorFn;
     const origFetch = window.fetch;
     
@@ -570,7 +590,9 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
             try {
                 let reqBody = JSON.parse(args[1].body);
                 let changed = false;
-                
+                // The model ST actually requested wins over the profile's stored model.
+                if (typeof reqBody.model === 'string' && reqBody.model && state.genMeta) state.genMeta.model = reqBody.model;
+
                 if (reqBody.reasoning_effort === 'auto') { delete reqBody.reasoning_effort; changed = true; }
                 else if (reqBody.reasoning_effort === 'min') { reqBody.reasoning_effort = 'low'; changed = true; }
                 else if (reqBody.reasoning_effort === 'max') { reqBody.reasoning_effort = 'high'; changed = true; }
@@ -1038,7 +1060,8 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
             if (msg) { 
                 msg.content = fullText; 
                 msg.reasoning = fullReasoning || null; 
-                msg.toolCalls = state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined; 
+                msg.toolCalls = state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined;
+                msg.gen = getGenStamp();
             }
             saveSessionsToMetadata();
 
@@ -1047,13 +1070,14 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
             }
 
             if (msg) {
-                msg.swipes = [{ content: fullText, reasoning: fullReasoning || null }];
+                msg.swipes = [{ content: fullText, reasoning: fullReasoning || null, gen: msg.gen }];
                 msg.swipeIndex = 0;
                 saveSessionsToMetadata();
             }
         } else {
             const newMsg = addMessage(session, 'assistant', fullText, { reasoning: fullReasoning || null, toolCalls: state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined });
-            newMsg.swipes = [{ content: fullText, reasoning: fullReasoning || null }];
+            newMsg.gen = getGenStamp();
+            newMsg.swipes = [{ content: fullText, reasoning: fullReasoning || null, gen: newMsg.gen }];
             newMsg.swipeIndex = 0;
             saveSessionsToMetadata();
             appendMsgEl(newMsg);

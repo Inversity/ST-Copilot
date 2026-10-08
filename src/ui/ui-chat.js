@@ -562,6 +562,16 @@ export function _renderMsgBodyContent(msgEl, msg) {
         else body.appendChild(hw);
     }
 
+    // Meta line: time, plus which model (and connection profile) wrote the swipe on screen.
+    const metaEl = msgEl.querySelector('.scp-msg-meta');
+    if (metaEl && msg.role !== 'user') {
+        const gen = msg.swipes?.[msg.swipeIndex || 0]?.gen || msg.gen || null;
+        const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const label = _genLabel(gen);
+        metaEl.textContent = label ? `${time} · ${label}` : time;
+        metaEl.title = gen ? `Model: ${gen.model || 'unknown'}\nConnection profile: ${gen.profile || 'none'}` : '';
+    }
+
     _updateMsgTokenCount(msgEl, msg.content, true);
 
     let liveTCs = msg.toolCalls || [];
@@ -734,9 +744,31 @@ export function createMsgEl(msg, onCopy, onEdit, onDelete, onRegen) {
             }
         });
 
+        const delBtn = document.createElement('button');
+        delBtn.className = 'scp-swipe-btn scp-swipe-del';
+        delBtn.innerHTML = I.trash;
+        delBtn.title = translate('Delete this swipe');
+        delBtn.addEventListener('click', async () => {
+            if (delBtn.disabled || state.generating) return;
+            const session = getCurrentSession();
+            const msgData = session.messages.find(m => m.id === msg.id);
+            if (!msgData?.swipes || msgData.swipes.length < 2) return;
+            const ok = await showCustomDialog({
+                type: 'confirm',
+                title: translate('Delete swipe'),
+                message: t`Delete swipe ${(msgData.swipeIndex ?? 0) + 1} of ${msgData.swipes.length}? The other swipes are kept.`,
+            });
+            if (!ok) return;
+            if (deleteCurrentSwipe(session, msg.id)) {
+                _renderMsgBodyContent(wrap, session.messages.find(m => m.id === msg.id));
+                updateSwipeBar(wrap, session, msg.id);
+            }
+        });
+
         swipeBar.appendChild(prevBtn);
         swipeBar.appendChild(counter);
         swipeBar.appendChild(nextBtn);
+        swipeBar.appendChild(delBtn);
         body.appendChild(swipeBar);
     }
 
@@ -788,9 +820,35 @@ export function navigateSwipe(session, msgId, dir) {
     msg.swipeIndex = newIdx;
     msg.content = msg.swipes[newIdx].content;
     msg.reasoning = msg.swipes[newIdx].reasoning || null;
+    msg.gen = msg.swipes[newIdx].gen || null;
     saveSessionsToMetadata();
     updateMsgCount(session);
     return true;
+}
+
+// Removes the swipe being viewed and shows its neighbor (the previous one, or the next
+// when deleting the first). Refuses when it is the only swipe.
+export function deleteCurrentSwipe(session, msgId) {
+    const msg = getSwipesForMsg(session, msgId);
+    if (!msg || msg.swipes.length < 2) return false;
+    const idx = msg.swipeIndex ?? 0;
+    msg.swipes.splice(idx, 1);
+    const newIdx = Math.max(0, idx - 1);
+    msg.swipeIndex = newIdx;
+    msg.content = msg.swipes[newIdx].content;
+    msg.reasoning = msg.swipes[newIdx].reasoning || null;
+    msg.gen = msg.swipes[newIdx].gen || null;
+    _dbgAdd('SWIPE_DELETE', { msgId, deletedIdx: idx, newIdx, remaining: msg.swipes.length });
+    saveSessionsToMetadata();
+    updateMsgCount(session);
+    return true;
+}
+
+// "model · profile" for the meta line; the profile is left out when it is the model name.
+function _genLabel(gen) {
+    if (!gen) return '';
+    if (gen.model && gen.profile && gen.profile !== gen.model) return `${gen.model} · ${gen.profile}`;
+    return gen.model || gen.profile || '';
 }
 
 export function updateSwipeBar(msgEl, session, msgId) {
@@ -807,8 +865,13 @@ export function updateSwipeBar(msgEl, session, msgId) {
     const prevBtn = bar.querySelector('.scp-swipe-prev');
     const nextBtn = bar.querySelector('.scp-swipe-next');
     const counter = bar.querySelector('.scp-swipe-counter');
+    const delBtn = bar.querySelector('.scp-swipe-del');
     if (prevBtn) prevBtn.disabled = cur <= 1 || state.generating;
     if (nextBtn) nextBtn.disabled = state.generating;
+    if (delBtn) {
+        delBtn.style.display = total > 1 ? '' : 'none';
+        delBtn.disabled = state.generating;
+    }
     if (counter) counter.innerHTML = `<span>${cur}</span>/${total}`;
     bar.style.display = '';
 }
@@ -925,7 +988,8 @@ export async function _runSwipeRegen(session, msgId, wrapEl) {
         const { text: rawText, reasoning: fullReasoning } = result;
         const fullText = rawText;
 
-        msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null };
+        msgData.gen = apiMod.getGenStamp();
+        msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null, gen: msgData.gen };
         msgData.content = fullText;
         msgData.reasoning = fullReasoning || null;
         saveSessionsToMetadata();
