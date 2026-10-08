@@ -778,7 +778,7 @@ export const TOOL_DEFINITIONS = [
             name: 'get_char_info',
             label: 'Get Character Info',
             icon: 'fa-user-pen',
-            description: 'Retrieve detailed information about the current character card fields.',
+            description: 'Retrieve the current character card fields exactly as stored (macros like {{char}} unexpanded), so text from it can be used verbatim as an edit anchor. alternate_greetings returns [{ id, text }]; id is the 1-based number to pass as index="N" in edits.',
             settingKey: 'toolsEnabled_get_char_info',
             schema: {
                 type: 'object',

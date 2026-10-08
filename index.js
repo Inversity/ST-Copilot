@@ -781,7 +781,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               name: 'get_char_info',
               label: 'Get Character Info',
               icon: 'fa-user-pen',
-              description: 'Retrieve detailed information about the current character card fields.',
+              description: 'Retrieve the current character card fields exactly as stored (macros like {{char}} unexpanded), so text from it can be used verbatim as an edit anchor. alternate_greetings returns [{ id, text }]; id is the 1-based number to pass as index="N" in edits.',
               settingKey: 'toolsEnabled_get_char_info',
               schema: {
                   type: 'object',
@@ -8707,8 +8707,15 @@ ${scopeHtml}
               const result = { name: charInfoFull.name };
               for (const f of requestedFields) {
                   if (f === 'tags') result.tags = getTagsForCharacter(charCtx);
-                  else if (f === 'alternate_greetings') result.alternate_greetings = (charCtx?.data?.alternate_greetings || []);
-                  else result[f] = (charInfoFull[f] || charCtx?.data?.[f] || '');
+                  // Label each greeting with the 1-based id that edits use as index="N", so the
+                  // model never has to count a bare array (which it does 0-based).
+                  else if (f === 'alternate_greetings') result.alternate_greetings = (charCtx?.data?.alternate_greetings || []).map((text, i) => ({ id: i + 1, text }));
+                  // Return the stored text, macros unexpanded: edits are matched against the stored
+                  // field, so anchors copied from an expanded copy ("Lexi" for {{char}}) never match.
+                  else {
+                      const raw = charCtx?.data?.[f] ?? charCtx?.[f];
+                      result[f] = typeof raw === 'string' ? raw : (charInfoFull[f] || '');
+                  }
               }
               return result;
           }
