@@ -1169,11 +1169,65 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       return { result, matched };
   }
 
+  // LLMs copying text routinely swap these: curly quotes, dashes, the ellipsis glyph, and
+  // whitespace runs. Matching on a normalized copy absorbs that without any guessing. map[k]
+  // is the index in the original text of normalized character k.
+  function _normalizeWithMap(text) {
+      let out = '';
+      const map = [];
+      let prevSpace = false;
+      for (let i = 0; i < text.length; i++) {
+          let ch = text[i];
+          if (/\s/.test(ch)) {
+              if (prevSpace) continue;
+              ch = ' ';
+              prevSpace = true;
+          } else {
+              prevSpace = false;
+          }
+          if ('‘’‚′'.includes(ch)) ch = "'";
+          else if ('“”„″'.includes(ch)) ch = '"';
+          else if ('–—−'.includes(ch)) ch = '-';
+          if (ch === '…') { out += '...'; map.push(i, i, i); continue; }
+          out += ch;
+          map.push(i);
+      }
+      return { text: out, map };
+  }
+
+  function _findAllIndices(haystack, needle) {
+      const hits = [];
+      if (!needle) return hits;
+      let i = haystack.indexOf(needle);
+      while (i !== -1) {
+          hits.push(i);
+          i = haystack.indexOf(needle, i + needle.length);
+      }
+      return hits;
+  }
+
+  // Every non-overlapping place `query` occurs in `src`: exact first, then normalized.
+  function _findLiteral(src, query) {
+      const q = query.trim();
+      if (!q) return [];
+      const exact = _findAllIndices(src, q);
+      if (exact.length) return exact.map(start => ({ start, end: start + q.length }));
+      const ns = _normalizeWithMap(src);
+      const nq = _normalizeWithMap(q).text.trim();
+      return _findAllIndices(ns.text, nq).map(k => ({ start: ns.map[k], end: ns.map[k + nq.length - 1] + 1 }));
+  }
+
+  // Anchors must identify exactly one place. A failed or ambiguous anchor changes nothing,
+  // so the edit fails safe instead of patching the wrong region. Returns
+  // { result, matched, reason } where reason is 'not_found' | 'ambiguous' when unmatched.
   function applySearchReplaceToField(fieldContent, searchText, replaceText) {
       if (!fieldContent) return { result: replaceText || '', matched: true };
       const src = fieldContent;
       const srch = searchText || '';
       const repl = replaceText || '';
+      // 0.85 still let one wholly wrong word through a 6-word anchor ("wall" matched "bar").
+      const FUZZY_MIN = 0.9;
+      const FUZZY_TIE_MARGIN = 0.05;
 
       function levenshtein(a, b) {
           if (a === b) return 0;
@@ -1227,6 +1281,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           let bestScore = 0;
           let bestStartIdx = -1;
           let bestEndIdx = -1;
+          const qualifying = [];
 
           const minWinSize = Math.max(1, queryTokens.length - 1);
           const maxWinSize = queryTokens.length + 1;
@@ -1242,6 +1297,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                       if (qT && wT) totalSim += getTokenSimilarity(qT, wT);
                   }
                   const score = totalSim / compareCount;
+                  if (score >= minScore) qualifying.push({ s: i, e: i + winSize - 1, score });
                   if (score > bestScore) {
                       bestScore = score;
                       bestStartIdx = i;
@@ -1273,58 +1329,55 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   }
               }
 
-              return { start: startPos, end: endPos, score: bestScore };
+              // A second, non-overlapping window scoring nearly as well means the query fits
+              // two places; picking one would be a guess.
+              const ambiguous = qualifying.some(w => (w.e < bestStartIdx || w.s > bestEndIdx) && w.score >= bestScore - FUZZY_TIE_MARGIN);
+              return { start: startPos, end: endPos, score: bestScore, ambiguous };
           }
           return null;
       }
 
-      if (srch.trim()) {
-          const exactIdx = src.indexOf(srch.trim());
-          if (exactIdx !== -1) {
-              return {
-                  result: src.slice(0, exactIdx) + repl + src.slice(exactIdx + srch.trim().length),
-                  matched: true
-              };
-          }
+      // All places `query` occurs in `text`: literal matches, else one fuzzy match. A fuzzy
+      // match that fits two places is returned twice so callers see it as ambiguous.
+      function locate(text, query) {
+          const literal = _findLiteral(text, query);
+          if (literal.length) return literal;
+          const fz = findFuzzyRange(text, query, FUZZY_MIN);
+          if (!fz) return [];
+          const hit = { start: fz.start, end: fz.end };
+          return fz.ambiguous ? [hit, hit] : [hit];
       }
+
+      const fail = (reason) => {
+          _dbgAdd('PATCH_ANCHOR_FAILED', { search: srch, reason, srcLength: src.length });
+          return { result: src, matched: false, reason };
+      };
+      const replaceRange = (start, end) => ({ result: src.slice(0, start) + repl + src.slice(end), matched: true });
+
+      if (!srch.trim()) return fail('not_found');
 
       let sepIdx = srch.indexOf(' || ');
       let sepLen = 4;
       if (sepIdx === -1) { sepIdx = srch.indexOf('||'); sepLen = 2; }
-      if (sepIdx === -1) { sepIdx = srch.indexOf('...'); sepLen = 3; }
+      const startPart = sepIdx > 0 ? srch.slice(0, sepIdx).trim() : '';
+      const endPart = sepIdx > 0 ? srch.slice(sepIdx + sepLen).trim() : '';
 
-      if (sepIdx !== -1 && sepIdx > 0 && srch.length - sepIdx - sepLen > 0) {
-          const startPart = srch.slice(0, sepIdx).trim();
-          const endPart = srch.slice(sepIdx + sepLen).trim();
-
-          if (startPart && endPart) {
-              const startMatch = findFuzzyRange(src, startPart);
-              if (startMatch) {
-                  const remainingSrc = src.slice(startMatch.end);
-                  const endMatch = findFuzzyRange(remainingSrc, endPart);
-                  if (endMatch) {
-                      const absoluteEnd = startMatch.end + endMatch.end;
-                      return {
-                          result: src.slice(0, startMatch.start) + repl + src.slice(absoluteEnd),
-                          matched: true
-                      };
-                  }
-              }
-          }
+      if (startPart && endPart) {
+          // Boundary anchor: exactly one start, and exactly one end after it.
+          const starts = locate(src, startPart);
+          if (!starts.length) return fail('not_found');
+          if (starts.length > 1) return fail('ambiguous');
+          const after = starts[0].end;
+          const ends = locate(src.slice(after), endPart);
+          if (!ends.length) return fail('not_found');
+          if (ends.length > 1) return fail('ambiguous');
+          return replaceRange(starts[0].start, after + ends[0].end);
       }
 
-      if (srch.trim()) {
-          const match = findFuzzyRange(src, srch);
-          if (match) {
-              return {
-                  result: src.slice(0, match.start) + repl + src.slice(match.end),
-                  matched: true
-              };
-          }
-      }
-
-      _dbgAdd('LB_PATCH_FUZZY_MATCH_FAILED', { search: srch, srcLength: src.length });
-      return { result: src, matched: false };
+      const hits = locate(src, srch);
+      if (!hits.length) return fail('not_found');
+      if (hits.length > 1) return fail('ambiguous');
+      return replaceRange(hits[0].start, hits[0].end);
   }
 
   function _ensureWrapped(text, tag) {
