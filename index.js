@@ -9592,6 +9592,68 @@ ${scopeHtml}
 
   // ─── Settings Engine ──────────────────────────────────────────────────────────
 
+  // Model field suggestions: our own filterable list (a <datalist> renders as the browser's
+  // native popup, which can't be styled to match).
+  let _modelList = [];
+  let _modelListProfile = null;
+  let _modelActive = -1;
+
+  function _renderModelDropdown() {
+      const input = document.getElementById('scp-sp-model-override');
+      const dd = document.getElementById('scp-sp-model-list');
+      if (!input || !dd) return;
+      const q = input.value.trim().toLowerCase();
+      const matches = _modelList.filter(m => !q || m.toLowerCase().includes(q)).slice(0, 200);
+      if (!matches.length) { dd.style.display = 'none'; return; }
+      _modelActive = Math.min(_modelActive, matches.length - 1);
+      dd.innerHTML = '';
+      matches.forEach((m, i) => {
+          const item = document.createElement('div');
+          item.className = `scp-model-dd-item${i === _modelActive ? ' active' : ''}${m === input.value ? ' current' : ''}`;
+          item.textContent = m;
+          // mousedown, not click: fires before the input's blur hides the list.
+          item.addEventListener('mousedown', e => { e.preventDefault(); _pickModel(m); });
+          dd.appendChild(item);
+      });
+      dd.style.display = '';
+      dd.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function _pickModel(model) {
+      const input = document.getElementById('scp-sp-model-override');
+      const dd = document.getElementById('scp-sp-model-list');
+      if (!input) return;
+      input.value = model;
+      input.dispatchEvent(new Event('input', { bubbles: true }));  // saves through the settings binding
+      if (dd) dd.style.display = 'none';
+      _modelActive = -1;
+  }
+
+  function _setupModelCombo() {
+      const input = document.getElementById('scp-sp-model-override');
+      const dd = document.getElementById('scp-sp-model-list');
+      if (!input || !dd || input.dataset.comboReady) return;
+      input.dataset.comboReady = '1';
+      input.addEventListener('focus', () => { if (_modelList.length) _renderModelDropdown(); });
+      input.addEventListener('input', e => { if (e.isTrusted && _modelList.length) { _modelActive = -1; _renderModelDropdown(); } });
+      input.addEventListener('blur', () => setTimeout(() => { dd.style.display = 'none'; }, 120));
+      input.addEventListener('keydown', e => {
+          if (dd.style.display === 'none') return;
+          const items = dd.querySelectorAll('.scp-model-dd-item');
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              _modelActive = (_modelActive + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+              _renderModelDropdown();
+          } else if (e.key === 'Enter' && _modelActive >= 0 && items[_modelActive]) {
+              e.preventDefault();
+              _pickModel(items[_modelActive].textContent);
+          } else if (e.key === 'Escape') {
+              e.stopPropagation();
+              dd.style.display = 'none';
+          }
+      });
+  }
+
   function _selectedConnectionProfile() {
       const ctx = SillyTavern.getContext();
       const id = getSettings().connectionProfileId;
@@ -9607,7 +9669,13 @@ ${scopeHtml}
       if (!input) return;
       const prof = _selectedConnectionProfile();
       input.placeholder = prof?.model ? t`Profile default: ${prof.model}` : translate('Profile default');
-      if (!fetchList || !list) return;
+      // Keep a loaded list until the connection profile changes; it belongs to that provider.
+      if (!fetchList) {
+          if (prof?.id !== _modelListProfile) _modelList = [];
+          _setupModelCombo();
+          return;
+      }
+      if (!list) return;
       if (!prof || prof.mode !== 'cc') {
           toastr.info(translate('Model lists are available for Chat Completion profiles only. Type a model name instead.'), EXT_DISPLAY);
           return;
@@ -9623,12 +9691,10 @@ ${scopeHtml}
           });
           const data = res.ok ? await res.json() : null;
           const ids = Array.isArray(data?.data) ? data.data.map(m => m?.id || m?.name || (typeof m === 'string' ? m : '')).filter(Boolean) : [];
-          list.innerHTML = '';
-          for (const id of [...new Set(ids)].sort()) {
-              const opt = document.createElement('option');
-              opt.value = id;
-              list.appendChild(opt);
-          }
+          _modelList = [...new Set(ids)].sort();
+          _modelListProfile = prof.id;
+          _setupModelCombo();
+          if (_modelList.length) { input.focus(); _renderModelDropdown(); }
           if (ids.length) toastr.success(t`Loaded ${ids.length} models from ${prof.api}.`, EXT_DISPLAY);
           else toastr.warning(t`${prof.api} returned no model list. Type a model name instead.`, EXT_DISPLAY);
       } catch (e) {

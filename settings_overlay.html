@@ -65,10 +65,12 @@
             </select>
             <label class="scp-sp-label" style="margin-top:6px"><span data-i18n="Model">Model</span> <span class="scp-sp-hint" data-i18n="(blank = the connection profile's model)">(blank = the connection profile's model)</span></label>
             <div class="scp-sp-row" style="gap:6px">
-              <input type="text" class="scp-sp-input" id="scp-sp-model-override" list="scp-sp-model-list" autocomplete="off" style="flex:1">
+              <div class="scp-model-combo" style="flex:1">
+                <input type="text" class="scp-sp-input" id="scp-sp-model-override" autocomplete="off" spellcheck="false">
+                <div class="scp-model-dd" id="scp-sp-model-list" style="display:none"></div>
+              </div>
               <button class="scp-profile-icon-btn" id="scp-sp-model-refresh" title="Load the provider's model list" data-i18n="[title]Load the provider's model list"><i class="fa-solid fa-rotate"></i></button>
             </div>
-            <datalist id="scp-sp-model-list"></datalist>
           </div>
           <div id="scp-sp-custom-profile-group" style="display:none; margin-top:6px">
             <div class="scp-sp-field" style="margin-bottom:4px">
