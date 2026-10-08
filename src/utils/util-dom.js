@@ -1,6 +1,26 @@
 import { EXT_DISPLAY } from '../constants.js';
 import { translate } from './util-i18n.js';
 
+// Restores an element's last size (per browser) and saves it when the user resizes it.
+// A size convenience only: missing or blocked storage just means the default size.
+export function rememberElementSize(el, key) {
+    if (!el || el.dataset.sizeMemory) return;
+    el.dataset.sizeMemory = '1';
+    try {
+        const v = JSON.parse(localStorage.getItem(key) || 'null');
+        if (v?.w && v?.h) { el.style.width = `${v.w}px`; el.style.height = `${v.h}px`; }
+    } catch (_) { /* storage unavailable */ }
+    if (typeof ResizeObserver === 'undefined') return;
+    let timer = null;
+    new ResizeObserver(() => {
+        if (el.offsetParent === null) return;  // hidden: nothing to record
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+            try { localStorage.setItem(key, JSON.stringify({ w: Math.round(el.offsetWidth), h: Math.round(el.offsetHeight) })); } catch (_) { /* storage unavailable */ }
+        }, 300);
+    }).observe(el);
+}
+
 export function escHtml(str) {
     return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }

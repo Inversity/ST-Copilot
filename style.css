@@ -4847,6 +4847,32 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
 .scp-ctx-kind-auto { background:rgba(255,255,255,0.04) !important; color:var(--scp-text-muted) !important; }
 .scp-ctx-kind-pending { background:rgba(255,255,255,0.04) !important; color:var(--scp-text-muted) !important; border:1px dashed rgba(255,255,255,0.15); }
 .scp-ctx-nav-divider { height:1px; background:rgba(255,255,255,0.06); margin:4px 0; }
+/* Wider default nav; the divider beside it drags to resize (width remembered). */
+.scp-ctx-inspector .scp-ctx-nav { width:220px; border-right:none; }
+.scp-ctx-resizer {
+    width:6px; flex-shrink:0; align-self:stretch; cursor:col-resize; touch-action:none;
+    border-left:1px solid rgba(255,255,255,0.06); transition:background 0.12s;
+}
+.scp-ctx-resizer:hover, .scp-ctx-resizer:active { background:var(--scp-accent-bg); border-left-color:var(--scp-accent-dim); }
+/* Token counts: right-aligned in nav rows and block headers. */
+.scp-ctx-tok { float:right; margin-left:8px; font-weight:400; opacity:0.6; font-variant-numeric:tabular-nums; text-transform:none; letter-spacing:0; }
+.scp-ctx-tok:empty { display:none; }
+.scp-ctx-total { margin-top:3px; color:var(--scp-accent); }
+.scp-ctx-total .scp-ctx-tok { float:none; margin:0; opacity:0.9; }
+.scp-ctx-nav-rp > summary::before { content:'▸ '; }
+.scp-ctx-nav-rp[open] > summary::before { content:'▾ '; }
+
+/* Resizable Settings and Context windows (drag the bottom-right corner; size remembered). */
+.scp-settings-panel {
+    resize: both;
+    min-width: 420px; min-height: 360px;
+    max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px);
+}
+#scp-ctx-modal .scp-modal {
+    resize: both;
+    min-width: 480px; min-height: 320px;
+    max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px);
+}
 .scp-ctx-body { flex:1; height:100%; overflow-y:auto; padding:10px 14px 20px; position:relative; scroll-behavior:smooth; }
 .scp-ctx-block { margin-bottom:16px; }
 .scp-ctx-block-header { font-size:10px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; padding:5px 10px; border-radius:6px 6px 0 0; }

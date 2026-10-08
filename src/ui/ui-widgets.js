@@ -1,6 +1,6 @@
 import { CHANGELOG, EXT_DISPLAY, I, DEFAULT_CHAR_EDIT_DIRECTIVE, DEFAULT_LB_MANAGE_PROMPT, DEFAULT_CHAT_EDIT_DIRECTIVE, QP_ICON_POOL } from '../constants.js';
 import { getSettings, saveSettings, getCurrentSession, getBindingKey, isMessageStarred, toggleStarMessage, getStarredMessages } from '../session.js';
-import { escHtml, showCustomDialog, copyText, autoResize } from '../utils/util-dom.js';
+import { escHtml, showCustomDialog, copyText, autoResize, rememberElementSize } from '../utils/util-dom.js';
 import { _dbgAdd } from '../utils/util-debug.js';
 import { recordStat, SM } from '../features/feature-stats.js';
 import { _processAttachmentsBeforeSend } from '../features/feature-attachments.js';
@@ -811,8 +811,61 @@ function _rpPromptNavItems(raw) {
     const end = raw.indexOf('</st_roleplay_prompt>');
     if (start === -1 || end === -1) return [];
     const unesc = s => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-    return [...raw.slice(start, end).matchAll(/<(prompt|slot) name="([^"]*)"/g)]
-        .map((m, i) => ({ id: `scp-ctx-rp-${i}`, label: unesc(m[2]), slot: m[1] === 'slot' }));
+    return [...raw.slice(start, end).matchAll(/<prompt name="([^"]*)"[^>]*>\n?([\s\S]*?)\n?<\/prompt>|<slot name="([^"]*)"[^>]*\/>/g)]
+        .map((m, i) => m[3] !== undefined
+            ? { id: `scp-ctx-rp-${i}`, label: unesc(m[3]), slot: true, text: '' }
+            : { id: `scp-ctx-rp-${i}`, label: unesc(m[1]), slot: false, text: m[2] });
+}
+
+// Text of the first <tag ...>...</tag> section in raw, for its token count.
+function _sectionText(raw, tag) {
+    const start = raw.indexOf(`<${tag}`);
+    if (start === -1) return '';
+    const close = `</${tag}>`;
+    const end = raw.indexOf(close, start);
+    return end === -1 ? raw.slice(start) : raw.slice(start, end + close.length);
+}
+
+// Token counts are filled in after render (estimateTokens is async). Each job fills the
+// .scp-ctx-tok spans with a matching data-tok-for; message jobs add up to the total.
+let _ctxTokenJobs = [];
+const _tokSpan = id => `<span class="scp-ctx-tok" data-tok-for="${id}"></span>`;
+const _fmtTok = n => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+
+async function _runCtxTokenJobs(root) {
+    const { estimateTokens } = await import('../api.js');
+    let total = 0;
+    for (const job of _ctxTokenJobs) {
+        let n = 0;
+        try { n = job.text ? await estimateTokens(job.text) : 0; } catch (_) { continue; }
+        if (job.total) total += n;
+        root.querySelectorAll(`.scp-ctx-tok[data-tok-for="${job.id}"]`).forEach(el => { el.textContent = `~${_fmtTok(n)}`; });
+    }
+    root.querySelectorAll('.scp-ctx-tok[data-tok-for="__total"]').forEach(el => { el.textContent = t`~${_fmtTok(total)} tokens total`; });
+}
+
+// Drag the line between the nav and the content to resize the nav; width is remembered.
+const NAV_WIDTH_KEY = 'scp_ctx_nav_width';
+function _setupCtxNavResizer(root) {
+    const nav = root.querySelector('.scp-ctx-nav');
+    const handle = root.querySelector('.scp-ctx-resizer');
+    if (!nav || !handle) return;
+    try { const w = parseInt(localStorage.getItem(NAV_WIDTH_KEY), 10); if (w) nav.style.width = `${w}px`; } catch (_) { /* storage unavailable */ }
+    handle.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        handle.setPointerCapture(e.pointerId);
+        const startX = e.clientX;
+        const startW = nav.getBoundingClientRect().width;
+        const maxW = Math.max(160, root.getBoundingClientRect().width * 0.7);
+        const move = ev => { nav.style.width = `${Math.min(maxW, Math.max(110, startW + ev.clientX - startX))}px`; };
+        const up = () => {
+            handle.removeEventListener('pointermove', move);
+            handle.removeEventListener('pointerup', up);
+            try { localStorage.setItem(NAV_WIDTH_KEY, String(Math.round(nav.getBoundingClientRect().width))); } catch (_) { /* storage unavailable */ }
+        };
+        handle.addEventListener('pointermove', move);
+        handle.addEventListener('pointerup', up);
+    });
 }
 
 // Nav/header label saying what a payload message is (tagged in assembleMessages).
@@ -872,9 +925,10 @@ export function _buildContextInspectorHTML(messages) {
     let navHtml = '', bodyHtml = '';
     let seenSections = new Set();
     const counters = { you: 0, copilot: 0 };
+    _ctxTokenJobs = [];
 
     // What the list is, at the top of the nav: everything below is sent, in this order.
-    navHtml += `<div class="scp-ctx-nav-note">${escHtml(translate('Everything below is sent, in this order.'))}</div>`;
+    navHtml += `<div class="scp-ctx-nav-note">${escHtml(translate('Everything below is sent, in this order.'))}<div class="scp-ctx-total">${_tokSpan('__total')}</div></div>`;
 
     messages.forEach((msg, idx) => {
         let raw = Array.isArray(msg.content)
@@ -885,7 +939,8 @@ export function _buildContextInspectorHTML(messages) {
         const displayRole = msg.role;
         const blockId = `scp-ctx-b${idx}`;
 
-        navHtml += `<button class="scp-ctx-nav-btn scp-ctx-nav-${displayRole} scp-ctx-nav-kind-${cls}" data-t="${blockId}">${escHtml(label)}</button>`;
+        navHtml += `<button class="scp-ctx-nav-btn scp-ctx-nav-${displayRole} scp-ctx-nav-kind-${cls}" data-t="${blockId}">${_tokSpan(blockId)}${escHtml(label)}</button>`;
+        _ctxTokenJobs.push({ id: blockId, text: raw, total: true });
 
         if (msg.role === 'system') {
             const tagRe = /<([\w:{}_-]+)[^>]*>/g;
@@ -906,6 +961,7 @@ export function _buildContextInspectorHTML(messages) {
                     const secLabel = SECTION_LABELS[key] || (isUserPersona ? 'User Persona' : key);
                     const secId = `scp-ctx-sec-${rawTag}`;
                     
+                    _ctxTokenJobs.push({ id: secId, text: _sectionText(raw, rawTag) });
                     if (MODULE_KEYS.includes(key)) {
                         foundModules.push({ key, id: secId, label: secLabel });
                     } else {
@@ -926,19 +982,22 @@ export function _buildContextInspectorHTML(messages) {
             foundModules.sort(sortFn);
 
             foundMain.forEach(item => {
-                navHtml += `<button class="scp-ctx-nav-btn scp-ctx-nav-sub" data-t="${item.id}">&nbsp;&nbsp;◦ ${escHtml(item.label)}</button>`;
+                navHtml += `<button class="scp-ctx-nav-btn scp-ctx-nav-sub" data-t="${item.id}">${_tokSpan(item.id)}&nbsp;&nbsp;◦ ${escHtml(item.label)}</button>`;
                 if (item.key === 'st_roleplay_prompt') {
                     const rp = _rpPromptNavItems(raw);
                     if (rp.length) {
-                        const sub = rp.map(p => `<button class="scp-ctx-nav-btn scp-ctx-nav-sub2${p.slot ? ' scp-ctx-nav-slot' : ''}" data-t="${p.id}">${p.slot ? '⌁ ' : '· '}${escHtml(p.label)}</button>`).join('');
-                        navHtml += `<details class="scp-ctx-nav-details"><summary class="scp-ctx-nav-btn scp-ctx-nav-sub2" style="color:var(--scp-text-muted)">${escHtml(t`${rp.filter(p => !p.slot).length} prompts, ${rp.filter(p => p.slot).length} slots`)}</summary>${sub}</details>`;
+                        const sub = rp.map(p => {
+                            if (!p.slot) _ctxTokenJobs.push({ id: p.id, text: p.text });
+                            return `<button class="scp-ctx-nav-btn scp-ctx-nav-sub2${p.slot ? ' scp-ctx-nav-slot' : ''}" data-t="${p.id}">${p.slot ? '' : _tokSpan(p.id)}${p.slot ? '⌁ ' : '· '}${escHtml(p.label)}</button>`;
+                        }).join('');
+                        navHtml += `<details class="scp-ctx-nav-details scp-ctx-nav-rp"><summary class="scp-ctx-nav-btn scp-ctx-nav-sub2" style="color:var(--scp-text-muted)">${escHtml(t`${rp.filter(p => !p.slot).length} prompts, ${rp.filter(p => p.slot).length} slots`)}</summary>${sub}</details>`;
                     }
                 }
             });
 
             let moduleNavs = '';
             foundModules.forEach(item => {
-                moduleNavs += `<button class="scp-ctx-nav-btn scp-ctx-nav-sub" data-t="${item.id}">&nbsp;&nbsp;◦ ${escHtml(item.label)}</button>`;
+                moduleNavs += `<button class="scp-ctx-nav-btn scp-ctx-nav-sub" data-t="${item.id}">${_tokSpan(item.id)}&nbsp;&nbsp;◦ ${escHtml(item.label)}</button>`;
             });
 
             if (moduleNavs) {
@@ -948,7 +1007,7 @@ export function _buildContextInspectorHTML(messages) {
 
         const highlighted = _highlightContextText(raw);
         bodyHtml += `<div class="scp-ctx-block" id="${blockId}">`;
-        bodyHtml += `<div class="scp-ctx-block-header scp-ctx-role-${displayRole} scp-ctx-kind-${cls}">${escHtml(label)}</div>`;
+        bodyHtml += `<div class="scp-ctx-block-header scp-ctx-role-${displayRole} scp-ctx-kind-${cls}">${_tokSpan(blockId)}${escHtml(label)}</div>`;
         bodyHtml += `<div class="scp-ctx-block-sep"></div>`;
         bodyHtml += `<div class="scp-ctx-block-body"><pre class="scp-ctx-pre">${highlighted}</pre></div>`;
         bodyHtml += `</div>`;
@@ -963,7 +1022,7 @@ export function _buildContextInspectorHTML(messages) {
         .scp-ctx-hl-tag-d5 { color: rgb(74, 120, 221) !important; }
     </style>`;
 
-    return `<div class="scp-ctx-inspector">${styleHtml}<nav class="scp-ctx-nav">${navHtml}</nav><div class="scp-ctx-body" id="scp-ctx-body">${bodyHtml}</div></div>`;
+    return `<div class="scp-ctx-inspector">${styleHtml}<nav class="scp-ctx-nav">${navHtml}</nav><div class="scp-ctx-resizer" title="${escHtml(translate('Drag to resize'))}"></div><div class="scp-ctx-body" id="scp-ctx-body">${bodyHtml}</div></div>`;
 }
 
 export let _lastInspectorMessages = [];
@@ -985,7 +1044,9 @@ export async function openInspector() {
     
     const modal = modalEl.querySelector('.scp-modal');
     if (modal) {
-        modal.style.height = '75vh';
+        // Default size on first open; after that the user's resized size is kept.
+        if (!modal.dataset.sizeMemory) modal.style.height = '75vh';
+        rememberElementSize(modal, 'scp_ctx_modal_size');
     }
     
     const modalBody = modalEl.querySelector('.scp-modal-body');
@@ -1003,7 +1064,9 @@ export async function openInspector() {
         fmtEl.style.overflow = 'hidden';
         fmtEl.style.padding = '0';
         fmtEl.innerHTML = _buildContextInspectorHTML(messages);
-        
+        _setupCtxNavResizer(fmtEl);
+        _runCtxTokenJobs(fmtEl);
+
         fmtEl.querySelectorAll('.scp-ctx-nav-btn[data-t]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const t = document.getElementById(btn.dataset.t);

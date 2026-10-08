@@ -1,7 +1,7 @@
 import { THEME_PRESETS, THEME_VAR_DEFS, THEME_CSS_MAP, EXT_DISPLAY, DEFAULT_SYSTEM_PROMPT, DEFAULT_CHAR_EDIT_DIRECTIVE, DEFAULT_LB_MANAGE_PROMPT, DEFAULT_CHAT_EDIT_DIRECTIVE, TOOL_DEFINITIONS, DEFAULT_TOOLS_PROMPT, DEFAULT_MEMORY_PROMPT, I } from '../constants.js';
 import { state } from '../state.js';
 import { getSettings, saveSettings, getEffectiveSettings, setSessionOverride, clearAllSessionOverrides, getBindingKey, hasSessionOverrides, saveSessionsToMetadata, getCurrentSession, getSessionOverrides, getChatBucket, initChatBucket } from '../session.js';
-import { showCustomDialog, escHtml } from '../utils/util-dom.js';
+import { showCustomDialog, escHtml, rememberElementSize } from '../utils/util-dom.js';
 import { applyCustomTheme, bringWindowToFront } from './ui-window.js';
 import { showColorPicker } from '../utils/util-colorpicker.js';
 import { _dbgAdd } from '../utils/util-debug.js';
@@ -956,6 +956,7 @@ export function openSettingsPanel() {
     import('./ui-window.js').then(m => m.applyCustomTheme(getSettings().customTheme || THEME_PRESETS.default));
     syncSPFromSettings(); buildThemeEditor(document.getElementById('scp-sp-theme-section')); _updateDirtyDots();
     refreshModelOverrideField(false);
+    rememberElementSize(overlay.querySelector('.scp-settings-panel'), 'scp_settings_panel_size');
     import('./ui-widgets.js').then(mod => {
         mod.buildSoundSettingsUI(document.getElementById('scp-sp-sound-settings'));
         buildQPSettingsUI(document.getElementById('scp-sp-qp-container'));
