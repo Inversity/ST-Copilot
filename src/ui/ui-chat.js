@@ -447,6 +447,46 @@ export function extractToolCallPlaceholders(text, startIndex = 0) {
 
 // ─── Rendering messages ──────────────────────────────────────────────────────
 
+// Meta line: time, plus which model (and connection profile) wrote the swipe on screen.
+// A swipe being generated has no gen yet, so it falls back to the message's.
+export function updateMsgMeta(msgEl, msg) {
+    const metaEl = msgEl?.querySelector('.scp-msg-meta');
+    if (!metaEl || !msg || msg.role === 'user') return;
+    const gen = msg.swipes?.[msg.swipeIndex || 0]?.gen || msg.gen || null;
+    const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const label = _genLabel(gen);
+    metaEl.textContent = label ? `${time} · ${label}` : time;
+    metaEl.title = gen ? `Model: ${gen.model || 'unknown'}\nConnection profile: ${gen.profile || 'none'}` : '';
+}
+
+// "Thought for 12.3s" once reasoning is done, "Thinking for 4.1s…" while it runs.
+export function reasoningSummaryText(ms, done) {
+    const secs = ms ? (ms / 1000).toFixed(1) : null;
+    if (done) return secs ? `Thought for ${secs}s` : 'Reasoning';
+    return secs ? `Thinking for ${secs}s…` : 'Thinking…';
+}
+
+// Live reasoning block for a streaming message. Finds the block or (re)creates it, so a
+// re-render that removed it can't leave the stream writing into a detached element, and
+// leaves its open/closed state alone.
+export function renderStreamingReasoning(msgEl, reasoningText, ms, done) {
+    if (!msgEl || !reasoningText) return;
+    const body = msgEl.querySelector('.scp-msg-body');
+    if (!body) return;
+    let block = body.querySelector('.scp-reasoning-block');
+    if (!block) {
+        block = document.createElement('details');
+        block.className = 'scp-reasoning-block';
+        block.innerHTML = '<summary class="scp-reasoning-summary"></summary><div class="scp-reasoning-content"></div>';
+        body.insertBefore(block, body.querySelector('.scp-msg-content'));
+    }
+    block.style.display = '';
+    block.querySelector('.scp-reasoning-summary').textContent = reasoningSummaryText(ms, done);
+    const contentEl = block.querySelector('.scp-reasoning-content');
+    contentEl.innerHTML = renderMarkdown(extractToolCallPlaceholders(reasoningText, 0).text);
+    postProcessHTMLBlocks(contentEl, true);
+}
+
 export function _renderMsgBodyContent(msgEl, msg) {
     const settings = getSettings();
     msgEl.querySelectorAll('.scp-tool-call-item').forEach(c => c.remove());
@@ -491,6 +531,8 @@ export function _renderMsgBodyContent(msgEl, msg) {
             body.insertBefore(rBlock, body.firstChild);
         }
         rBlock.style.display = '';
+        const rMs = msg.swipes?.[msg.swipeIndex || 0]?.reasoningMs ?? msg.reasoningMs;
+        rBlock.querySelector('.scp-reasoning-summary').textContent = reasoningSummaryText(rMs, true);
         rBlock.querySelector('.scp-reasoning-content').innerHTML = renderMarkdown(reasoning);
         postProcessHTMLBlocks(rBlock.querySelector('.scp-reasoning-content'));
     } else if (rBlock) {
@@ -562,15 +604,7 @@ export function _renderMsgBodyContent(msgEl, msg) {
         else body.appendChild(hw);
     }
 
-    // Meta line: time, plus which model (and connection profile) wrote the swipe on screen.
-    const metaEl = msgEl.querySelector('.scp-msg-meta');
-    if (metaEl && msg.role !== 'user') {
-        const gen = msg.swipes?.[msg.swipeIndex || 0]?.gen || msg.gen || null;
-        const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const label = _genLabel(gen);
-        metaEl.textContent = label ? `${time} · ${label}` : time;
-        metaEl.title = gen ? `Model: ${gen.model || 'unknown'}\nConnection profile: ${gen.profile || 'none'}` : '';
-    }
+    updateMsgMeta(msgEl, msg);
 
     _updateMsgTokenCount(msgEl, msg.content, true);
 
@@ -872,6 +906,7 @@ export function updateSwipeBar(msgEl, session, msgId) {
         delBtn.style.display = total > 1 ? '' : 'none';
         delBtn.disabled = state.generating;
     }
+    bar.classList.toggle('scp-swipe-bar-has-del', !!delBtn && total > 1);
     if (counter) counter.innerHTML = `<span>${cur}</span>/${total}`;
     bar.style.display = '';
 }
@@ -909,9 +944,9 @@ export async function _runSwipeRegen(session, msgId, wrapEl) {
 
     let streamContentEl = wrapEl.querySelector('.scp-msg-content');
     if (streamContentEl) streamContentEl.innerHTML = '';
-    const rBlock = wrapEl.querySelector('.scp-reasoning-block');
-    if (rBlock) rBlock.style.display = 'none';
-    
+    // The previous swipe's reasoning doesn't belong to this one; the stream rebuilds it.
+    wrapEl.querySelector('.scp-reasoning-block')?.remove();
+
     wrapEl.querySelectorAll('.scp-lb-proposal-card').forEach(c => c.remove());
     wrapEl.querySelectorAll('.scp-msg-hist-wrap').forEach(c => c.remove());
 
@@ -924,14 +959,27 @@ export async function _runSwipeRegen(session, msgId, wrapEl) {
     let cursorEl = null;
     const cleanupCursor = () => { if (cursorEl?.parentNode) cursorEl.remove(); cursorEl = null; };
 
-    const onChunk = (text, reasoning) => {
+    let regenReasoningMs = null;
+    const newSwipe = msgData.swipes[msgData.swipeIndex];
+
+    const onChunk = (text, reasoning, reasoningMs, reasoningDone) => {
         if (!cursorEl) {
             cursorEl = document.createElement('span');
             cursorEl.className = 'scp-stream-cursor';
             const bar = document.getElementById('scp-thinking-bar');
             if (bar) bar.style.display = 'flex';
+            // Request is out, so the model is known: label this swipe from the start.
+            newSwipe.gen = apiMod.getGenStamp();
+            updateMsgMeta(wrapEl, msgData);
+        }
+        if (reasoning) {
+            regenReasoningMs = reasoningMs;
+            newSwipe.reasoning = reasoning;
+            newSwipe.reasoningMs = reasoningMs;
+            msgData.reasoning = reasoning;
         }
         scheduleStreamRender(() => {
+            if (reasoning) renderStreamingReasoning(wrapEl, reasoning, reasoningMs, reasoningDone);
             if (streamContentEl) {
                 let procReasoning = reasoning || '';
                 let procText = stripMemoryBlock(text);
@@ -989,7 +1037,8 @@ export async function _runSwipeRegen(session, msgId, wrapEl) {
         const fullText = rawText;
 
         msgData.gen = apiMod.getGenStamp();
-        msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null, gen: msgData.gen };
+        msgData.reasoningMs = fullReasoning ? regenReasoningMs : null;
+        msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null, reasoningMs: msgData.reasoningMs, gen: msgData.gen };
         msgData.content = fullText;
         msgData.reasoning = fullReasoning || null;
         saveSessionsToMetadata();
@@ -1190,8 +1239,47 @@ export function handleEdit(wrapEl, msg) {
     row.appendChild(cancelBtn);
     contentEl.replaceWith(ta);
     wrapEl.querySelector('.scp-msg-actions').after(row);
+
+    // Reasoning gets its own box above the reply while editing (assistant messages that have it).
+    let rTa = null, rWrap = null;
+    if (msg.role !== 'user' && msg.reasoning) {
+        rWrap = document.createElement('div');
+        rWrap.className = 'scp-edit-reasoning';
+        rWrap.innerHTML = `<div class="scp-edit-label">${escHtml(translate('Reasoning'))}</div>`;
+        rTa = document.createElement('textarea');
+        rTa.className = 'scp-edit-ta scp-edit-ta-reasoning';
+        rTa.value = msg.reasoning;
+        rWrap.appendChild(rTa);
+        ta.before(rWrap);
+        const rBlock = wrapEl.querySelector('.scp-reasoning-block');
+        if (rBlock) rBlock.style.display = 'none';
+        autoResize(rTa); rTa.addEventListener('input', () => autoResize(rTa));
+    }
+
     ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
     autoResize(ta); ta.addEventListener('input', () => autoResize(ta));
+
+    const syncReasoningBlock = () => {
+        rWrap?.remove();
+        const swipe = msg.swipes?.[msg.swipeIndex ?? 0];
+        if (msg.reasoning) renderStreamingReasoning(wrapEl, msg.reasoning, swipe?.reasoningMs ?? msg.reasoningMs, true);
+        else wrapEl.querySelector('.scp-reasoning-block')?.remove();
+    };
+
+    // Writes text and reasoning to the message and its current swipe, keeping the swipe's
+    // other fields (model, reasoning time, history lines).
+    const commitEdit = (newText) => {
+        const newReasoning = rTa ? (rTa.value.trim() || null) : (msg.reasoning || null);
+        const msgObj = session.messages.find(m => m.id === msg.id);
+        for (const m of new Set([msgObj, msg].filter(Boolean))) {
+            m.content = newText;
+            m.reasoning = newReasoning;
+            if (m.swipes && m.swipeIndex !== undefined) {
+                m.swipes[m.swipeIndex] = { ...m.swipes[m.swipeIndex], content: newText, reasoning: newReasoning };
+            }
+        }
+        saveSessionsToMetadata();
+    };
 
     const restoreMessageDOM = (textToRender) => {
         const nc = document.createElement('div');
@@ -1231,6 +1319,7 @@ export function handleEdit(wrapEl, msg) {
         postProcessHTMLBlocks(nc);
         ta.replaceWith(nc);
         row.remove();
+        syncReasoningBlock();
         wrapEl.classList.remove('is-editing');
         if (msg.toolCalls?.length) postProcessToolCalls(wrapEl, msg.toolCalls);
     };
@@ -1244,15 +1333,7 @@ export function handleEdit(wrapEl, msg) {
             const rawText = ta.value.trim();
             if (!rawText) return;
             const newText = expandMacros(rawText);
-            
-            const msgObj = session.messages.find(m => m.id === msg.id);
-            if (msgObj) { msgObj.content = newText; saveSessionsToMetadata(); }
-            
-            msg.content = newText;
-            if (msg.swipes && msg.swipeIndex !== undefined) {
-                msg.swipes[msg.swipeIndex] = { content: newText, reasoning: msg.reasoning || null };
-                saveSessionsToMetadata();
-            }
+            commitEdit(newText);
             recordStat(SM.edit);
             restoreMessageDOM(newText);
             _updateMsgTokenCount(wrapEl, newText, true);
@@ -1263,15 +1344,7 @@ export function handleEdit(wrapEl, msg) {
         const rawText = ta.value.trim();
         if (!rawText) return;
         const newText = expandMacros(rawText);
-        
-        const msgObj = session.messages.find(m => m.id === msg.id);
-        if (msgObj) { msgObj.content = newText; saveSessionsToMetadata(); }
-
-        msg.content = newText;
-        if (msg.swipes && msg.swipeIndex !== undefined) {
-            msg.swipes[msg.swipeIndex] = { content: newText, reasoning: msg.reasoning || null };
-            saveSessionsToMetadata();
-        }
+        commitEdit(newText);
         recordStat(SM.edit);
         restoreMessageDOM(newText);
         _updateMsgTokenCount(wrapEl, newText, true);

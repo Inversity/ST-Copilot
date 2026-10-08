@@ -11321,6 +11321,46 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
   // ─── Rendering messages ──────────────────────────────────────────────────────
 
+  // Meta line: time, plus which model (and connection profile) wrote the swipe on screen.
+  // A swipe being generated has no gen yet, so it falls back to the message's.
+  function updateMsgMeta(msgEl, msg) {
+      const metaEl = msgEl?.querySelector('.scp-msg-meta');
+      if (!metaEl || !msg || msg.role === 'user') return;
+      const gen = msg.swipes?.[msg.swipeIndex || 0]?.gen || msg.gen || null;
+      const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const label = _genLabel(gen);
+      metaEl.textContent = label ? `${time} · ${label}` : time;
+      metaEl.title = gen ? `Model: ${gen.model || 'unknown'}\nConnection profile: ${gen.profile || 'none'}` : '';
+  }
+
+  // "Thought for 12.3s" once reasoning is done, "Thinking for 4.1s…" while it runs.
+  function reasoningSummaryText(ms, done) {
+      const secs = ms ? (ms / 1000).toFixed(1) : null;
+      if (done) return secs ? `Thought for ${secs}s` : 'Reasoning';
+      return secs ? `Thinking for ${secs}s…` : 'Thinking…';
+  }
+
+  // Live reasoning block for a streaming message. Finds the block or (re)creates it, so a
+  // re-render that removed it can't leave the stream writing into a detached element, and
+  // leaves its open/closed state alone.
+  function renderStreamingReasoning(msgEl, reasoningText, ms, done) {
+      if (!msgEl || !reasoningText) return;
+      const body = msgEl.querySelector('.scp-msg-body');
+      if (!body) return;
+      let block = body.querySelector('.scp-reasoning-block');
+      if (!block) {
+          block = document.createElement('details');
+          block.className = 'scp-reasoning-block';
+          block.innerHTML = '<summary class="scp-reasoning-summary"></summary><div class="scp-reasoning-content"></div>';
+          body.insertBefore(block, body.querySelector('.scp-msg-content'));
+      }
+      block.style.display = '';
+      block.querySelector('.scp-reasoning-summary').textContent = reasoningSummaryText(ms, done);
+      const contentEl = block.querySelector('.scp-reasoning-content');
+      contentEl.innerHTML = renderMarkdown(extractToolCallPlaceholders(reasoningText, 0).text);
+      postProcessHTMLBlocks(contentEl, true);
+  }
+
   function _renderMsgBodyContent(msgEl, msg) {
       const settings = getSettings();
       msgEl.querySelectorAll('.scp-tool-call-item').forEach(c => c.remove());
@@ -11365,6 +11405,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               body.insertBefore(rBlock, body.firstChild);
           }
           rBlock.style.display = '';
+          const rMs = msg.swipes?.[msg.swipeIndex || 0]?.reasoningMs ?? msg.reasoningMs;
+          rBlock.querySelector('.scp-reasoning-summary').textContent = reasoningSummaryText(rMs, true);
           rBlock.querySelector('.scp-reasoning-content').innerHTML = renderMarkdown(reasoning);
           postProcessHTMLBlocks(rBlock.querySelector('.scp-reasoning-content'));
       } else if (rBlock) {
@@ -11436,15 +11478,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           else body.appendChild(hw);
       }
 
-      // Meta line: time, plus which model (and connection profile) wrote the swipe on screen.
-      const metaEl = msgEl.querySelector('.scp-msg-meta');
-      if (metaEl && msg.role !== 'user') {
-          const gen = msg.swipes?.[msg.swipeIndex || 0]?.gen || msg.gen || null;
-          const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          const label = _genLabel(gen);
-          metaEl.textContent = label ? `${time} · ${label}` : time;
-          metaEl.title = gen ? `Model: ${gen.model || 'unknown'}\nConnection profile: ${gen.profile || 'none'}` : '';
-      }
+      updateMsgMeta(msgEl, msg);
 
       _updateMsgTokenCount(msgEl, msg.content, true);
 
@@ -11746,6 +11780,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           delBtn.style.display = total > 1 ? '' : 'none';
           delBtn.disabled = state.generating;
       }
+      bar.classList.toggle('scp-swipe-bar-has-del', !!delBtn && total > 1);
       if (counter) counter.innerHTML = `<span>${cur}</span>/${total}`;
       bar.style.display = '';
   }
@@ -11783,9 +11818,9 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
       let streamContentEl = wrapEl.querySelector('.scp-msg-content');
       if (streamContentEl) streamContentEl.innerHTML = '';
-      const rBlock = wrapEl.querySelector('.scp-reasoning-block');
-      if (rBlock) rBlock.style.display = 'none';
-      
+      // The previous swipe's reasoning doesn't belong to this one; the stream rebuilds it.
+      wrapEl.querySelector('.scp-reasoning-block')?.remove();
+
       wrapEl.querySelectorAll('.scp-lb-proposal-card').forEach(c => c.remove());
       wrapEl.querySelectorAll('.scp-msg-hist-wrap').forEach(c => c.remove());
 
@@ -11798,14 +11833,27 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       let cursorEl = null;
       const cleanupCursor = () => { if (cursorEl?.parentNode) cursorEl.remove(); cursorEl = null; };
 
-      const onChunk = (text, reasoning) => {
+      let regenReasoningMs = null;
+      const newSwipe = msgData.swipes[msgData.swipeIndex];
+
+      const onChunk = (text, reasoning, reasoningMs, reasoningDone) => {
           if (!cursorEl) {
               cursorEl = document.createElement('span');
               cursorEl.className = 'scp-stream-cursor';
               const bar = document.getElementById('scp-thinking-bar');
               if (bar) bar.style.display = 'flex';
+              // Request is out, so the model is known: label this swipe from the start.
+              newSwipe.gen = apiMod.getGenStamp();
+              updateMsgMeta(wrapEl, msgData);
+          }
+          if (reasoning) {
+              regenReasoningMs = reasoningMs;
+              newSwipe.reasoning = reasoning;
+              newSwipe.reasoningMs = reasoningMs;
+              msgData.reasoning = reasoning;
           }
           scheduleStreamRender(() => {
+              if (reasoning) renderStreamingReasoning(wrapEl, reasoning, reasoningMs, reasoningDone);
               if (streamContentEl) {
                   let procReasoning = reasoning || '';
                   let procText = stripMemoryBlock(text);
@@ -11863,7 +11911,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const fullText = rawText;
 
           msgData.gen = apiMod.getGenStamp();
-          msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null, gen: msgData.gen };
+          msgData.reasoningMs = fullReasoning ? regenReasoningMs : null;
+          msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null, reasoningMs: msgData.reasoningMs, gen: msgData.gen };
           msgData.content = fullText;
           msgData.reasoning = fullReasoning || null;
           saveSessionsToMetadata();
@@ -12064,8 +12113,47 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       row.appendChild(cancelBtn);
       contentEl.replaceWith(ta);
       wrapEl.querySelector('.scp-msg-actions').after(row);
+
+      // Reasoning gets its own box above the reply while editing (assistant messages that have it).
+      let rTa = null, rWrap = null;
+      if (msg.role !== 'user' && msg.reasoning) {
+          rWrap = document.createElement('div');
+          rWrap.className = 'scp-edit-reasoning';
+          rWrap.innerHTML = `<div class="scp-edit-label">${escHtml(translate('Reasoning'))}</div>`;
+          rTa = document.createElement('textarea');
+          rTa.className = 'scp-edit-ta scp-edit-ta-reasoning';
+          rTa.value = msg.reasoning;
+          rWrap.appendChild(rTa);
+          ta.before(rWrap);
+          const rBlock = wrapEl.querySelector('.scp-reasoning-block');
+          if (rBlock) rBlock.style.display = 'none';
+          autoResize(rTa); rTa.addEventListener('input', () => autoResize(rTa));
+      }
+
       ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
       autoResize(ta); ta.addEventListener('input', () => autoResize(ta));
+
+      const syncReasoningBlock = () => {
+          rWrap?.remove();
+          const swipe = msg.swipes?.[msg.swipeIndex ?? 0];
+          if (msg.reasoning) renderStreamingReasoning(wrapEl, msg.reasoning, swipe?.reasoningMs ?? msg.reasoningMs, true);
+          else wrapEl.querySelector('.scp-reasoning-block')?.remove();
+      };
+
+      // Writes text and reasoning to the message and its current swipe, keeping the swipe's
+      // other fields (model, reasoning time, history lines).
+      const commitEdit = (newText) => {
+          const newReasoning = rTa ? (rTa.value.trim() || null) : (msg.reasoning || null);
+          const msgObj = session.messages.find(m => m.id === msg.id);
+          for (const m of new Set([msgObj, msg].filter(Boolean))) {
+              m.content = newText;
+              m.reasoning = newReasoning;
+              if (m.swipes && m.swipeIndex !== undefined) {
+                  m.swipes[m.swipeIndex] = { ...m.swipes[m.swipeIndex], content: newText, reasoning: newReasoning };
+              }
+          }
+          saveSessionsToMetadata();
+      };
 
       const restoreMessageDOM = (textToRender) => {
           const nc = document.createElement('div');
@@ -12105,6 +12193,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           postProcessHTMLBlocks(nc);
           ta.replaceWith(nc);
           row.remove();
+          syncReasoningBlock();
           wrapEl.classList.remove('is-editing');
           if (msg.toolCalls?.length) postProcessToolCalls(wrapEl, msg.toolCalls);
       };
@@ -12118,15 +12207,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               const rawText = ta.value.trim();
               if (!rawText) return;
               const newText = expandMacros(rawText);
-              
-              const msgObj = session.messages.find(m => m.id === msg.id);
-              if (msgObj) { msgObj.content = newText; saveSessionsToMetadata(); }
-              
-              msg.content = newText;
-              if (msg.swipes && msg.swipeIndex !== undefined) {
-                  msg.swipes[msg.swipeIndex] = { content: newText, reasoning: msg.reasoning || null };
-                  saveSessionsToMetadata();
-              }
+              commitEdit(newText);
               recordStat(SM.edit);
               restoreMessageDOM(newText);
               _updateMsgTokenCount(wrapEl, newText, true);
@@ -12137,15 +12218,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const rawText = ta.value.trim();
           if (!rawText) return;
           const newText = expandMacros(rawText);
-          
-          const msgObj = session.messages.find(m => m.id === msg.id);
-          if (msgObj) { msgObj.content = newText; saveSessionsToMetadata(); }
-
-          msg.content = newText;
-          if (msg.swipes && msg.swipeIndex !== undefined) {
-              msg.swipes[msg.swipeIndex] = { content: newText, reasoning: msg.reasoning || null };
-              saveSessionsToMetadata();
-          }
+          commitEdit(newText);
           recordStat(SM.edit);
           restoreMessageDOM(newText);
           _updateMsgTokenCount(wrapEl, newText, true);
@@ -13081,12 +13154,14 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
     performSearch: performSearch,
     postProcessHTMLBlocks: postProcessHTMLBlocks,
     prepareHtmlForIframe: prepareHtmlForIframe,
+    reasoningSummaryText: reasoningSummaryText,
     removeMsgEl: removeMsgEl,
     removeMsgElAfter: removeMsgElAfter,
     removeMsgElAndBelow: removeMsgElAndBelow,
     renderMarkdown: renderMarkdown,
     renderPickerMessages: renderPickerMessages,
     renderSession: renderSession,
+    renderStreamingReasoning: renderStreamingReasoning,
     restoreScrollPosition: restoreScrollPosition,
     saveScrollPosition: saveScrollPosition,
     scheduleStreamRender: scheduleStreamRender,
@@ -13102,6 +13177,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
     toggleSearchWholeWord: toggleSearchWholeWord,
     updateDepthSlidersMax: updateDepthSlidersMax,
     updateMsgCount: updateMsgCount,
+    updateMsgMeta: updateMsgMeta,
     updatePickBtnState: updatePickBtnState,
     updateSearchCount: updateSearchCount,
     updateSwipeBar: updateSwipeBar
@@ -15229,9 +15305,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       let streamMsgId = null;
       let streamMsgEl = null;
       let streamContentEl = null;
-      let streamReasoningBlockEl = null;
-      let streamReasoningSummaryEl = null;
-      let streamReasoningContentEl = null;
+      let streamReasoningMs = null;
       let cursorEl = null;
       let isStreaming = false;
       let streamAccumText = '';
@@ -15256,20 +15330,10 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               
               streamMsgEl = document.querySelector(`.scp-msg[data-id="${streamMsgId}"]`);
               if (streamMsgEl) {
-                  const body = streamMsgEl.querySelector('.scp-msg-body');
                   streamContentEl = streamMsgEl.querySelector('.scp-msg-content');
-
-                  streamReasoningBlockEl = document.createElement('details');
-                  streamReasoningBlockEl.className = 'scp-reasoning-block';
-                  streamReasoningBlockEl.style.display = 'none';
-                  streamReasoningSummaryEl = document.createElement('summary');
-                  streamReasoningSummaryEl.className = 'scp-reasoning-summary';
-                  streamReasoningSummaryEl.textContent = 'Thinking…';
-                  streamReasoningContentEl = document.createElement('div');
-                  streamReasoningContentEl.className = 'scp-reasoning-content';
-                  streamReasoningBlockEl.appendChild(streamReasoningSummaryEl);
-                  streamReasoningBlockEl.appendChild(streamReasoningContentEl);
-                  if (body) body.insertBefore(streamReasoningBlockEl, streamContentEl);
+                  // The request is already out, so the model is known: show it from the start.
+                  placeholder.gen = getGenStamp();
+                  updateMsgMeta(streamMsgEl, placeholder);
 
                   cursorEl = document.createElement('span');
                   cursorEl.className = 'scp-stream-cursor';
@@ -15277,6 +15341,14 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                   const bar = document.getElementById('scp-thinking-bar');
                   if (bar) bar.style.display = 'flex';
               }
+          }
+
+          // Keep reasoning on the message itself while streaming, not only in the DOM, so a
+          // re-render keeps the block and the final render knows how long it took.
+          if (reasoning) {
+              streamReasoningMs = reasoningMs;
+              const liveMsg = session.messages.find(m => m.id === streamMsgId);
+              if (liveMsg) { liveMsg.reasoning = reasoning; liveMsg.reasoningMs = reasoningMs; }
           }
 
           scheduleStreamRender(() => {
@@ -15293,15 +15365,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                   const resC = extractToolCallPlaceholders(procText, tcIndex);
                   procText = resC.text;
 
-                  if (reasoning && streamReasoningBlockEl) {
-                      streamReasoningBlockEl.style.display = '';
-                      streamReasoningContentEl.innerHTML = renderMarkdown(procReasoning);
-                      postProcessHTMLBlocks(streamReasoningContentEl, true);
-                      const secs = reasoningMs ? (reasoningMs / 1000).toFixed(1) : null;
-                      streamReasoningSummaryEl.textContent = reasoningDone
-                          ? `Thought for ${secs}s`
-                          : secs ? `Thinking for ${secs}s…` : 'Thinking…';
-                  }
+                  if (reasoning) renderStreamingReasoning(streamMsgEl, reasoning, reasoningMs, reasoningDone);
 
                   streamContentEl.innerHTML = renderMarkdown(procText);
                   if (procText) streamContentEl.appendChild(cursorEl);
@@ -15380,11 +15444,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                       const resC = extractToolCallPlaceholders(procText, tcIndex);
                       procText = resC.text;
 
-                      if (combinedReasoning && streamReasoningBlockEl) {
-                          streamReasoningBlockEl.style.display = '';
-                          streamReasoningContentEl.innerHTML = renderMarkdown(procReasoning);
-                          postProcessHTMLBlocks(streamReasoningContentEl, true);
-                      }
+                      if (combinedReasoning) renderStreamingReasoning(streamMsgEl, combinedReasoning, streamReasoningMs, true);
                       streamContentEl.innerHTML = renderMarkdown(procText);
                       if (appendEl) streamContentEl.appendChild(appendEl);
                       postProcessHTMLBlocks(streamContentEl, true);
@@ -15511,6 +15571,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                   msg.reasoning = fullReasoning || null; 
                   msg.toolCalls = state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined;
                   msg.gen = getGenStamp();
+                  msg.reasoningMs = fullReasoning ? streamReasoningMs : null;
               }
               saveSessionsToMetadata();
 
@@ -15519,14 +15580,15 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               }
 
               if (msg) {
-                  msg.swipes = [{ content: fullText, reasoning: fullReasoning || null, gen: msg.gen }];
+                  msg.swipes = [{ content: fullText, reasoning: fullReasoning || null, reasoningMs: msg.reasoningMs, gen: msg.gen }];
                   msg.swipeIndex = 0;
                   saveSessionsToMetadata();
               }
           } else {
               const newMsg = addMessage(session, 'assistant', fullText, { reasoning: fullReasoning || null, toolCalls: state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined });
               newMsg.gen = getGenStamp();
-              newMsg.swipes = [{ content: fullText, reasoning: fullReasoning || null, gen: newMsg.gen }];
+              newMsg.reasoningMs = fullReasoning ? streamReasoningMs : null;
+              newMsg.swipes = [{ content: fullText, reasoning: fullReasoning || null, reasoningMs: newMsg.reasoningMs, gen: newMsg.gen }];
               newMsg.swipeIndex = 0;
               saveSessionsToMetadata();
               appendMsgEl(newMsg);

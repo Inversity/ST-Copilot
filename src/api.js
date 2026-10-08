@@ -19,7 +19,7 @@ import { buildChatEditAIInstructions } from './features/feature-chatedit-engine.
 import { buildMemoryContextBlock, buildMemoryAIInstructions, processMemoryUpdates, stripMemoryBlock } from './features/feature-memory.js';
 import { buildToolCallsSystemBlock, parseToolCallsFromText, executeTool, getEnabledTools } from './features/feature-tools-engine.js';
 
-import { updateMsgCount, smartScrollToBottom, setGeneratingState, showGenerationError, _renderMsgBodyContent, updateSwipeBar, _refreshSwipeBars, appendMsgEl } from './ui/ui-chat.js';
+import { updateMsgCount, smartScrollToBottom, setGeneratingState, showGenerationError, _renderMsgBodyContent, updateSwipeBar, _refreshSwipeBars, appendMsgEl, renderStreamingReasoning, updateMsgMeta } from './ui/ui-chat.js';
 import { getDisplayContent, extractToolCallPlaceholders, renderMarkdown, postProcessHTMLBlocks, scheduleStreamRender, cancelStreamRender } from './ui/ui-chat.js';
 import { postProcessToolCalls, executeAskUser } from './features/feature-tools-ui.js';
 import { playCompletionSound } from './ui/ui-widgets.js';
@@ -785,9 +785,7 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
     let streamMsgId = null;
     let streamMsgEl = null;
     let streamContentEl = null;
-    let streamReasoningBlockEl = null;
-    let streamReasoningSummaryEl = null;
-    let streamReasoningContentEl = null;
+    let streamReasoningMs = null;
     let cursorEl = null;
     let isStreaming = false;
     let streamAccumText = '';
@@ -812,20 +810,10 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
             
             streamMsgEl = document.querySelector(`.scp-msg[data-id="${streamMsgId}"]`);
             if (streamMsgEl) {
-                const body = streamMsgEl.querySelector('.scp-msg-body');
                 streamContentEl = streamMsgEl.querySelector('.scp-msg-content');
-
-                streamReasoningBlockEl = document.createElement('details');
-                streamReasoningBlockEl.className = 'scp-reasoning-block';
-                streamReasoningBlockEl.style.display = 'none';
-                streamReasoningSummaryEl = document.createElement('summary');
-                streamReasoningSummaryEl.className = 'scp-reasoning-summary';
-                streamReasoningSummaryEl.textContent = 'Thinking…';
-                streamReasoningContentEl = document.createElement('div');
-                streamReasoningContentEl.className = 'scp-reasoning-content';
-                streamReasoningBlockEl.appendChild(streamReasoningSummaryEl);
-                streamReasoningBlockEl.appendChild(streamReasoningContentEl);
-                if (body) body.insertBefore(streamReasoningBlockEl, streamContentEl);
+                // The request is already out, so the model is known: show it from the start.
+                placeholder.gen = getGenStamp();
+                updateMsgMeta(streamMsgEl, placeholder);
 
                 cursorEl = document.createElement('span');
                 cursorEl.className = 'scp-stream-cursor';
@@ -833,6 +821,14 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
                 const bar = document.getElementById('scp-thinking-bar');
                 if (bar) bar.style.display = 'flex';
             }
+        }
+
+        // Keep reasoning on the message itself while streaming, not only in the DOM, so a
+        // re-render keeps the block and the final render knows how long it took.
+        if (reasoning) {
+            streamReasoningMs = reasoningMs;
+            const liveMsg = session.messages.find(m => m.id === streamMsgId);
+            if (liveMsg) { liveMsg.reasoning = reasoning; liveMsg.reasoningMs = reasoningMs; }
         }
 
         scheduleStreamRender(() => {
@@ -849,15 +845,7 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
                 const resC = extractToolCallPlaceholders(procText, tcIndex);
                 procText = resC.text;
 
-                if (reasoning && streamReasoningBlockEl) {
-                    streamReasoningBlockEl.style.display = '';
-                    streamReasoningContentEl.innerHTML = renderMarkdown(procReasoning);
-                    postProcessHTMLBlocks(streamReasoningContentEl, true);
-                    const secs = reasoningMs ? (reasoningMs / 1000).toFixed(1) : null;
-                    streamReasoningSummaryEl.textContent = reasoningDone
-                        ? `Thought for ${secs}s`
-                        : secs ? `Thinking for ${secs}s…` : 'Thinking…';
-                }
+                if (reasoning) renderStreamingReasoning(streamMsgEl, reasoning, reasoningMs, reasoningDone);
 
                 streamContentEl.innerHTML = renderMarkdown(procText);
                 if (procText) streamContentEl.appendChild(cursorEl);
@@ -936,11 +924,7 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
                     const resC = extractToolCallPlaceholders(procText, tcIndex);
                     procText = resC.text;
 
-                    if (combinedReasoning && streamReasoningBlockEl) {
-                        streamReasoningBlockEl.style.display = '';
-                        streamReasoningContentEl.innerHTML = renderMarkdown(procReasoning);
-                        postProcessHTMLBlocks(streamReasoningContentEl, true);
-                    }
+                    if (combinedReasoning) renderStreamingReasoning(streamMsgEl, combinedReasoning, streamReasoningMs, true);
                     streamContentEl.innerHTML = renderMarkdown(procText);
                     if (appendEl) streamContentEl.appendChild(appendEl);
                     postProcessHTMLBlocks(streamContentEl, true);
@@ -1067,6 +1051,7 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
                 msg.reasoning = fullReasoning || null; 
                 msg.toolCalls = state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined;
                 msg.gen = getGenStamp();
+                msg.reasoningMs = fullReasoning ? streamReasoningMs : null;
             }
             saveSessionsToMetadata();
 
@@ -1075,14 +1060,15 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
             }
 
             if (msg) {
-                msg.swipes = [{ content: fullText, reasoning: fullReasoning || null, gen: msg.gen }];
+                msg.swipes = [{ content: fullText, reasoning: fullReasoning || null, reasoningMs: msg.reasoningMs, gen: msg.gen }];
                 msg.swipeIndex = 0;
                 saveSessionsToMetadata();
             }
         } else {
             const newMsg = addMessage(session, 'assistant', fullText, { reasoning: fullReasoning || null, toolCalls: state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined });
             newMsg.gen = getGenStamp();
-            newMsg.swipes = [{ content: fullText, reasoning: fullReasoning || null, gen: newMsg.gen }];
+            newMsg.reasoningMs = fullReasoning ? streamReasoningMs : null;
+            newMsg.swipes = [{ content: fullText, reasoning: fullReasoning || null, reasoningMs: newMsg.reasoningMs, gen: newMsg.gen }];
             newMsg.swipeIndex = 0;
             saveSessionsToMetadata();
             appendMsgEl(newMsg);
