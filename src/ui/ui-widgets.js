@@ -4,7 +4,7 @@ import { escHtml, showCustomDialog, copyText, autoResize, rememberElementSize } 
 import { _dbgAdd } from '../utils/util-debug.js';
 import { recordStat, SM } from '../features/feature-stats.js';
 import { _processAttachmentsBeforeSend } from '../features/feature-attachments.js';
-import { assembleMessages } from '../api.js';
+import { assembleMessages, redactRequestBody } from '../api.js';
 import { state } from '../state.js';
 import { t, translate } from '../utils/util-i18n.js';
 
@@ -931,8 +931,12 @@ export function _buildContextInspectorHTML(messages) {
     navHtml += `<div class="scp-ctx-nav-note">${escHtml(translate('Everything below is sent, in this order.'))}<div class="scp-ctx-total">${_tokSpan('__total')}</div></div>`;
 
     messages.forEach((msg, idx) => {
+        // Image parts are sent as image_url; show a numbered placeholder in the text and the
+        // images themselves under the block.
+        const images = Array.isArray(msg.content) ? msg.content.filter(p => p.type === 'image_url') : [];
+        let imgN = 0;
         let raw = Array.isArray(msg.content)
-            ? msg.content.map(p => p.type === 'text' ? p.text : '[Image]').join('\n')
+            ? msg.content.map(p => p.type === 'text' ? p.text : `[Image ${++imgN} of ${images.length}: sent as an image, shown below]`).join('\n')
             : (msg.content || '');
 
         const { text: label, cls } = _ctxMessageLabel(msg, counters);
@@ -1009,8 +1013,16 @@ export function _buildContextInspectorHTML(messages) {
         bodyHtml += `<div class="scp-ctx-block" id="${blockId}">`;
         bodyHtml += `<div class="scp-ctx-block-header scp-ctx-role-${displayRole} scp-ctx-kind-${cls}">${_tokSpan(blockId)}${escHtml(label)}</div>`;
         bodyHtml += `<div class="scp-ctx-block-sep"></div>`;
-        bodyHtml += `<div class="scp-ctx-block-body"><pre class="scp-ctx-pre">${highlighted}</pre></div>`;
-        bodyHtml += `</div>`;
+        bodyHtml += `<div class="scp-ctx-block-body"><pre class="scp-ctx-pre">${highlighted}</pre>`;
+        if (images.length) {
+            bodyHtml += `<div class="scp-ctx-images">` + images.map((p, i) => {
+                const url = String(p.image_url?.url || '');
+                const kb = url.startsWith('data:') ? Math.round((url.length - url.indexOf(',') - 1) * 0.75 / 1024) : null;
+                const safeUrl = /^(data:image\/|https?:)/.test(url) ? url : '';
+                return `<figure class="scp-ctx-image">${safeUrl ? `<img src="${escHtml(safeUrl)}" alt="">` : ''}<figcaption>${escHtml(t`Image ${i + 1}`)}${kb !== null ? ` · ${kb} KB` : ''}</figcaption></figure>`;
+            }).join('') + `</div>`;
+        }
+        bodyHtml += `</div></div>`;
     });
 
     const styleHtml = `<style>
@@ -1078,7 +1090,8 @@ export async function openInspector() {
             });
         });
     }
-    if (jsonEl) jsonEl.textContent = JSON.stringify(messages, null, 2);
+    // Shortened like Last sent: inline base64 images become "data:image/png;base64,… (N KB)".
+    if (jsonEl) jsonEl.textContent = JSON.stringify(redactRequestBody(messages), null, 2);
     modalEl.style.display = 'flex';
     import('./ui-window.js').then(m => m.bringWindowToFront());
     

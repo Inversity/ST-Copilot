@@ -365,6 +365,11 @@ const _SECRET_KEY_RE = /pass(word)?$|password|secret|(^|_)token$|api[_-]?key|aut
 // Copy of a request body with credential-looking fields replaced, safe to show and copy.
 export function redactRequestBody(value) {
     if (Array.isArray(value)) return value.map(redactRequestBody);
+    // Inline images/files: keep the type, drop the base64 (it buries everything else).
+    if (typeof value === 'string' && value.startsWith('data:') && value.length > 200) {
+        const kb = Math.round((value.length - value.indexOf(',') - 1) * 0.75 / 1024);
+        return `${value.slice(0, value.indexOf(',') + 1)}… (${kb} KB)`;
+    }
     if (!value || typeof value !== 'object') return value;
     const out = {};
     for (const [k, v] of Object.entries(value)) {

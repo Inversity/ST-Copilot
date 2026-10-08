@@ -4849,6 +4849,13 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
 .scp-ctx-nav-divider { height:1px; background:rgba(255,255,255,0.06); margin:4px 0; }
 /* Wider default nav; the divider beside it drags to resize (width remembered). */
 .scp-ctx-inspector .scp-ctx-nav { width:220px; border-right:none; }
+/* The nav is a column flexbox with a fixed height: without this its items shrink to fit
+   (an expanded prompts list got clipped after ~5 rows) instead of the nav scrolling. */
+.scp-ctx-nav > * { flex-shrink:0; }
+.scp-ctx-images { display:flex; flex-wrap:wrap; gap:8px; padding:8px 10px 4px; }
+.scp-ctx-image { margin:0; display:flex; flex-direction:column; gap:3px; }
+.scp-ctx-image img { max-width:160px; max-height:160px; border-radius:6px; border:1px solid rgba(255,255,255,0.1); object-fit:contain; background:rgba(0,0,0,0.2); }
+.scp-ctx-image figcaption { font-size:10px; color:var(--scp-text-muted); }
 .scp-ctx-resizer {
     width:6px; flex-shrink:0; align-self:stretch; cursor:col-resize; touch-action:none;
     border-left:1px solid rgba(255,255,255,0.06); transition:background 0.12s;

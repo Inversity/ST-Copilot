@@ -26,3 +26,10 @@ test('credential-looking fields are redacted at any depth; content is kept', () 
     assert.equal(r.access_token, '[redacted]');
     assert.equal(body.proxy_password, 'hunter2', 'original body is not modified');
 });
+
+test('inline base64 images are shortened to their type and size', () => {
+    const b64 = 'A'.repeat(4096);
+    const r = redactRequestBody({ messages: [{ content: [{ type: 'image_url', image_url: { url: `data:image/png;base64,${b64}` } }, { type: 'text', text: 'look' }] }] });
+    assert.equal(r.messages[0].content[0].image_url.url, 'data:image/png;base64,… (3 KB)');
+    assert.equal(r.messages[0].content[1].text, 'look');
+});

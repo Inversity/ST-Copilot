@@ -48,7 +48,12 @@ export async function _processAttachmentsBeforeSend(atts, isPreview = false) {
 
 export function _mergeContent(baseText, atts) {
     if (!atts || !atts.length) return baseText;
-    const textParts = atts.filter(a => a.textContent).map(a => a.sendAsText ? a.textContent : `[Attached file "${a.name}"]\n${a.textContent}`);
+    // Text files are labeled with their name (they used to be pasted in bare, so neither the
+    // model nor the Context view could tell file text from typed text). Image captions are
+    // already labeled.
+    const textParts = atts.filter(a => a.textContent).map(a => (a.isImage && a.sendAsText)
+        ? a.textContent
+        : `[Attached file "${a.name}"]\n${a.textContent}\n[End of "${a.name}"]`);
     const textPrefix = textParts.join('\n\n');
     
     let combinedText = '';
