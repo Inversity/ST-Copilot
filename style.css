@@ -4836,6 +4836,16 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
 .scp-ctx-nav-system { color:var(--scp-accent) !important; }
 .scp-ctx-nav-user { color:#5bc0eb !important; }
 .scp-ctx-nav-assistant { color:var(--scp-success) !important; }
+/* Payload parts that aren't the Copilot conversation: roleplay chat, auto replies, unsent input. */
+.scp-ctx-nav-btn.scp-ctx-nav-kind-roleplay { color:#e0a458 !important; }
+.scp-ctx-nav-btn.scp-ctx-nav-kind-auto { color:var(--scp-text-muted) !important; font-style:italic; font-weight:400; }
+.scp-ctx-nav-btn.scp-ctx-nav-kind-pending { color:var(--scp-text-muted) !important; border:1px dashed rgba(255,255,255,0.15); }
+.scp-ctx-nav-sub2 { font-weight:400; padding-left:26px; }
+.scp-ctx-nav-slot { color:var(--scp-text-muted) !important; font-style:italic; }
+.scp-ctx-nav-note { font-size:calc(var(--scp-font-size, 13px) - 4px); color:var(--scp-text-muted); padding:2px 7px 6px; white-space:normal; }
+.scp-ctx-kind-roleplay { background:rgba(224,164,88,0.15) !important; color:#e0a458 !important; }
+.scp-ctx-kind-auto { background:rgba(255,255,255,0.04) !important; color:var(--scp-text-muted) !important; }
+.scp-ctx-kind-pending { background:rgba(255,255,255,0.04) !important; color:var(--scp-text-muted) !important; border:1px dashed rgba(255,255,255,0.15); }
 .scp-ctx-nav-divider { height:1px; background:rgba(255,255,255,0.06); margin:4px 0; }
 .scp-ctx-body { flex:1; height:100%; overflow-y:auto; padding:10px 14px 20px; position:relative; scroll-behavior:smooth; }
 .scp-ctx-block { margin-bottom:16px; }

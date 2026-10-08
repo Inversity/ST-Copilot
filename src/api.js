@@ -165,8 +165,15 @@ export function getMainChatSlice(depth) {
     return ctx.chat.slice(start).map((m, i) => extractData(m, start + i));
 }
 
+// What a message in the payload is, for the Context inspector. Non-enumerable, so it never
+// reaches JSON.stringify or the API request.
+function _tagCtx(msg, kind, extra = {}) {
+    Object.defineProperty(msg, '_ctx', { value: { kind, ...extra }, enumerable: false, configurable: true });
+    return msg;
+}
+
 export async function assembleMessages(session, settings, pendingUserText, pendingAtts = null) {
-    const messages = [{ role: 'system', content: await buildSystemContent(settings) }];
+    const messages = [_tagCtx({ role: 'system', content: await buildSystemContent(settings) }, 'system')];
     const depth = Math.max(0, parseInt(settings.contextDepth) || 0);
     const hasPicked = !!(session.pickedChatIndices && session.pickedChatIndices.length > 0);
     
@@ -215,29 +222,35 @@ export async function assembleMessages(session, settings, pendingUserText, pendi
             }
 
             const ctxAttr = hasPicked ? `picked_messages="${visibleSlice.length}"` : `last_messages="${visibleSlice.length}"`;
-            messages.push({
+            messages.push(_tagCtx({
                 role: 'user',
                 content: `<roleplay_context ${ctxAttr}>\n${summaryText}${block}\n\n</roleplay_context>`,
-            });
-            messages.push({ role: 'assistant', content: 'Understood. I have reviewed the current roleplay context. How can I help?' });
+            }, 'roleplay', {
+                count: visibleSlice.length,
+                first: visibleSlice[0]?.chatIndex,
+                last: visibleSlice[visibleSlice.length - 1]?.chatIndex,
+                picked: hasPicked,
+            }));
+            messages.push(_tagCtx({ role: 'assistant', content: 'Understood. I have reviewed the current roleplay context. How can I help?' }, 'ack'));
         }
     }
     const limit = Math.max(1, parseInt(settings.localHistoryLimit) || 50);
+    const historyTotal = session.messages.length;
     for (const m of session.messages.slice(-limit)) {
         let content = m.content;
-        
+
         const currentSwipe = m.swipes?.[m.swipeIndex || 0];
         const hasAttachedHistory = currentSwipe?.historyLines?.length > 0;
 
         if (m.isLBHistory || m.isCharEditHistory || m.isChatEditHistory) {
             content = _buildAiContextForHistoryMsg(m);
-            messages.push({ role: 'user', content: _mergeContent(content, m.attachments) });
+            messages.push(_tagCtx({ role: 'user', content: _mergeContent(content, m.attachments) }, 'action'));
         } else {
             const finalContent = _mergeContent(content, m.attachments);
             let apiRole = m.role;
             if (apiRole === 'system') apiRole = 'user';
-            
-            messages.push({ role: apiRole, content: finalContent });
+
+            messages.push(_tagCtx({ role: apiRole, content: finalContent }, apiRole === 'assistant' ? 'copilot' : 'you', { limit, historyTotal }));
 
             if (hasAttachedHistory) {
                 let cat = 'system_action_results';
@@ -248,15 +261,15 @@ export async function assembleMessages(session, settings, pendingUserText, pendi
 
                 const dummy = { appliedLines: currentSwipe.historyLines, isCharEditHistory: cat === 'character_card_changes', isChatEditHistory: cat === 'chat_messages_edits' };
                 const historyContext = _buildAiContextForHistoryMsg(dummy);
-                
-                messages.push({ role: 'user', content: historyContext });
+
+                messages.push(_tagCtx({ role: 'user', content: historyContext }, 'action'));
             }
         }
     }
     if (pendingUserText !== null && pendingUserText !== undefined) {
         const finalContent = _mergeContent(pendingUserText, pendingAtts);
         if (finalContent || (Array.isArray(finalContent) && finalContent.length)) {
-            messages.push({ role: 'user', content: finalContent });
+            messages.push(_tagCtx({ role: 'user', content: finalContent }, 'pending'));
         }
     }
 

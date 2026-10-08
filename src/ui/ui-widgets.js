@@ -750,9 +750,13 @@ export function _highlightContextText(raw) {
     }
 
     let html = '', last = 0;
-    const KNOWN = new Set(['system_prompt','character_information','characters','character','lorebook_context','st_system_prompt','persistent_memory','summary_context','lorebook_management','character_management','chat_messages_editing','roleplay_context','entity_definitions','persona_configuration','operational_guidelines','{{user}}_persona', 'tool_calls_system', 'memory_system']);
+    const KNOWN = new Set(['system_prompt','character_information','characters','character','lorebook_context','st_system_prompt','st_roleplay_prompt','persistent_memory','summary_context','lorebook_management','character_management','chat_messages_editing','prompt_editing','roleplay_context','entity_definitions','persona_configuration','operational_guidelines','{{user}}_persona', 'tool_calls_system', 'memory_system']);
     let currentDepth = 0;
     let emittedAnchors = new Set();
+    // Inside <st_roleplay_prompt>, every <prompt> and <slot/> gets an anchor so the nav can
+    // list the user's prompts one by one (numbered in order; see _rpPromptNavItems).
+    let inRpPrompt = false;
+    let rpIdx = 0;
 
     for (const [start, end, type, match, tagName] of events) {
         if (start < last) continue;
@@ -772,6 +776,11 @@ export function _highlightContextText(raw) {
             } else {
                 applyDepth = currentDepth;
                 currentDepth++;
+            }
+
+            if (tagName === 'st_roleplay_prompt') inRpPrompt = !isClose;
+            if (inRpPrompt && !isClose && (tagName === 'prompt' || (tagName === 'slot' && isSelfClose))) {
+                html += `<span id="scp-ctx-rp-${rpIdx++}" class="scp-ctx-anchor"></span>`;
             }
 
             if (!isClose && !isComment && !isSelfClose && tagName) {
@@ -796,9 +805,38 @@ export function _highlightContextText(raw) {
     return html;
 }
 
+// The prompts and slots inside <st_roleplay_prompt>, in order, matching the scp-ctx-rp-N anchors.
+function _rpPromptNavItems(raw) {
+    const start = raw.indexOf('<st_roleplay_prompt');
+    const end = raw.indexOf('</st_roleplay_prompt>');
+    if (start === -1 || end === -1) return [];
+    const unesc = s => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    return [...raw.slice(start, end).matchAll(/<(prompt|slot) name="([^"]*)"/g)]
+        .map((m, i) => ({ id: `scp-ctx-rp-${i}`, label: unesc(m[2]), slot: m[1] === 'slot' }));
+}
+
+// Nav/header label saying what a payload message is (tagged in assembleMessages).
+function _ctxMessageLabel(msg, counters) {
+    const c = msg._ctx || {};
+    switch (c.kind) {
+        case 'system': return { text: '■ SYSTEM · Copilot setup', cls: 'system' };
+        case 'roleplay': {
+            const range = c.first !== undefined ? (c.first === c.last ? ` #${c.first}` : ` #${c.first}–#${c.last}`) : '';
+            return { text: `▶ ROLEPLAY CHAT · ${c.count} msg${c.count === 1 ? '' : 's'}${range}${c.picked ? ' (picked)' : ''}`, cls: 'roleplay' };
+        }
+        case 'ack': return { text: '◀ AUTO REPLY · acknowledges roleplay', cls: 'auto' };
+        case 'you': return { text: `▶ YOU #${++counters.you}`, cls: 'user' };
+        case 'copilot': return { text: `◀ COPILOT #${++counters.copilot}`, cls: 'assistant' };
+        case 'action': return { text: '▶ ACTION RESULTS · applied edits', cls: 'auto' };
+        case 'pending': return { text: '▶ YOU · in the input box (not sent yet)', cls: 'pending' };
+        default: return { text: msg.role === 'user' ? '▶ USER' : msg.role === 'assistant' ? '◀ ASSISTANT' : `■ ${String(msg.role).toUpperCase()}`, cls: msg.role };
+    }
+}
+
 export function _buildContextInspectorHTML(messages) {
     const SECTION_LABELS = {
-        'system_prompt': 'System Prompt', 
+        'system_prompt': 'Copilot System Prompt',
+        'st_roleplay_prompt': 'My Roleplay Prompt',
         'persistent_memory': 'Persistent Memory',
         'lorebook_context': 'Lorebook', 
         'characters': 'Characters',
@@ -807,8 +845,10 @@ export function _buildContextInspectorHTML(messages) {
         'lorebook_management': 'Lorebook Management',
         'character_management': 'Character Management',
         'chat_messages_editing': 'Chat Management',
+        'prompt_editing': 'Prompt Management',
         'tool_calls_system': 'Tool Calls'
     };
+    const MODULE_KEYS = ['memory_system', 'lorebook_management', 'character_management', 'chat_messages_editing', 'prompt_editing', 'tool_calls_system'];
     const KNOWN_SECS = new Set(Object.keys(SECTION_LABELS));
     const ALIASES = {
         'character_information': 'characters',
@@ -816,6 +856,7 @@ export function _buildContextInspectorHTML(messages) {
     };
     const DISPLAY_ORDER = [
         'system_prompt',
+        'st_roleplay_prompt',
         'persistent_memory',
         'lorebook_context',
         'characters',
@@ -824,27 +865,27 @@ export function _buildContextInspectorHTML(messages) {
         'lorebook_management',
         'character_management',
         'chat_messages_editing',
+        'prompt_editing',
         'tool_calls_system'
     ];
 
     let navHtml = '', bodyHtml = '';
     let seenSections = new Set();
-    
+    const counters = { you: 0, copilot: 0 };
+
+    // What the list is, at the top of the nav: everything below is sent, in this order.
+    navHtml += `<div class="scp-ctx-nav-note">${escHtml(translate('Everything below is sent, in this order.'))}</div>`;
+
     messages.forEach((msg, idx) => {
         let raw = Array.isArray(msg.content)
             ? msg.content.map(p => p.type === 'text' ? p.text : '[Image]').join('\n')
             : (msg.content || '');
 
-        let displayRole = msg.role;
-        if (msg.role === 'user' && raw.includes('"type": "system_notification"')) {
-            displayRole = 'system';
-        }
-
-        const LABELS = { system:'■ SYSTEM', user:'▶ USER', assistant:'◀ ASSISTANT' };
-        const label = (LABELS[displayRole] || displayRole) + (idx > 0 ? ` #${idx}` : '');
+        const { text: label, cls } = _ctxMessageLabel(msg, counters);
+        const displayRole = msg.role;
         const blockId = `scp-ctx-b${idx}`;
 
-        navHtml += `<button class="scp-ctx-nav-btn scp-ctx-nav-${displayRole}" data-t="${blockId}">${escHtml(label)}</button>`;
+        navHtml += `<button class="scp-ctx-nav-btn scp-ctx-nav-${displayRole} scp-ctx-nav-kind-${cls}" data-t="${blockId}">${escHtml(label)}</button>`;
 
         if (msg.role === 'system') {
             const tagRe = /<([\w:{}_-]+)[^>]*>/g;
@@ -865,7 +906,7 @@ export function _buildContextInspectorHTML(messages) {
                     const secLabel = SECTION_LABELS[key] || (isUserPersona ? 'User Persona' : key);
                     const secId = `scp-ctx-sec-${rawTag}`;
                     
-                    if (['memory_system','lorebook_management','character_management','chat_messages_editing', 'tool_calls_system'].includes(key)) {
+                    if (MODULE_KEYS.includes(key)) {
                         foundModules.push({ key, id: secId, label: secLabel });
                     } else {
                         foundMain.push({ key, id: secId, label: secLabel });
@@ -886,6 +927,13 @@ export function _buildContextInspectorHTML(messages) {
 
             foundMain.forEach(item => {
                 navHtml += `<button class="scp-ctx-nav-btn scp-ctx-nav-sub" data-t="${item.id}">&nbsp;&nbsp;◦ ${escHtml(item.label)}</button>`;
+                if (item.key === 'st_roleplay_prompt') {
+                    const rp = _rpPromptNavItems(raw);
+                    if (rp.length) {
+                        const sub = rp.map(p => `<button class="scp-ctx-nav-btn scp-ctx-nav-sub2${p.slot ? ' scp-ctx-nav-slot' : ''}" data-t="${p.id}">${p.slot ? '⌁ ' : '· '}${escHtml(p.label)}</button>`).join('');
+                        navHtml += `<details class="scp-ctx-nav-details"><summary class="scp-ctx-nav-btn scp-ctx-nav-sub2" style="color:var(--scp-text-muted)">${escHtml(t`${rp.filter(p => !p.slot).length} prompts, ${rp.filter(p => p.slot).length} slots`)}</summary>${sub}</details>`;
+                    }
+                }
             });
 
             let moduleNavs = '';
@@ -900,7 +948,7 @@ export function _buildContextInspectorHTML(messages) {
 
         const highlighted = _highlightContextText(raw);
         bodyHtml += `<div class="scp-ctx-block" id="${blockId}">`;
-        bodyHtml += `<div class="scp-ctx-block-header scp-ctx-role-${displayRole}">${escHtml(label)}</div>`;
+        bodyHtml += `<div class="scp-ctx-block-header scp-ctx-role-${displayRole} scp-ctx-kind-${cls}">${escHtml(label)}</div>`;
         bodyHtml += `<div class="scp-ctx-block-sep"></div>`;
         bodyHtml += `<div class="scp-ctx-block-body"><pre class="scp-ctx-pre">${highlighted}</pre></div>`;
         bodyHtml += `</div>`;

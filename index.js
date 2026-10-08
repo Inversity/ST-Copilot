@@ -15461,8 +15461,15 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       return ctx.chat.slice(start).map((m, i) => extractData(m, start + i));
   }
 
+  // What a message in the payload is, for the Context inspector. Non-enumerable, so it never
+  // reaches JSON.stringify or the API request.
+  function _tagCtx(msg, kind, extra = {}) {
+      Object.defineProperty(msg, '_ctx', { value: { kind, ...extra }, enumerable: false, configurable: true });
+      return msg;
+  }
+
   async function assembleMessages(session, settings, pendingUserText, pendingAtts = null) {
-      const messages = [{ role: 'system', content: await buildSystemContent(settings) }];
+      const messages = [_tagCtx({ role: 'system', content: await buildSystemContent(settings) }, 'system')];
       const depth = Math.max(0, parseInt(settings.contextDepth) || 0);
       const hasPicked = !!(session.pickedChatIndices && session.pickedChatIndices.length > 0);
       
@@ -15511,29 +15518,35 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               }
 
               const ctxAttr = hasPicked ? `picked_messages="${visibleSlice.length}"` : `last_messages="${visibleSlice.length}"`;
-              messages.push({
+              messages.push(_tagCtx({
                   role: 'user',
                   content: `<roleplay_context ${ctxAttr}>\n${summaryText}${block}\n\n</roleplay_context>`,
-              });
-              messages.push({ role: 'assistant', content: 'Understood. I have reviewed the current roleplay context. How can I help?' });
+              }, 'roleplay', {
+                  count: visibleSlice.length,
+                  first: visibleSlice[0]?.chatIndex,
+                  last: visibleSlice[visibleSlice.length - 1]?.chatIndex,
+                  picked: hasPicked,
+              }));
+              messages.push(_tagCtx({ role: 'assistant', content: 'Understood. I have reviewed the current roleplay context. How can I help?' }, 'ack'));
           }
       }
       const limit = Math.max(1, parseInt(settings.localHistoryLimit) || 50);
+      const historyTotal = session.messages.length;
       for (const m of session.messages.slice(-limit)) {
           let content = m.content;
-          
+
           const currentSwipe = m.swipes?.[m.swipeIndex || 0];
           const hasAttachedHistory = currentSwipe?.historyLines?.length > 0;
 
           if (m.isLBHistory || m.isCharEditHistory || m.isChatEditHistory) {
               content = _buildAiContextForHistoryMsg(m);
-              messages.push({ role: 'user', content: _mergeContent(content, m.attachments) });
+              messages.push(_tagCtx({ role: 'user', content: _mergeContent(content, m.attachments) }, 'action'));
           } else {
               const finalContent = _mergeContent(content, m.attachments);
               let apiRole = m.role;
               if (apiRole === 'system') apiRole = 'user';
-              
-              messages.push({ role: apiRole, content: finalContent });
+
+              messages.push(_tagCtx({ role: apiRole, content: finalContent }, apiRole === 'assistant' ? 'copilot' : 'you', { limit, historyTotal }));
 
               if (hasAttachedHistory) {
                   let cat = 'system_action_results';
@@ -15544,15 +15557,15 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
                   const dummy = { appliedLines: currentSwipe.historyLines, isCharEditHistory: cat === 'character_card_changes', isChatEditHistory: cat === 'chat_messages_edits' };
                   const historyContext = _buildAiContextForHistoryMsg(dummy);
-                  
-                  messages.push({ role: 'user', content: historyContext });
+
+                  messages.push(_tagCtx({ role: 'user', content: historyContext }, 'action'));
               }
           }
       }
       if (pendingUserText !== null && pendingUserText !== undefined) {
           const finalContent = _mergeContent(pendingUserText, pendingAtts);
           if (finalContent || (Array.isArray(finalContent) && finalContent.length)) {
-              messages.push({ role: 'user', content: finalContent });
+              messages.push(_tagCtx({ role: 'user', content: finalContent }, 'pending'));
           }
       }
 
@@ -17341,9 +17354,13 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       }
 
       let html = '', last = 0;
-      const KNOWN = new Set(['system_prompt','character_information','characters','character','lorebook_context','st_system_prompt','persistent_memory','summary_context','lorebook_management','character_management','chat_messages_editing','roleplay_context','entity_definitions','persona_configuration','operational_guidelines','{{user}}_persona', 'tool_calls_system', 'memory_system']);
+      const KNOWN = new Set(['system_prompt','character_information','characters','character','lorebook_context','st_system_prompt','st_roleplay_prompt','persistent_memory','summary_context','lorebook_management','character_management','chat_messages_editing','prompt_editing','roleplay_context','entity_definitions','persona_configuration','operational_guidelines','{{user}}_persona', 'tool_calls_system', 'memory_system']);
       let currentDepth = 0;
       let emittedAnchors = new Set();
+      // Inside <st_roleplay_prompt>, every <prompt> and <slot/> gets an anchor so the nav can
+      // list the user's prompts one by one (numbered in order; see _rpPromptNavItems).
+      let inRpPrompt = false;
+      let rpIdx = 0;
 
       for (const [start, end, type, match, tagName] of events) {
           if (start < last) continue;
@@ -17363,6 +17380,11 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               } else {
                   applyDepth = currentDepth;
                   currentDepth++;
+              }
+
+              if (tagName === 'st_roleplay_prompt') inRpPrompt = !isClose;
+              if (inRpPrompt && !isClose && (tagName === 'prompt' || (tagName === 'slot' && isSelfClose))) {
+                  html += `<span id="scp-ctx-rp-${rpIdx++}" class="scp-ctx-anchor"></span>`;
               }
 
               if (!isClose && !isComment && !isSelfClose && tagName) {
@@ -17387,9 +17409,38 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       return html;
   }
 
+  // The prompts and slots inside <st_roleplay_prompt>, in order, matching the scp-ctx-rp-N anchors.
+  function _rpPromptNavItems(raw) {
+      const start = raw.indexOf('<st_roleplay_prompt');
+      const end = raw.indexOf('</st_roleplay_prompt>');
+      if (start === -1 || end === -1) return [];
+      const unesc = s => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+      return [...raw.slice(start, end).matchAll(/<(prompt|slot) name="([^"]*)"/g)]
+          .map((m, i) => ({ id: `scp-ctx-rp-${i}`, label: unesc(m[2]), slot: m[1] === 'slot' }));
+  }
+
+  // Nav/header label saying what a payload message is (tagged in assembleMessages).
+  function _ctxMessageLabel(msg, counters) {
+      const c = msg._ctx || {};
+      switch (c.kind) {
+          case 'system': return { text: '■ SYSTEM · Copilot setup', cls: 'system' };
+          case 'roleplay': {
+              const range = c.first !== undefined ? (c.first === c.last ? ` #${c.first}` : ` #${c.first}–#${c.last}`) : '';
+              return { text: `▶ ROLEPLAY CHAT · ${c.count} msg${c.count === 1 ? '' : 's'}${range}${c.picked ? ' (picked)' : ''}`, cls: 'roleplay' };
+          }
+          case 'ack': return { text: '◀ AUTO REPLY · acknowledges roleplay', cls: 'auto' };
+          case 'you': return { text: `▶ YOU #${++counters.you}`, cls: 'user' };
+          case 'copilot': return { text: `◀ COPILOT #${++counters.copilot}`, cls: 'assistant' };
+          case 'action': return { text: '▶ ACTION RESULTS · applied edits', cls: 'auto' };
+          case 'pending': return { text: '▶ YOU · in the input box (not sent yet)', cls: 'pending' };
+          default: return { text: msg.role === 'user' ? '▶ USER' : msg.role === 'assistant' ? '◀ ASSISTANT' : `■ ${String(msg.role).toUpperCase()}`, cls: msg.role };
+      }
+  }
+
   function _buildContextInspectorHTML(messages) {
       const SECTION_LABELS = {
-          'system_prompt': 'System Prompt', 
+          'system_prompt': 'Copilot System Prompt',
+          'st_roleplay_prompt': 'My Roleplay Prompt',
           'persistent_memory': 'Persistent Memory',
           'lorebook_context': 'Lorebook', 
           'characters': 'Characters',
@@ -17398,8 +17449,10 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           'lorebook_management': 'Lorebook Management',
           'character_management': 'Character Management',
           'chat_messages_editing': 'Chat Management',
+          'prompt_editing': 'Prompt Management',
           'tool_calls_system': 'Tool Calls'
       };
+      const MODULE_KEYS = ['memory_system', 'lorebook_management', 'character_management', 'chat_messages_editing', 'prompt_editing', 'tool_calls_system'];
       const KNOWN_SECS = new Set(Object.keys(SECTION_LABELS));
       const ALIASES = {
           'character_information': 'characters',
@@ -17407,6 +17460,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       };
       const DISPLAY_ORDER = [
           'system_prompt',
+          'st_roleplay_prompt',
           'persistent_memory',
           'lorebook_context',
           'characters',
@@ -17415,27 +17469,27 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           'lorebook_management',
           'character_management',
           'chat_messages_editing',
+          'prompt_editing',
           'tool_calls_system'
       ];
 
       let navHtml = '', bodyHtml = '';
       let seenSections = new Set();
-      
+      const counters = { you: 0, copilot: 0 };
+
+      // What the list is, at the top of the nav: everything below is sent, in this order.
+      navHtml += `<div class="scp-ctx-nav-note">${escHtml(translate('Everything below is sent, in this order.'))}</div>`;
+
       messages.forEach((msg, idx) => {
           let raw = Array.isArray(msg.content)
               ? msg.content.map(p => p.type === 'text' ? p.text : '[Image]').join('\n')
               : (msg.content || '');
 
-          let displayRole = msg.role;
-          if (msg.role === 'user' && raw.includes('"type": "system_notification"')) {
-              displayRole = 'system';
-          }
-
-          const LABELS = { system:'■ SYSTEM', user:'▶ USER', assistant:'◀ ASSISTANT' };
-          const label = (LABELS[displayRole] || displayRole) + (idx > 0 ? ` #${idx}` : '');
+          const { text: label, cls } = _ctxMessageLabel(msg, counters);
+          const displayRole = msg.role;
           const blockId = `scp-ctx-b${idx}`;
 
-          navHtml += `<button class="scp-ctx-nav-btn scp-ctx-nav-${displayRole}" data-t="${blockId}">${escHtml(label)}</button>`;
+          navHtml += `<button class="scp-ctx-nav-btn scp-ctx-nav-${displayRole} scp-ctx-nav-kind-${cls}" data-t="${blockId}">${escHtml(label)}</button>`;
 
           if (msg.role === 'system') {
               const tagRe = /<([\w:{}_-]+)[^>]*>/g;
@@ -17456,7 +17510,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                       const secLabel = SECTION_LABELS[key] || (isUserPersona ? 'User Persona' : key);
                       const secId = `scp-ctx-sec-${rawTag}`;
                       
-                      if (['memory_system','lorebook_management','character_management','chat_messages_editing', 'tool_calls_system'].includes(key)) {
+                      if (MODULE_KEYS.includes(key)) {
                           foundModules.push({ key, id: secId, label: secLabel });
                       } else {
                           foundMain.push({ key, id: secId, label: secLabel });
@@ -17477,6 +17531,13 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
               foundMain.forEach(item => {
                   navHtml += `<button class="scp-ctx-nav-btn scp-ctx-nav-sub" data-t="${item.id}">&nbsp;&nbsp;◦ ${escHtml(item.label)}</button>`;
+                  if (item.key === 'st_roleplay_prompt') {
+                      const rp = _rpPromptNavItems(raw);
+                      if (rp.length) {
+                          const sub = rp.map(p => `<button class="scp-ctx-nav-btn scp-ctx-nav-sub2${p.slot ? ' scp-ctx-nav-slot' : ''}" data-t="${p.id}">${p.slot ? '⌁ ' : '· '}${escHtml(p.label)}</button>`).join('');
+                          navHtml += `<details class="scp-ctx-nav-details"><summary class="scp-ctx-nav-btn scp-ctx-nav-sub2" style="color:var(--scp-text-muted)">${escHtml(t`${rp.filter(p => !p.slot).length} prompts, ${rp.filter(p => p.slot).length} slots`)}</summary>${sub}</details>`;
+                      }
+                  }
               });
 
               let moduleNavs = '';
@@ -17491,7 +17552,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
           const highlighted = _highlightContextText(raw);
           bodyHtml += `<div class="scp-ctx-block" id="${blockId}">`;
-          bodyHtml += `<div class="scp-ctx-block-header scp-ctx-role-${displayRole}">${escHtml(label)}</div>`;
+          bodyHtml += `<div class="scp-ctx-block-header scp-ctx-role-${displayRole} scp-ctx-kind-${cls}">${escHtml(label)}</div>`;
           bodyHtml += `<div class="scp-ctx-block-sep"></div>`;
           bodyHtml += `<div class="scp-ctx-block-body"><pre class="scp-ctx-pre">${highlighted}</pre></div>`;
           bodyHtml += `</div>`;
