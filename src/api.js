@@ -21,7 +21,8 @@ import { buildMemoryContextBlock, buildMemoryAIInstructions, processMemoryUpdate
 import { buildToolCallsSystemBlock, parseToolCallsFromText, executeTool, getEnabledTools } from './features/feature-tools-engine.js';
 
 import { updateMsgCount, smartScrollToBottom, setGeneratingState, showGenerationError, _renderMsgBodyContent, updateSwipeBar, _refreshSwipeBars, appendMsgEl, renderStreamingReasoning, updateMsgMeta } from './ui/ui-chat.js';
-import { getDisplayContent, extractToolCallPlaceholders, renderMarkdown, postProcessHTMLBlocks, scheduleStreamRender, cancelStreamRender } from './ui/ui-chat.js';
+import { getDisplayContent, extractToolCallPlaceholders, postProcessHTMLBlocks, scheduleStreamRender, cancelStreamRender, renderStreamingMarkdown } from './ui/ui-chat.js';
+import { renderMarkdown } from './utils/util-markdown.js';
 import { postProcessToolCalls, executeAskUser } from './features/feature-tools-ui.js';
 import { playCompletionSound } from './ui/ui-widgets.js';
 
@@ -915,7 +916,7 @@ export async function runToolRounds({ session, settings, result, msgEl, contentE
             const procText = extractToolCallPlaceholders(stripMemoryBlock(combinedText), tcIndex).text;
 
             if (combinedReasoning) renderStreamingReasoning(msgEl, combinedReasoning, getReasoningMs(), true);
-            contentEl.innerHTML = renderMarkdown(procText);
+            renderStreamingMarkdown(contentEl, procText);
             if (appendEl) contentEl.appendChild(appendEl);
             postProcessHTMLBlocks(contentEl, true);
             if (state.activeToolCalls.length || tcIndex > 0) postProcessToolCalls(msgEl, state.activeToolCalls);
@@ -1069,7 +1070,7 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
 
                 if (reasoning) renderStreamingReasoning(streamMsgEl, reasoning, reasoningMs, reasoningDone);
 
-                streamContentEl.innerHTML = renderMarkdown(procText);
+                renderStreamingMarkdown(streamContentEl, procText);
                 if (procText) streamContentEl.appendChild(cursorEl);
                 postProcessHTMLBlocks(streamContentEl, true);
 
@@ -1264,7 +1265,7 @@ export async function runContinue(session, targetMsgId) {
 
             const { content: disp } = getDisplayContent(procText, settings);
             if (streamContentEl) {
-                streamContentEl.innerHTML = renderMarkdown(disp);
+                renderStreamingMarkdown(streamContentEl, disp);
                 streamContentEl.appendChild(cursorEl);
                 postProcessHTMLBlocks(streamContentEl, true);
 
