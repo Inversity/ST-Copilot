@@ -89,6 +89,20 @@ test('drain waits for the reveal; abort shows the rest at once', async () => {
     assert.equal(h2.last().text, 'abcdef');
 });
 
+test('after an aborted drain, a frame still queued emits nothing', async () => {
+    const h = harness({ smooth_streaming: true, smooth_streaming_speed: 50 });
+    h.reveal.push('abcdef', null, null, true);
+    h.tick(0);                       // a step is now queued for the next frame
+    const ac = new AbortController();
+    const d = h.reveal.drain(ac.signal);
+    ac.abort();
+    await d;
+    const emitted = h.out.length;
+    h.tick(1000);                    // the leftover frame runs
+    h.reveal.push('abcdefgh', null, null, true);
+    assert.equal(h.out.length, emitted);
+});
+
 test('rewritten text keeps only the part still shown', () => {
     const h = harness({ smooth_streaming: true, smooth_streaming_speed: 50 });
     h.reveal.push('abcdef', null, null, false);

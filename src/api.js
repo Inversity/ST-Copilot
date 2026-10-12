@@ -431,6 +431,9 @@ export function createSmoothReveal(emit, {
     let target = { text: '', reasoning: '', ms: null, done: false };
     let shownText = 0, shownReasoning = 0;
     let budget = 0, last = null, scheduled = false, settle = null;
+    // Set once drained: the caller's final render follows, so a frame still queued here must
+    // not emit again (it would queue a stream render over the finished message).
+    let closed = false;
 
     const emitShown = () => emit(target.text.slice(0, shownText), target.reasoning.slice(0, shownReasoning) || null, target.ms, target.done);
     const caughtUp = () => shownText >= target.text.length && shownReasoning >= target.reasoning.length;
@@ -446,6 +449,7 @@ export function createSmoothReveal(emit, {
     };
     const step = () => {
         scheduled = false;
+        if (closed) return;
         const s = settings();
         const t = now();
         budget += last === null ? 0 : t - last;
@@ -458,7 +462,7 @@ export function createSmoothReveal(emit, {
         if (!caughtUp()) { scheduled = true; frame(step); return; }
         budget = 0;
         last = null;
-        if (settle) { settle(); settle = null; }
+        if (settle) { closed = true; settle(); settle = null; }
     };
     // Text normally only grows; if it was rewritten, keep only the part still shown.
     const keepPrefix = (oldStr, newStr, shown) => {
@@ -470,6 +474,7 @@ export function createSmoothReveal(emit, {
 
     return {
         push(text, reasoning, ms, done) {
+            if (closed) return;
             const next = { text: text || '', reasoning: reasoning || '', ms, done };
             shownText = keepPrefix(target.text, next.text, shownText);
             shownReasoning = keepPrefix(target.reasoning, next.reasoning, shownReasoning);
@@ -481,11 +486,12 @@ export function createSmoothReveal(emit, {
         drain(signal) {
             if (caughtUp() || !settings().smooth_streaming || !focused()) {
                 if (!caughtUp()) { showAll(); emitShown(); }
+                closed = true;
                 return Promise.resolve();
             }
             return new Promise(resolve => {
                 settle = resolve;
-                signal?.addEventListener('abort', () => { showAll(); emitShown(); settle = null; resolve(); }, { once: true });
+                signal?.addEventListener('abort', () => { showAll(); emitShown(); closed = true; settle = null; resolve(); }, { once: true });
             });
         },
     };
