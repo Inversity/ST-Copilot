@@ -478,6 +478,33 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
     }
 }
 
+// Sends through the connection SillyTavern is using right now, unsaved changes included.
+// Chat completion builds its payload with ST's own presetToGeneratePayload (an empty preset
+// means the live settings, run through the same createGenerationParameters as ST's chat).
+// Applying the preset by name instead would pull the preset's own source and endpoint.
+async function sendViaLiveConnection(ctx, messages, maxTokens, stream, signal) {
+    if (ctx.mainApi === 'openai' && ctx.ChatCompletionService) {
+        const live = ctx.chatCompletionSettings || {};
+        const data = await ctx.ChatCompletionService.presetToGeneratePayload({}, {}, {
+            stream,
+            messages,
+            max_tokens: maxTokens,
+            model: ctx.getChatCompletionModel(),
+            chat_completion_source: live.chat_completion_source,
+        });
+        return ctx.ChatCompletionService.sendRequest(data, false, signal);
+    }
+    if (ctx.mainApi === 'textgenerationwebui' && ctx.TextCompletionService) {
+        const textGenSettings = ctx.textCompletionSettings || {};
+        return ctx.TextCompletionService.processRequest({
+            prompt: messages,
+            max_tokens: maxTokens,
+            stream,
+        }, { presetName: textGenSettings.preset_settings_textgenerationwebui }, false, signal);
+    }
+    throw new Error('No active API connection found. Please select a profile in Connection Manager or configure the main API.');
+}
+
 async function _callGenerate(session, settings, pendingText, onChunk) {
     const ctx = SillyTavern.getContext();
     const messages = await assembleMessages(session, settings, pendingText);
@@ -680,15 +707,14 @@ async function _callGenerate(session, settings, pendingText, onChunk) {
             throw new Error('No profile selected in ST-Copilot settings.');
         }
     } else if (settings.connectionSource !== 'custom') {
+        // Default follows SillyTavern's live connection (sendViaLiveConnection), so a model
+        // changed in ST applies at once. The selected profile's saved copy can be older, so
+        // it only labels the reply here.
         const domSelect = document.getElementById('connection_profiles');
         if (domSelect && domSelect.value) {
             profileId = domSelect.value;
         } else if (ctx.extensionSettings?.connectionManager?.selectedProfile) {
             profileId = ctx.extensionSettings.connectionManager.selectedProfile;
-        }
-        
-        if (profileId) {
-            useConnectionManager = true;
         }
     }
 
@@ -765,24 +791,7 @@ async function _callGenerate(session, settings, pendingText, onChunk) {
                 includePreset: true
             }, modelOverridePayload);
         } else {
-            const mainApi = ctx.mainApi;
-            if (mainApi === 'openai' && ctx.ChatCompletionService) {
-                const oaiSettings = ctx.chatCompletionSettings || {};
-                asyncGeneratorFn = await ctx.ChatCompletionService.processRequest({
-                    messages: messages,
-                    max_tokens: maxTokens,
-                    stream: useStream
-                }, { presetName: oaiSettings.preset_settings_openai }, false, abort.signal);
-            } else if (mainApi === 'textgenerationwebui' && ctx.TextCompletionService) {
-                const textGenSettings = ctx.textCompletionSettings || {};
-                asyncGeneratorFn = await ctx.TextCompletionService.processRequest({
-                    prompt: messages,
-                    max_tokens: maxTokens,
-                    stream: useStream
-                }, { presetName: textGenSettings.preset_settings_textgenerationwebui }, false, abort.signal);
-            } else {
-                throw new Error('No active API connection found. Please select a profile in Connection Manager or configure the main API.');
-            }
+            asyncGeneratorFn = await sendViaLiveConnection(ctx, messages, maxTokens, useStream, abort.signal);
         }
     } catch (e) {
         if (useStream && !abort.signal.aborted && e?.name !== 'AbortError' && e?.message !== 'userStopped') {
@@ -798,25 +807,7 @@ async function _callGenerate(session, settings, pendingText, onChunk) {
                         includePreset: true
                     }, modelOverridePayload);
                 } else {
-                    const mainApi = ctx.mainApi;
-                    if (mainApi === 'openai' && ctx.ChatCompletionService) {
-                        const oaiSettings = ctx.chatCompletionSettings || {};
-                        asyncGeneratorFn = await ctx.ChatCompletionService.processRequest({
-                            messages: messages,
-                            max_tokens: maxTokens,
-                            stream: false
-                        }, { presetName: oaiSettings.preset_settings_openai }, false, abort.signal);
-                    } else if (mainApi === 'textgenerationwebui' && ctx.TextCompletionService) {
-                        const textGenSettings = ctx.textCompletionSettings || {};
-                        asyncGeneratorFn = await ctx.TextCompletionService.processRequest({
-                            prompt: messages,
-                            max_tokens: maxTokens,
-                            stream: false
-                        }, { presetName: textGenSettings.preset_settings_textgenerationwebui }, false, abort.signal);
-                    } else {
-                        // Without this the reply came back silently empty.
-                        throw e;
-                    }
+                    asyncGeneratorFn = await sendViaLiveConnection(ctx, messages, maxTokens, false, abort.signal);
                 }
             } catch (err2) {
                 state.abortController = null;
