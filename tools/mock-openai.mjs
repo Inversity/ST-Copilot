@@ -53,7 +53,7 @@ http.createServer((req, res) => {
         const reasoningToks = text(REASONING);
         const contentToks = text(Math.min(TOKENS, body.max_tokens || TOKENS));
         const started = Date.now();
-        console.log(`${new Date().toISOString()} ${body.stream ? 'stream' : 'block'} msgs=${body.messages?.length ?? 0} promptChars=${JSON.stringify(body.messages || []).length}`);
+        console.log(`${new Date().toISOString()} ${body.stream ? 'stream' : 'block'} model=${body.model} msgs=${body.messages?.length ?? 0} promptChars=${JSON.stringify(body.messages || []).length} max_tokens=${body.max_tokens}`);
 
         if (!body.stream) {
             return send(res, 200, {
