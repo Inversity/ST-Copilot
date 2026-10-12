@@ -402,6 +402,95 @@ export function createReasoningClock(now = () => performance.now()) {
     };
 }
 
+// SillyTavern's Smooth Streaming for Copilot replies. ST applies it in SmoothEventSourceStream,
+// which Copilot's requests never pass through (ST's request service builds a plain stream), by
+// re-emitting each network event one character at a time. Here the received text is revealed
+// on display instead, at ST's own per-character delays: getDelay() in
+// public/scripts/sse-stream.js, which ST does not export. Keep the two in step.
+function smoothDelayAfter(ch, speed) {
+    if (!ch) return 0;
+    const base = Math.max(100 - speed, 1) * 0.4;
+    if (ch === ',' || ch === '\n') return base * 12.5;
+    if (ch === '.' || ch === '!' || ch === '?') return base * 25;
+    return base;
+}
+
+/**
+ * Wraps a stream's onChunk(text, reasoning, ms, done) so text appears at ST's Smooth Streaming
+ * pace when that setting is on. `push` takes the latest full text, as onChunk does; `drain`
+ * waits until everything received is shown (or `signal` aborts, which shows it at once).
+ * Like ST: no pacing while the page is unfocused, and reasoning is not paced with
+ * "smooth_streaming_no_think". Clock, frame scheduler, settings and focus are injectable for tests.
+ */
+export function createSmoothReveal(emit, {
+    now = () => performance.now(),
+    frame = cb => requestAnimationFrame(cb),
+    settings = () => SillyTavern.getContext().powerUserSettings || {},
+    focused = () => document.hasFocus() && !document.hidden,
+} = {}) {
+    let target = { text: '', reasoning: '', ms: null, done: false };
+    let shownText = 0, shownReasoning = 0;
+    let budget = 0, last = null, scheduled = false, settle = null;
+
+    const emitShown = () => emit(target.text.slice(0, shownText), target.reasoning.slice(0, shownReasoning) || null, target.ms, target.done);
+    const caughtUp = () => shownText >= target.text.length && shownReasoning >= target.reasoning.length;
+    const showAll = () => { shownText = target.text.length; shownReasoning = target.reasoning.length; };
+    const advance = (str, shown, speed) => {
+        while (shown < str.length) {
+            const d = smoothDelayAfter(str[shown - 1], speed);
+            if (budget < d) break;
+            budget -= d;
+            shown++;
+        }
+        return shown;
+    };
+    const step = () => {
+        scheduled = false;
+        const s = settings();
+        const t = now();
+        budget += last === null ? 0 : t - last;
+        last = t;
+        if (!s.smooth_streaming || !focused()) showAll();
+        if (s.smooth_streaming_no_think) shownReasoning = target.reasoning.length;
+        shownReasoning = advance(target.reasoning, shownReasoning, s.smooth_streaming_speed ?? 50);
+        if (shownReasoning >= target.reasoning.length) shownText = advance(target.text, shownText, s.smooth_streaming_speed ?? 50);
+        emitShown();
+        if (!caughtUp()) { scheduled = true; frame(step); return; }
+        budget = 0;
+        last = null;
+        if (settle) { settle(); settle = null; }
+    };
+    // Text normally only grows; if it was rewritten, keep only the part still shown.
+    const keepPrefix = (oldStr, newStr, shown) => {
+        if (newStr.startsWith(oldStr.slice(0, shown))) return shown;
+        let i = 0;
+        while (i < shown && oldStr[i] === newStr[i]) i++;
+        return i;
+    };
+
+    return {
+        push(text, reasoning, ms, done) {
+            const next = { text: text || '', reasoning: reasoning || '', ms, done };
+            shownText = keepPrefix(target.text, next.text, shownText);
+            shownReasoning = keepPrefix(target.reasoning, next.reasoning, shownReasoning);
+            target = next;
+            const s = settings();
+            if (!s.smooth_streaming || !focused()) { showAll(); emitShown(); return; }
+            if (!scheduled) { scheduled = true; frame(step); }
+        },
+        drain(signal) {
+            if (caughtUp() || !settings().smooth_streaming || !focused()) {
+                if (!caughtUp()) { showAll(); emitShown(); }
+                return Promise.resolve();
+            }
+            return new Promise(resolve => {
+                settle = resolve;
+                signal?.addEventListener('abort', () => { showAll(); emitShown(); settle = null; resolve(); }, { once: true });
+            });
+        },
+    };
+}
+
 // Debug-log heartbeat while streaming (every 5s): sizes and the tail of the reply so far. A
 // "frozen" reply then shows whether text was still arriving, the model was still reasoning,
 // or it was writing a tool call or edit block that is hidden until it completes.
@@ -471,8 +560,17 @@ export function getGenStamp() {
 export async function callGenerate(session, settings, pendingText, onChunk) {
     const idle = startStreamIdleWatch();
     state.streamIdle = idle;
+    const smooth = typeof onChunk === 'function' ? createSmoothReveal(onChunk) : null;
     try {
-        return await _callGenerate(session, settings, pendingText, onChunk);
+        const result = await _callGenerate(session, settings, pendingText, smooth ? smooth.push : onChunk);
+        if (smooth && result) {
+            // Finish revealing before the caller's final render, as ST does. Stop shows the rest at once.
+            const reveal = new AbortController();
+            state.abortController = reveal;
+            await smooth.drain(reveal.signal);
+            if (state.abortController === reveal) state.abortController = null;
+        }
+        return result;
     } finally {
         idle.stop();
         if (state.streamIdle === idle) state.streamIdle = null;
