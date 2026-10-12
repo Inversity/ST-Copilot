@@ -2,6 +2,14 @@
 
 This fork continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker, whose last release was 2.9.0 (2026-07-02). Versions before 3.0.0 are upstream's and are listed in the extension's "What's New" panel.
 
+## 3.0.2 (2026-10-12)
+
+- **Long sessions stay smooth.** Only the newest 50 Copilot messages are rendered; "Show older messages" adds 50 more without moving the view, and search and starred-message jumps still cover the whole session. Every rendered message used to be laid out again on each frame while a reply streamed. On a 300-message session, slow frames while streaming went from 55% to 3%, and typing in the input stopped stuttering.
+- **Default connection follows SillyTavern's live connection.** A model or endpoint changed in SillyTavern applies to Copilot at once; it no longer waits until the connection profile is saved and reconnected. The request is built with SillyTavern's own settings and payload builder. "Specific Profile" still uses the saved profile.
+- **Default connection without a profile works.** With no Connection Manager profile selected, Copilot could not find SillyTavern's API (streaming always failed) and the fallback returned an empty reply with no error. It also applied the preset by name, which could point at a different API than SillyTavern's.
+- **Benchmark tools** in `tools/`: a performance bench (long frames per extension, frame pacing, interaction latency), seeded synthetic test data, and a mock streaming endpoint.
+- Tested against SillyTavern 1.19.0 (`staging` at `ad29cbda6`).
+
 ## 3.0.1 (2026-10-08)
 
 - **Swipes run tool calls.** A swipe that called a tool (reading prompts, card fields, lorebook entries) used to stop there with a tool card that never ran. Swipes now use the same tool loop as new replies, and each swipe keeps its own tool cards.

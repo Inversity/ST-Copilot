@@ -290,6 +290,16 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     // ─── Changelog Data ──────────────────────────────────────────────────────────
 export const CHANGELOG = [
     {
+        version: '3.0.2',
+        date: '10/12/2026',
+        announce: true,
+        notes: [
+            '<strong>Long sessions stay smooth</strong>: only the newest 50 messages are rendered. "Show older messages" adds more without moving the view; search and starred jumps still cover everything.',
+            '<strong>Default connection follows SillyTavern</strong>: a model or endpoint changed in SillyTavern applies to Copilot at once, without saving and reconnecting the profile.',
+            '<strong>Default connection without a profile</strong>: now works, and shows an error instead of an empty reply when no API is connected.',
+        ],
+    },
+    {
         version: '3.0.1',
         date: '10/8/2026',
         announce: true,
