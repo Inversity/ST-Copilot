@@ -16201,16 +16201,16 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                   includePreset: true
               }, modelOverridePayload);
           } else {
-              const mainApi = window.main_api || ctx.main_api;
+              const mainApi = ctx.mainApi;
               if (mainApi === 'openai' && ctx.ChatCompletionService) {
-                  const oaiSettings = window.oai_settings || ctx.oai_settings || {};
+                  const oaiSettings = ctx.chatCompletionSettings || {};
                   asyncGeneratorFn = await ctx.ChatCompletionService.processRequest({
                       messages: messages,
                       max_tokens: maxTokens,
                       stream: useStream
                   }, { presetName: oaiSettings.preset_settings_openai }, false, abort.signal);
               } else if (mainApi === 'textgenerationwebui' && ctx.TextCompletionService) {
-                  const textGenSettings = window.textgenerationwebui_settings || ctx.textgenerationwebui_settings || {};
+                  const textGenSettings = ctx.textCompletionSettings || {};
                   asyncGeneratorFn = await ctx.TextCompletionService.processRequest({
                       prompt: messages,
                       max_tokens: maxTokens,
@@ -16234,21 +16234,24 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                           includePreset: true
                       }, modelOverridePayload);
                   } else {
-                      const mainApi = window.main_api || ctx.main_api;
+                      const mainApi = ctx.mainApi;
                       if (mainApi === 'openai' && ctx.ChatCompletionService) {
-                          const oaiSettings = window.oai_settings || ctx.oai_settings || {};
+                          const oaiSettings = ctx.chatCompletionSettings || {};
                           asyncGeneratorFn = await ctx.ChatCompletionService.processRequest({
                               messages: messages,
                               max_tokens: maxTokens,
                               stream: false
                           }, { presetName: oaiSettings.preset_settings_openai }, false, abort.signal);
                       } else if (mainApi === 'textgenerationwebui' && ctx.TextCompletionService) {
-                          const textGenSettings = window.textgenerationwebui_settings || ctx.textgenerationwebui_settings || {};
+                          const textGenSettings = ctx.textCompletionSettings || {};
                           asyncGeneratorFn = await ctx.TextCompletionService.processRequest({
                               prompt: messages,
                               max_tokens: maxTokens,
                               stream: false
                           }, { presetName: textGenSettings.preset_settings_textgenerationwebui }, false, abort.signal);
+                      } else {
+                          // Without this the reply came back silently empty.
+                          throw e;
                       }
                   }
               } catch (err2) {
