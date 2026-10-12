@@ -388,6 +388,14 @@
     display: flex; flex-direction: column; gap: 2px;
 }
 
+.scp-show-older {
+    align-self: center; flex-shrink: 0; margin: 4px 0 8px; padding: 4px 12px;
+    border-radius: 5px; font-size: 11px; cursor: pointer;
+    background: none; border: var(--scp-border); color: var(--scp-text-muted);
+    font-family: var(--scp-font);
+}
+.scp-show-older:hover { color: var(--scp-accent); background: var(--scp-accent-bg); }
+
 /* ── Empty State ─────────────────────────────────────────────── */
 
 .scp-empty-state {

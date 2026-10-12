@@ -5,6 +5,9 @@ export const ICON_ID = 'scp-dock-icon';
 export const MODAL_ID = 'scp-ctx-modal';
 export const ICON_STORAGE_KEY = 'scp-icon-position';
 export const EMBEDDED_BOOK_KEY = '__char_embedded__';
+// Copilot messages rendered at once; older ones load on request. Every rendered message is
+// re-laid out while a reply streams, so a long session otherwise drops frames throughout.
+export const MSG_RENDER_WINDOW = 50;
 
 export const DEFAULT_SYSTEM_PROMPT = `<role>
 You are ST-Copilot, an assistant built into SillyTavern. You help the person using SillyTavern with anything related to SillyTavern or AI roleplay.

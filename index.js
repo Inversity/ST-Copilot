@@ -8,6 +8,9 @@ var STCopilot = (function (exports) {
   const MODAL_ID = 'scp-ctx-modal';
   const ICON_STORAGE_KEY = 'scp-icon-position';
   const EMBEDDED_BOOK_KEY = '__char_embedded__';
+  // Copilot messages rendered at once; older ones load on request. Every rendered message is
+  // re-laid out while a reply streams, so a long session otherwise drops frames throughout.
+  const MSG_RENDER_WINDOW = 50;
 
   const DEFAULT_SYSTEM_PROMPT = `<role>
 You are ST-Copilot, an assistant built into SillyTavern. You help the person using SillyTavern with anything related to SillyTavern or AI roleplay.
@@ -13152,7 +13155,12 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       if (!session.messages.length) renderSession(session);
   }
 
-  function renderSession(session) {
+  /**
+   * Renders the newest `windowSize` messages (0 = all) behind a "show older" button.
+   * `scrollAnchor` ({ id, offset } from revealOlderMessages) keeps that message where it was
+   * on screen instead of jumping to the bottom.
+   */
+  function renderSession(session, { windowSize = MSG_RENDER_WINDOW, scrollAnchor = null } = {}) {
       clearSearchHighlights();
       state.searchMatches = [];
       state.searchIdx = -1;
@@ -13172,7 +13180,15 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           updateMsgCount(session);
           return;
       }
-      for (const msg of session.messages) {
+      const start = windowSize > 0 ? Math.max(0, session.messages.length - windowSize) : 0;
+      if (start > 0) {
+          const older = document.createElement('button');
+          older.className = 'scp-show-older';
+          older.textContent = t`Show older messages (${start} hidden)`;
+          older.addEventListener('click', () => revealOlderMessages());
+          c.appendChild(older);
+      }
+      for (const msg of session.messages.slice(start)) {
           if (msg.isLBHistory || msg.isCharEditHistory || msg.isChatEditHistory) {
               appendLBHistoryEl(msg);
           } else {
@@ -13183,7 +13199,25 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       updateMsgCount(session);
       _refreshContinueBtns();
       _refreshSwipeBars(session);
-      requestAnimationFrame(() => scrollToBottom());
+      const anchorEl = scrollAnchor && c.querySelector(`.scp-msg[data-id="${scrollAnchor.id}"]`);
+      if (anchorEl) {
+          c.scrollTop += anchorEl.getBoundingClientRect().top - c.getBoundingClientRect().top - scrollAnchor.offset;
+      } else {
+          requestAnimationFrame(() => scrollToBottom());
+      }
+  }
+
+  /** Renders more of the session above what is shown (all of it with `all`), keeping the view still. */
+  function revealOlderMessages(all = false) {
+      const c = document.getElementById('scp-messages');
+      if (!c) return false;
+      const session = getCurrentSession();
+      const rendered = c.querySelectorAll(':scope > .scp-msg').length;
+      if (rendered >= session.messages.length) return false;
+      const topEl = c.querySelector(':scope > .scp-msg');
+      const scrollAnchor = topEl ? { id: topEl.dataset.id, offset: topEl.getBoundingClientRect().top - c.getBoundingClientRect().top } : null;
+      renderSession(session, { windowSize: all ? 0 : rendered + MSG_RENDER_WINDOW, scrollAnchor });
+      return true;
   }
 
   function appendMsgEl(msg, isStreamInit = false) {
@@ -13534,6 +13568,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       state.searchIdx = -1;
       const q = state.searchQuery.trim();
       if (!q) { updateSearchCount(); return; }
+      // Search covers the whole session, so render the messages kept out of the DOM first.
+      revealOlderMessages(true);
       const container = document.getElementById('scp-messages');
       if (!container) return;
       state.searchMatches = _applyHighlightsInRoot(container);
@@ -14017,6 +14053,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
     renderSession: renderSession,
     renderStreamingReasoning: renderStreamingReasoning,
     restoreScrollPosition: restoreScrollPosition,
+    revealOlderMessages: revealOlderMessages,
     saveScrollPosition: saveScrollPosition,
     scheduleStreamRender: scheduleStreamRender,
     scrollToBottom: scrollToBottom,
@@ -17461,10 +17498,12 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
             </div>
             <button class="scp-fav-item-remove" title="Remove from starred" data-i18n="[title]Remove from starred">✕</button>`;
 
-          item.addEventListener('click', e => {
+          item.addEventListener('click', async e => {
               if (e.target.classList.contains('scp-fav-item-remove')) return;
               closeFavoritesPanel();
-              const msgEl = document.querySelector(`.scp-msg[data-id="${msg.id}"]`);
+              let msgEl = document.querySelector(`.scp-msg[data-id="${msg.id}"]`);
+              // Older messages are not rendered until asked for.
+              if (!msgEl && (await Promise.resolve().then(function () { return uiChat; })).revealOlderMessages(true)) msgEl = document.querySelector(`.scp-msg[data-id="${msg.id}"]`);
               if (!msgEl) return;
               msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
               requestAnimationFrame(() => {

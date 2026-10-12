@@ -653,10 +653,12 @@ export function renderFavoritesPanel() {
             </div>
             <button class="scp-fav-item-remove" title="Remove from starred" data-i18n="[title]Remove from starred">✕</button>`;
 
-        item.addEventListener('click', e => {
+        item.addEventListener('click', async e => {
             if (e.target.classList.contains('scp-fav-item-remove')) return;
             closeFavoritesPanel();
-            const msgEl = document.querySelector(`.scp-msg[data-id="${msg.id}"]`);
+            let msgEl = document.querySelector(`.scp-msg[data-id="${msg.id}"]`);
+            // Older messages are not rendered until asked for.
+            if (!msgEl && (await import('./ui-chat.js')).revealOlderMessages(true)) msgEl = document.querySelector(`.scp-msg[data-id="${msg.id}"]`);
             if (!msgEl) return;
             msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
             requestAnimationFrame(() => {

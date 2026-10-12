@@ -1,4 +1,4 @@
-import { I, EXT_DISPLAY, THEME_PRESETS, WIN_ID } from '../constants.js';
+import { I, EXT_DISPLAY, THEME_PRESETS, WIN_ID, MSG_RENDER_WINDOW } from '../constants.js';
 import { state } from '../state.js';
 import { getSettings, saveSettings, getCurrentSession, saveSessionsToMetadata, addMessage, deleteMsg, truncateAfter, truncateFrom, expandMacros, getEffectiveSettings, getBindingKey, initChatBucket, isBucketForCurrentChat, isMessageStarred, toggleStarMessage } from '../session.js';
 import { _dbgAdd } from '../utils/util-debug.js';
@@ -1480,7 +1480,12 @@ export async function handleDelete(wrapEl, msg) {
     if (!session.messages.length) renderSession(session);
 }
 
-export function renderSession(session) {
+/**
+ * Renders the newest `windowSize` messages (0 = all) behind a "show older" button.
+ * `scrollAnchor` ({ id, offset } from revealOlderMessages) keeps that message where it was
+ * on screen instead of jumping to the bottom.
+ */
+export function renderSession(session, { windowSize = MSG_RENDER_WINDOW, scrollAnchor = null } = {}) {
     clearSearchHighlights();
     state.searchMatches = [];
     state.searchIdx = -1;
@@ -1500,7 +1505,15 @@ export function renderSession(session) {
         updateMsgCount(session);
         return;
     }
-    for (const msg of session.messages) {
+    const start = windowSize > 0 ? Math.max(0, session.messages.length - windowSize) : 0;
+    if (start > 0) {
+        const older = document.createElement('button');
+        older.className = 'scp-show-older';
+        older.textContent = t`Show older messages (${start} hidden)`;
+        older.addEventListener('click', () => revealOlderMessages());
+        c.appendChild(older);
+    }
+    for (const msg of session.messages.slice(start)) {
         if (msg.isLBHistory || msg.isCharEditHistory || msg.isChatEditHistory) {
             appendLBHistoryEl(msg);
         } else {
@@ -1511,7 +1524,25 @@ export function renderSession(session) {
     updateMsgCount(session);
     _refreshContinueBtns();
     _refreshSwipeBars(session);
-    requestAnimationFrame(() => scrollToBottom());
+    const anchorEl = scrollAnchor && c.querySelector(`.scp-msg[data-id="${scrollAnchor.id}"]`);
+    if (anchorEl) {
+        c.scrollTop += anchorEl.getBoundingClientRect().top - c.getBoundingClientRect().top - scrollAnchor.offset;
+    } else {
+        requestAnimationFrame(() => scrollToBottom());
+    }
+}
+
+/** Renders more of the session above what is shown (all of it with `all`), keeping the view still. */
+export function revealOlderMessages(all = false) {
+    const c = document.getElementById('scp-messages');
+    if (!c) return false;
+    const session = getCurrentSession();
+    const rendered = c.querySelectorAll(':scope > .scp-msg').length;
+    if (rendered >= session.messages.length) return false;
+    const topEl = c.querySelector(':scope > .scp-msg');
+    const scrollAnchor = topEl ? { id: topEl.dataset.id, offset: topEl.getBoundingClientRect().top - c.getBoundingClientRect().top } : null;
+    renderSession(session, { windowSize: all ? 0 : rendered + MSG_RENDER_WINDOW, scrollAnchor });
+    return true;
 }
 
 export function appendMsgEl(msg, isStreamInit = false) {
@@ -1862,6 +1893,8 @@ export function performSearch() {
     state.searchIdx = -1;
     const q = state.searchQuery.trim();
     if (!q) { updateSearchCount(); return; }
+    // Search covers the whole session, so render the messages kept out of the DOM first.
+    revealOlderMessages(true);
     const container = document.getElementById('scp-messages');
     if (!container) return;
     state.searchMatches = _applyHighlightsInRoot(container);
