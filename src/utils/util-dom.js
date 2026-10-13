@@ -55,7 +55,48 @@ export function autoResize(el) {
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`; 
 }
 
-export function showCustomDialog({ type = 'alert', title = '', message = '', htmlMessage = '', defaultValue = '', placeholder = '', delayConfirm = 0 }) {
+// Alert, confirm and prompt dialogs on SillyTavern's Popup: its theme, translations, focus
+// handling and mobile layout. Resolves like before: alert and confirm to true/false, prompt to
+// the text or null. delayConfirm keeps OK disabled for that many seconds; the popup is tagged
+// scp-popup so Copilot's own click and key handlers treat it as part of Copilot.
+export async function showCustomDialog({ type = 'alert', title = '', message = '', htmlMessage = '', defaultValue = '', placeholder = '', delayConfirm = 0 }) {
+    const ctx = SillyTavern.getContext();
+    if (typeof ctx.Popup !== 'function') return _showOwnDialog({ type, title, message, htmlMessage, defaultValue, placeholder, delayConfirm });
+    const { POPUP_TYPE, POPUP_RESULT } = ctx;
+    const isPrompt = type === 'prompt';
+    const isConfirm = type === 'confirm';
+    const body = message ? `<div>${escHtml(translate(message))}</div>` : (htmlMessage || '');
+    const content = `${title ? `<h3>${escHtml(translate(title))}</h3>` : ''}${body}`;
+
+    let remaining = isConfirm ? delayConfirm : 0;
+    let timer = null;
+    const popup = new ctx.Popup(content, isPrompt ? POPUP_TYPE.INPUT : isConfirm ? POPUP_TYPE.CONFIRM : POPUP_TYPE.TEXT, defaultValue, {
+        okButton: isConfirm ? translate('Confirm') : (isPrompt ? translate('OK') : null),
+        cancelButton: isConfirm || isPrompt ? translate('Cancel') : null,
+        placeholder: placeholder || null,
+        onOpen: (p) => {
+            if (remaining <= 0) return;
+            const label = p.okButton.textContent;
+            const tick = () => {
+                p.okButton.classList.toggle('disabled', remaining > 0);
+                p.okButton.textContent = remaining > 0 ? `${label} (${remaining})` : label;
+            };
+            tick();
+            timer = setInterval(() => { remaining--; tick(); if (remaining <= 0) clearInterval(timer); }, 1000);
+        },
+        // Enter or a click on OK during the countdown does not close it.
+        onClosing: (p) => !(remaining > 0 && p.result === POPUP_RESULT.AFFIRMATIVE),
+        onClose: () => clearInterval(timer),
+    });
+    popup.dlg.classList.add('scp-popup');
+    if (isConfirm) popup.okButton.classList.add('redWarningBG');
+    const value = await popup.show();
+    if (isPrompt) return typeof value === 'string' ? value : null;
+    return value === POPUP_RESULT.AFFIRMATIVE;
+}
+
+// Copilot's own dialog, for a SillyTavern without Popup on its context.
+function _showOwnDialog({ type = 'alert', title = '', message = '', htmlMessage = '', defaultValue = '', placeholder = '', delayConfirm = 0 }) {
     return new Promise(resolve => {
         const overlay = document.createElement('div');
         overlay.className = 'scp-dialog-overlay';

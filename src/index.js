@@ -169,7 +169,7 @@ function attachWindowListeners() {
             return;
         }
         const clickedInside = win.contains(e.target) || 
-                              e.target.closest('.scp-dialog-overlay') ||
+                              e.target.closest('.scp-dialog-overlay, .scp-popup') ||
                               document.getElementById('scp-settings-overlay')?.contains(e.target) ||
                               document.getElementById('scp-lb-overlay')?.contains(e.target) ||
                               document.getElementById('scp-char-overlay')?.contains(e.target) ||

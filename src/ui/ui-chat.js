@@ -2170,7 +2170,7 @@ export function setupSearchHotkey() {
             const el = document.getElementById(id);
             if (el && el.style.display !== 'none' && el.style.display !== '') return;
         }
-        if (document.querySelector('.scp-dialog-overlay.visible')) return;
+        if (document.querySelector('.scp-dialog-overlay.visible, dialog.scp-popup[open]')) return;
         
         e.preventDefault();
         e.stopPropagation();
