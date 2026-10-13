@@ -247,7 +247,7 @@ Format:
 
 Search results and message lists show previews. Edits need text copied exactly, so before quoting, patching, or replacing anything you have only seen as a preview, read it in full (read_messages, get_lorebook_entry, get_char_info). Never overwrite a message, entry, or field based on a preview: whatever you did not see would be lost.
 
-To call a tool, output a \`tool_call\` block. The result is returned to you, and then you continue your answer to the Human. You can call several tools in a row.
+Look things up before you write your answer, not after it. To call a tool, output a \`tool_call\` block and stop there: your reply is cut off at the block, the result is returned to you, and you continue your answer to the Human from that point. To read several things, put every call in one block, one JSON object per line, or ask for several ids in one call (e.g. greeting_ids), rather than one call per turn.
 
 <available_tools>
 {{tools_list}}
@@ -299,10 +299,20 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       'tg8w5qx8dy',
       'mzgi1oyshb',
       '25gvtyi9zne',
+      '19jod6wkwii',
   ];
 
       // ─── Changelog Data ──────────────────────────────────────────────────────────
   const CHANGELOG = [
+      {
+          version: '3.0.7',
+          date: '10/13/2026',
+          announce: true,
+          notes: [
+              '<strong>Accepted character edits stick</strong>: they reach SillyTavern\'s own copy of the character, so the Alternate Greetings popup and the Character Manager show them at once, and SillyTavern\'s next save no longer writes the old text back.',
+              '<strong>Tool calls</strong>: a reply stops at its tool call, so the next round continues with the result instead of writing the whole answer again.',
+          ],
+      },
       {
           version: '3.0.6',
           date: '10/13/2026',
@@ -6317,7 +6327,18 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           .trim();
   }
 
+  // SillyTavern replaces a character's object whenever it saves or reloads characters
+  // (getOneCharacter after every editor autosave, getCharacters), so a reference held since a
+  // proposal card rendered can be stale. An edit written into a stale object reaches the file
+  // but not ST's copy, and ST's next save of that character writes its old data back over it.
+  // Look the character up again by avatar before reading or writing.
+  function liveCharacter(char) {
+      if (!char?.avatar) return char;
+      return SillyTavern.getContext().characters?.find(c => c.avatar === char.avatar) || char;
+  }
+
   function getCharFieldValue(char, fieldId) {
+      char = liveCharacter(char);
       if (fieldId === 'user_persona') return getUserPersona();
       if (fieldId === 'tags') return getTagsForCharacter(char).join(', ');
       
@@ -6391,7 +6412,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
   async function saveCharacterField(char, fieldId, newValue) {
       const ctx = SillyTavern.getContext();
-      
+      char = liveCharacter(char);
+
       if (fieldId.startsWith('evolutia_char:')) {
           const aeName = fieldId.split('evolutia_char:')[1];
           const AE_KEY = 'st-description-swap-fields';
@@ -6868,7 +6890,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           if (!field) continue;
           try {
               if (field === 'alternate_greetings') {
-                  const greetings = [...(char.data?.alternate_greetings || [])];
+                  const greetings = [...getCharFieldValue(char, 'alternate_greetings')];
                   if (action === 'append') {
                       greetings.push(change.value || '');
                       await saveCharacterField(char, 'alternate_greetings', greetings);
@@ -7180,7 +7202,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           let current;
           if (change.field === 'alternate_greetings') {
               const idx = (change.index || 1) - 1;
-              current = (char.data?.alternate_greetings || [])[idx] || '';
+              current = getCharFieldValue(char, 'alternate_greetings')[idx] || '';
           } else {
               current = String(getCharFieldValue(char, change.field));
           }
@@ -7194,7 +7216,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           let current;
           if (change.field === 'alternate_greetings') {
               const idx = (change.index || 1) - 1;
-              current = (char.data?.alternate_greetings || [])[idx] || '';
+              current = getCharFieldValue(char, 'alternate_greetings')[idx] || '';
           } else {
               current = String(getCharFieldValue(char, change.field));
           }
@@ -7257,7 +7279,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   let original;
                   if (change.field === 'alternate_greetings') {
                       const idx = (change.index || 1) - 1;
-                      original = (char.data?.alternate_greetings || [])[idx] || '';
+                      original = getCharFieldValue(char, 'alternate_greetings')[idx] || '';
                   } else {
                       original = String(getCharFieldValue(char, change.field));
                   }
@@ -10145,6 +10167,38 @@ ${scopeHtml}
           results.push(...extracted);
       }
       return results;
+  }
+
+  // Where a reply that calls tools should end: after its first run of complete tool_call
+  // blocks (only whitespace between them). Anything the model writes after that was written
+  // without the results, and the next round writes it again with them. Returns null until a
+  // block is complete. `settled` is false while the text after the run could still be the
+  // start of another block, so a stream should keep reading.
+  function findToolCallCut(text) {
+      const s = String(text || '');
+      let i = s.search(/```tool_call/i);
+      if (i < 0) return null;
+      const block = /```tool_call[\s\S]*?```/iy;
+      const space = /\s*/y;
+      let end = -1;
+      for (;;) {
+          block.lastIndex = i;
+          if (!block.exec(s)) break;
+          end = block.lastIndex;
+          space.lastIndex = end;
+          space.exec(s);
+          i = space.lastIndex;
+      }
+      if (end < 0) return null;
+      const rest = s.slice(i).toLowerCase();
+      const opener = '```tool_call';
+      const settled = rest.length > 0 && !opener.startsWith(rest.slice(0, opener.length)) && !rest.startsWith(opener);
+      return { end, settled };
+  }
+
+  function cutAfterToolCalls(text) {
+      const cut = findToolCallCut(text);
+      return cut ? text.slice(0, cut.end) : text;
   }
 
   function buildToolCallsSystemBlock() {
@@ -13136,7 +13190,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const fullPromptText = builtMessages.map(m => m.content).join('\n');
           const tokensIn = await apiMod.estimateTokens(fullPromptText);
 
-          const result = await apiMod.callGenerate(tempSession, settings, null, onChunk);
+          const result = await apiMod.callGenerate(tempSession, settings, null, onChunk, { stopAtToolCall: apiMod.toolRoundsEnabled(settings) });
           cancelStreamRender();
           cleanupCursor();
 
@@ -13154,7 +13208,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           // Same tool loop as a new reply: a swipe that calls a tool used to stop there, with a
           // tool card that never ran.
           let finalResult = result;
-          if (settings.toolsEnabled && getEnabledTools().length > 0) {
+          if (apiMod.toolRoundsEnabled(settings)) {
               finalResult = await apiMod.runToolRounds({
                   session, settings, result,
                   msgEl: wrapEl, contentEl: streamContentEl, excludeMsgId: msgId,
@@ -16447,12 +16501,14 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       return meta.model || meta.profile ? { model: meta.model || null, profile: meta.profile || null } : null;
   }
 
-  async function callGenerate(session, settings, pendingText, onChunk) {
+  // opts.stopAtToolCall: the caller runs tool rounds after this, so a streamed reply is cut
+  // off once its tool calls are complete (see findToolCallCut).
+  async function callGenerate(session, settings, pendingText, onChunk, opts = {}) {
       const idle = startStreamIdleWatch();
       state.streamIdle = idle;
       const smooth = typeof onChunk === 'function' ? createSmoothReveal(onChunk) : null;
       try {
-          const result = await _callGenerate(session, settings, pendingText, smooth ? smooth.push : onChunk);
+          const result = await _callGenerate(session, settings, pendingText, smooth ? smooth.push : onChunk, opts);
           if (smooth && result) {
               // Finish revealing before the caller's final render, as ST does. Stop shows the rest at once.
               const reveal = new AbortController();
@@ -16503,13 +16559,26 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       throw new Error('No active API connection found. Please select a profile in Connection Manager or configure the main API.');
   }
 
-  async function _callGenerate(session, settings, pendingText, onChunk) {
+  async function _callGenerate(session, settings, pendingText, onChunk, opts = {}) {
       const ctx = SillyTavern.getContext();
       const messages = await assembleMessages(session, settings, pendingText);
       const maxTokens = parseInt(settings.maxTokens) || 8200;
 
       const abort = new AbortController();
       state.abortController = abort;
+
+      // Stops the request once the reply's tool calls are complete: the rest would be written
+      // without their results, and the next round writes it again. Returns the cut text.
+      let toolCut = false;
+      const cutAtToolCall = (t) => {
+          if (!opts.stopAtToolCall || toolCut) return t;
+          const cut = findToolCallCut(t);
+          if (!cut?.settled) return t;
+          toolCut = true;
+          _dbgAdd('GEN_TOOL_CALL_CUT', { dropped: t.length - cut.end });
+          abort.abort();
+          return t.slice(0, cut.end);
+      };
       // Filled in below: the custom model, or the model in the request body ST builds for us.
       state.genMeta = { model: settings.connectionSource === 'custom' ? (settings.customModel || null) : null, profile: null };
 
@@ -16636,23 +16705,25 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                   const decoder = new TextDecoder("utf-8");
                   let buffer = "";
 
-                  while (true) {
+                  read: while (true) {
+                      if (toolCut) break;
                       if (abort.signal.aborted) { state.abortController = null; return null; }
                       const { done, value } = await reader.read();
                       if (done) break;
-                      
+
                       buffer += decoder.decode(value, { stream: true });
                       const lines = buffer.split('\n');
-                      buffer = lines.pop(); 
+                      buffer = lines.pop();
 
                       for (const line of lines) {
+                          if (toolCut) break read;
                           const l = line.trim();
                           if (!l || l.startsWith(':') || l === 'data: [DONE]') continue;
                           if (l.startsWith('data: ')) {
                               try {
                                   const data = JSON.parse(l.slice(6));
                                   const ext = deepExtract(data);
-                                  if (ext.t) text += ext.t;
+                                  if (ext.t) text = cutAtToolCall(text + ext.t);
                                   if (ext.r) reasoning = (reasoning || '') + ext.r;
                                   logProgress(text, reasoning);
                                   if (typeof onChunk === 'function') {
@@ -16865,7 +16936,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               lastValue = value;
 
               const ext = deepExtract(value);
-              text = ext.t;
+              text = cutAtToolCall(ext.t);
               const newReasoning = ext.r;
 
               if (newReasoning) reasoning = newReasoning;
@@ -16874,6 +16945,12 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               if (typeof onChunk === 'function') {
                   const rc = reasoningClock(reasoning, text);
                   onChunk(text, reasoning, rc.ms, rc.done);
+              }
+              if (toolCut) {
+                  // Lets the generator's own cleanup run; the request is already aborted.
+                  Promise.resolve().then(() => gen.return?.()).catch(() => {});
+                  lastValue = null;
+                  break;
               }
           }
       } catch (e) {
@@ -16889,6 +16966,10 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       return { text: text.trim(), reasoning, isMaxTokens };
   }
 
+  function toolRoundsEnabled(settings) {
+      return !!settings.toolsEnabled && (settings.toolsMaxRounds ?? 5) > 0 && getEnabledTools().length > 0;
+  }
+
   // The text-based tool loop, shared by new replies and swipes: runs the tool calls in the
   // reply, feeds the results back, and continues generating, up to toolsMaxRounds. Rounds
   // render live into msgEl/contentEl. excludeMsgId is the message being written (left out of
@@ -16896,7 +16977,9 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
   // later round keeps what was generated before it.
   async function runToolRounds({ session, settings, result, msgEl, contentEl, excludeMsgId, getReasoningMs = () => null }) {
       const maxRounds = settings.toolsMaxRounds ?? 5;
-      let roundText = result.text || '';
+      // A round ends at its tool calls (findToolCallCut). Streaming already stops there; this
+      // also covers non-streamed replies.
+      let roundText = cutAfterToolCalls(result.text || '');
       let accumulatedText = roundText;
       let accumulatedReasoning = result.reasoning || null;
       const extraHistory = [];
@@ -16960,7 +17043,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const toolResultsText = roundEntries.map(e =>
               `<tool_result name="${e.name}" status="${e.status}">\n${typeof e.result === 'string' ? e.result : JSON.stringify(e.result, null, 2)}\n</tool_result>`
           ).join('\n');
-          extraHistory.push({ role: 'user', content: `<tool_results>\n${toolResultsText}\n</tool_results>\n\nCONTINUE your response using these results. Write exactly where you left off.` });
+          extraHistory.push({ role: 'user', content: `<tool_results>\n${toolResultsText}\n</tool_results>\n\nCONTINUE your response using these results, from exactly where you left off. Do not repeat anything you already wrote.` });
 
           const thinkingText = document.getElementById('scp-thinking-text');
           if (thinkingText) thinkingText.textContent = `Round ${round + 2}/${maxRounds + 1}…`;
@@ -16977,7 +17060,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
           let nextResult;
           try {
-              nextResult = await callGenerate(tempSession, settings, null, (t, r) => updateLiveUI(t, r, cursor2));
+              nextResult = await callGenerate(tempSession, settings, null, (t, r) => updateLiveUI(t, r, cursor2), { stopAtToolCall: round + 1 < maxRounds });
           } finally {
               cancelStreamRender();
               session.messages = session.messages.filter(m => !m._tcTemp);
@@ -16985,7 +17068,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           }
           if (nextResult === null) break;
 
-          roundText = nextResult.text || '';
+          roundText = round + 1 < maxRounds ? cutAfterToolCalls(nextResult.text || '') : (nextResult.text || '');
           accumulatedText += '\n\n' + roundText;
           if (nextResult.reasoning) {
               accumulatedReasoning = accumulatedReasoning ? accumulatedReasoning + '\n\n' + nextResult.reasoning : nextResult.reasoning;
@@ -17105,7 +17188,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               tokensIn
           });
 
-          let result = await callGenerate(session, settings, null, onChunk);
+          let result = await callGenerate(session, settings, null, onChunk, { stopAtToolCall: toolRoundsEnabled(settings) });
 
           cancelStreamRender();
           cleanupCursor();
@@ -17114,7 +17197,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               toastr.warning(translate('⚠ Generation failed: AI returned an empty response.'), EXT_DISPLAY, { timeOut: 10000 });
           }
 
-          if (result !== null && settings.toolsEnabled && getEnabledTools().length > 0) {
+          if (result !== null && toolRoundsEnabled(settings)) {
               result = await runToolRounds({
                   session, settings, result,
                   msgEl: streamMsgEl, contentEl: streamContentEl, excludeMsgId: streamMsgId,
@@ -17377,7 +17460,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
     runContinue: runContinue,
     runGenerate: runGenerate,
     runToolRounds: runToolRounds,
-    sendViaLiveConnection: sendViaLiveConnection
+    sendViaLiveConnection: sendViaLiveConnection,
+    toolRoundsEnabled: toolRoundsEnabled
   });
 
   // ─── Quick Prompts ───────────────────────────────────────────────────────────

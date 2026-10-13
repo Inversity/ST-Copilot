@@ -18,7 +18,7 @@ import { renderChatProposalCard } from '../features/feature-chatedit-ui.js';
 import { parsePromptChangesFromText, stripPromptChangesBlock, PROMPT_CHANGES_BLOCK } from '../features/feature-prompt-engine.js';
 import { renderPromptProposalCard } from '../features/feature-prompt-manager-ui.js';
 import { stripMemoryBlock } from '../features/feature-memory.js';
-import { parseToolCallsFromText, getEnabledTools } from '../features/feature-tools-engine.js';
+import { parseToolCallsFromText } from '../features/feature-tools-engine.js';
 import { postProcessToolCalls } from '../features/feature-tools-ui.js';
 import { recordStat, SM } from '../features/feature-stats.js';
 import { _processAttachmentsBeforeSend, _mergeContent, _renderAttachmentPreviews, _openImageLightbox, _openTextLightbox } from '../features/feature-attachments.js';
@@ -909,7 +909,7 @@ export async function _runSwipeRegen(session, msgId, wrapEl) {
         const fullPromptText = builtMessages.map(m => m.content).join('\n');
         const tokensIn = await apiMod.estimateTokens(fullPromptText);
 
-        const result = await apiMod.callGenerate(tempSession, settings, null, onChunk);
+        const result = await apiMod.callGenerate(tempSession, settings, null, onChunk, { stopAtToolCall: apiMod.toolRoundsEnabled(settings) });
         cancelStreamRender();
         cleanupCursor();
 
@@ -927,7 +927,7 @@ export async function _runSwipeRegen(session, msgId, wrapEl) {
         // Same tool loop as a new reply: a swipe that calls a tool used to stop there, with a
         // tool card that never ran.
         let finalResult = result;
-        if (settings.toolsEnabled && getEnabledTools().length > 0) {
+        if (apiMod.toolRoundsEnabled(settings)) {
             finalResult = await apiMod.runToolRounds({
                 session, settings, result,
                 msgEl: wrapEl, contentEl: streamContentEl, excludeMsgId: msgId,

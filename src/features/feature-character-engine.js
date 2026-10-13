@@ -466,7 +466,18 @@ export function stripCharCreationBlock(text) {
         .trim();
 }
 
+// SillyTavern replaces a character's object whenever it saves or reloads characters
+// (getOneCharacter after every editor autosave, getCharacters), so a reference held since a
+// proposal card rendered can be stale. An edit written into a stale object reaches the file
+// but not ST's copy, and ST's next save of that character writes its old data back over it.
+// Look the character up again by avatar before reading or writing.
+export function liveCharacter(char) {
+    if (!char?.avatar) return char;
+    return SillyTavern.getContext().characters?.find(c => c.avatar === char.avatar) || char;
+}
+
 export function getCharFieldValue(char, fieldId) {
+    char = liveCharacter(char);
     if (fieldId === 'user_persona') return getUserPersona();
     if (fieldId === 'tags') return getTagsForCharacter(char).join(', ');
     
@@ -540,7 +551,8 @@ function _emitCharacterEdited(ctx, char) {
 
 export async function saveCharacterField(char, fieldId, newValue) {
     const ctx = SillyTavern.getContext();
-    
+    char = liveCharacter(char);
+
     if (fieldId.startsWith('evolutia_char:')) {
         const aeName = fieldId.split('evolutia_char:')[1];
         const AE_KEY = 'st-description-swap-fields';

@@ -2,6 +2,11 @@
 
 This fork continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker, whose last release was 2.9.0 (2026-07-02). Versions before 3.0.0 are upstream's and are listed in the extension's "What's New" panel.
 
+## 3.0.7 (2026-10-13)
+
+- **Accepted character edits stick.** SillyTavern replaces its copy of a character every time it saves one, so a proposal card could end up holding an outdated copy. Accepting an edit then wrote the file but not SillyTavern's copy: the Alternate Greetings popup, the Character Manager and Copilot itself kept showing the old text, and SillyTavern's next save of that character (an edit in its character panel, closing the greetings popup) wrote the old text back. Copilot now looks the character up again each time it reads or writes a field.
+- **A reply that calls a tool stops at the call.** Models often kept writing after a tool call, answering before they had the result, and the next round then wrote the whole answer again (the "Round 2/6" repeat). Copilot now ends that round at its tool call: streaming stops there, and the next round continues with the result instead of starting over. The tools prompt also asks for lookups before answering and for several reads in one call.
+
 ## 3.0.6 (2026-10-13)
 
 - **Lorebook entries now follow SillyTavern's World Info.** Copilot used its own keyword scan, which disagreed with SillyTavern on most activation rules (secondary keys, case and whole-word settings, scan depth, recursion, probability, groups, budget) and could put almost a whole lorebook into Copilot's prompt. Copilot now sees the entries SillyTavern itself activated for the roleplay, plus entries your own Copilot messages activate under the same rules. Each entry says why it is there, so Copilot can tell you which ones the roleplay really uses, and the Lorebook Manager marks them "active in ST". The "Main chat keytriggers scan depth" setting is gone: SillyTavern's own depth applies.

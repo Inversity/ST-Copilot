@@ -135,7 +135,7 @@ export async function applyCharChanges(changes, char, afterMsgId = null) {
         if (!field) continue;
         try {
             if (field === 'alternate_greetings') {
-                const greetings = [...(char.data?.alternate_greetings || [])];
+                const greetings = [...getCharFieldValue(char, 'alternate_greetings')];
                 if (action === 'append') {
                     greetings.push(change.value || '');
                     await saveCharacterField(char, 'alternate_greetings', greetings);
@@ -447,7 +447,7 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
         let current;
         if (change.field === 'alternate_greetings') {
             const idx = (change.index || 1) - 1;
-            current = (char.data?.alternate_greetings || [])[idx] || '';
+            current = getCharFieldValue(char, 'alternate_greetings')[idx] || '';
         } else {
             current = String(getCharFieldValue(char, change.field));
         }
@@ -461,7 +461,7 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
         let current;
         if (change.field === 'alternate_greetings') {
             const idx = (change.index || 1) - 1;
-            current = (char.data?.alternate_greetings || [])[idx] || '';
+            current = getCharFieldValue(char, 'alternate_greetings')[idx] || '';
         } else {
             current = String(getCharFieldValue(char, change.field));
         }
@@ -524,7 +524,7 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
                 let original;
                 if (change.field === 'alternate_greetings') {
                     const idx = (change.index || 1) - 1;
-                    original = (char.data?.alternate_greetings || [])[idx] || '';
+                    original = getCharFieldValue(char, 'alternate_greetings')[idx] || '';
                 } else {
                     original = String(getCharFieldValue(char, change.field));
                 }

@@ -438,6 +438,38 @@ export function parseToolCallsFromText(text) {
     return results;
 }
 
+// Where a reply that calls tools should end: after its first run of complete tool_call
+// blocks (only whitespace between them). Anything the model writes after that was written
+// without the results, and the next round writes it again with them. Returns null until a
+// block is complete. `settled` is false while the text after the run could still be the
+// start of another block, so a stream should keep reading.
+export function findToolCallCut(text) {
+    const s = String(text || '');
+    let i = s.search(/```tool_call/i);
+    if (i < 0) return null;
+    const block = /```tool_call[\s\S]*?```/iy;
+    const space = /\s*/y;
+    let end = -1;
+    for (;;) {
+        block.lastIndex = i;
+        if (!block.exec(s)) break;
+        end = block.lastIndex;
+        space.lastIndex = end;
+        space.exec(s);
+        i = space.lastIndex;
+    }
+    if (end < 0) return null;
+    const rest = s.slice(i).toLowerCase();
+    const opener = '```tool_call';
+    const settled = rest.length > 0 && !opener.startsWith(rest.slice(0, opener.length)) && !rest.startsWith(opener);
+    return { end, settled };
+}
+
+export function cutAfterToolCalls(text) {
+    const cut = findToolCallCut(text);
+    return cut ? text.slice(0, cut.end) : text;
+}
+
 export function stripToolCallsFromText(text) {
     return text.replace(/```tool_call[\s\S]*?```/gi, '').trim();
 }

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseCharChangesFromText, parseCharCreationFromText, stripCharChangesBlock, parseAnchorPatches, groupChangesByCharacter } from '../src/features/feature-character-engine.js';
-import { reconstructCharChangesBlock } from '../src/features/feature-character-ui.js';
+import { reconstructCharChangesBlock, applyCharChanges } from '../src/features/feature-character-ui.js';
 
 const fence = (name, body) => 'Here you go.\n```' + name + '\n' + body + '\n```';
 
@@ -77,6 +77,38 @@ test('rebuilt pending block keeps the char attribute and round-trips', () => {
     ];
     const reparsed = parseCharChangesFromText(reconstructCharChangesBlock(pending));
     assert.deepEqual(reparsed.map(c => [c.char, c.field, c.action]).sort(), [['Ann', 'scenario', 'overwrite'], ['Bob', 'description', 'replace']]);
+});
+
+// SillyTavern swaps in a new character object on every save (getOneCharacter), so the object
+// a proposal card captured can be stale by the time Accept is clicked.
+async function withSwappedCharacter(fn) {
+    const stale = { name: 'Lexi', avatar: 'lexi.png', data: { alternate_greetings: ['old one', 'two'] } };
+    const live = { name: 'Lexi', avatar: 'lexi.png', data: { alternate_greetings: ['old one', 'two', 'three'] } };
+    const sent = [];
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = async (url, init) => { sent.push({ url, body: JSON.parse(init.body) }); return { ok: true, text: async () => '' }; };
+    globalThis.__stContext = { characters: [live], name1: 'User', getRequestHeaders: () => ({}) };
+    try {
+        await fn({ stale, live, sent });
+    } finally {
+        globalThis.fetch = origFetch;
+        delete globalThis.__stContext;
+    }
+}
+
+test('accepting a greeting edit writes to the live character, not the captured one', async () => {
+    await withSwappedCharacter(async ({ stale, live, sent }) => {
+        await applyCharChanges([{ field: 'alternate_greetings', action: 'overwrite', index: 1, value: 'new one' }], stale);
+        assert.deepEqual(live.data.alternate_greetings, ['new one', 'two', 'three']);
+        assert.deepEqual(sent[0].body.value, ['new one', 'two', 'three'], 'greetings only the live object has are kept');
+    });
+});
+
+test('appending a greeting builds on the live list', async () => {
+    await withSwappedCharacter(async ({ stale, live }) => {
+        await applyCharChanges([{ field: 'alternate_greetings', action: 'append', value: 'four' }], stale);
+        assert.deepEqual(live.data.alternate_greetings, ['old one', 'two', 'three', 'four']);
+    });
 });
 
 test('group chat: unknown names are skipped instead of hitting the first member', () => {

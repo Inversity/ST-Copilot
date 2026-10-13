@@ -244,7 +244,7 @@ export const DEFAULT_TOOLS_PROMPT = `You can call tools to look things up before
 
 Search results and message lists show previews. Edits need text copied exactly, so before quoting, patching, or replacing anything you have only seen as a preview, read it in full (read_messages, get_lorebook_entry, get_char_info). Never overwrite a message, entry, or field based on a preview: whatever you did not see would be lost.
 
-To call a tool, output a \`tool_call\` block. The result is returned to you, and then you continue your answer to the Human. You can call several tools in a row.
+Look things up before you write your answer, not after it. To call a tool, output a \`tool_call\` block and stop there: your reply is cut off at the block, the result is returned to you, and you continue your answer to the Human from that point. To read several things, put every call in one block, one JSON object per line, or ask for several ids in one call (e.g. greeting_ids), rather than one call per turn.
 
 <available_tools>
 {{tools_list}}
@@ -296,10 +296,20 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     'tg8w5qx8dy',
     'mzgi1oyshb',
     '25gvtyi9zne',
+    '19jod6wkwii',
 ];
 
     // ─── Changelog Data ──────────────────────────────────────────────────────────
 export const CHANGELOG = [
+    {
+        version: '3.0.7',
+        date: '10/13/2026',
+        announce: true,
+        notes: [
+            '<strong>Accepted character edits stick</strong>: they reach SillyTavern\'s own copy of the character, so the Alternate Greetings popup and the Character Manager show them at once, and SillyTavern\'s next save no longer writes the old text back.',
+            '<strong>Tool calls</strong>: a reply stops at its tool call, so the next round continues with the result instead of writing the whole answer again.',
+        ],
+    },
     {
         version: '3.0.6',
         date: '10/13/2026',

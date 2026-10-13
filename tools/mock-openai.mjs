@@ -20,6 +20,11 @@ const TPS = Number(args.tps || 40);
 const TOKENS = Number(args.tokens || 600);
 const REASONING = Number(args.reasoning || 0);
 const MD = args.md === '1';
+// --tool 1: a reply that calls get_char_info and then keeps writing (as models do when nothing
+// stops them), until the request carries tool results; then plain text. Logs when the client
+// closes a stream before it finished, which is how a tool-call cut-off shows up here.
+const TOOL = args.tool === '1';
+const TOOL_CALL = 'Greeting 1 is only a preview, so I will read it first.\n```tool_call\n{"name": "get_char_info", "input": {"fields": ["alternate_greetings"], "greeting_ids": [1]}}\n```\n\n';
 
 const WORDS = ('the lantern road bends north past the ford where the ferryman waits and the river runs ' +
     'high with spring rain so we take the ridge path instead keeping the map dry under oilcloth ' +
@@ -96,7 +101,13 @@ http.createServer((req, res) => {
         try { body = JSON.parse(raw || '{}'); } catch (_) { /* bad JSON: treat as non-streaming defaults */ }
         const id = `chatcmpl-bench-${Date.now()}`;
         const reasoningToks = text(REASONING);
-        const contentToks = (MD ? markdown : text)(Math.min(TOKENS, body.max_tokens || TOKENS));
+        let contentToks = (MD ? markdown : text)(Math.min(TOKENS, body.max_tokens || TOKENS));
+        if (TOOL) {
+            const hasResults = JSON.stringify(body.messages || body.prompt || '').includes('<tool_results>');
+            contentToks = hasResults
+                ? ('ROUND-TWO with the results. ' + contentToks.join('')).match(/[\s\S]{1,4}/g)
+                : (TOOL_CALL + 'PREMATURE-REVIEW written without the results: ' + contentToks.join('')).match(/[\s\S]{1,4}/g);
+        }
         const started = Date.now();
         if (isText) return completeText(res, body, contentToks, started);
         console.log(`${new Date().toISOString()} ${body.stream ? 'stream' : 'block'} model=${body.model} msgs=${body.messages?.length ?? 0} promptChars=${JSON.stringify(body.messages || []).length} max_tokens=${body.max_tokens}`);
@@ -130,6 +141,9 @@ http.createServer((req, res) => {
             res.end();
         }, Math.max(10, 1000 / TPS));
         // res, not req: req 'close' fires once the request body is read, which would cancel at once.
-        res.on('close', () => clearInterval(timer));
+        res.on('close', () => {
+            clearInterval(timer);
+            if (i < queue.length) console.log(`  client closed the stream after ${i}/${queue.length} chunks`);
+        });
     });
 }).listen(PORT, '127.0.0.1', () => console.log(`mock-openai on http://127.0.0.1:${PORT}/v1  tps=${TPS} tokens=${TOKENS} reasoning=${REASONING}`));

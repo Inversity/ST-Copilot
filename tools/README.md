@@ -51,8 +51,12 @@ An OpenAI-compatible endpoint on localhost that streams synthetic text at a fixe
 so streaming runs cost nothing and stream the same thing every time.
 
 ```
-node tools/mock-openai.mjs [--port 5005] [--tps 40] [--tokens 600] [--reasoning 0]
+node tools/mock-openai.mjs [--port 5005] [--tps 40] [--tokens 600] [--reasoning 0] [--md 1] [--tool 1]
 ```
+
+`--tool 1` makes the first round call `get_char_info` and keep writing after the call; once
+the request carries tool results it streams plain text. The log shows "client closed the
+stream after N/M chunks" when Copilot stops the reply at its tool call.
 
 In SillyTavern: Chat Completion, source Custom (OpenAI-compatible), URL
 `http://127.0.0.1:5005/v1`, model `mock-model`. Save it as a Connection Manager profile

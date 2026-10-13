@@ -18,7 +18,7 @@ import { buildCharacterContextBlock, buildCharEditAIInstructions } from './featu
 import { buildChatEditAIInstructions } from './features/feature-chatedit-engine.js';
 import { buildPromptEditAIInstructions } from './features/feature-prompt-engine.js';
 import { buildMemoryContextBlock, buildMemoryAIInstructions, processMemoryUpdates, stripMemoryBlock } from './features/feature-memory.js';
-import { buildToolCallsSystemBlock, parseToolCallsFromText, executeTool, getEnabledTools } from './features/feature-tools-engine.js';
+import { buildToolCallsSystemBlock, parseToolCallsFromText, executeTool, getEnabledTools, findToolCallCut, cutAfterToolCalls } from './features/feature-tools-engine.js';
 
 import { updateMsgCount, smartScrollToBottom, setGeneratingState, showGenerationError, _renderMsgBodyContent, updateSwipeBar, _refreshSwipeBars, appendMsgEl, renderStreamingReasoning, updateMsgMeta } from './ui/ui-chat.js';
 import { getDisplayContent, extractToolCallPlaceholders, postProcessHTMLBlocks, scheduleStreamRender, cancelStreamRender, renderStreamingMarkdown } from './ui/ui-chat.js';
@@ -561,12 +561,14 @@ export function getGenStamp() {
     return meta.model || meta.profile ? { model: meta.model || null, profile: meta.profile || null } : null;
 }
 
-export async function callGenerate(session, settings, pendingText, onChunk) {
+// opts.stopAtToolCall: the caller runs tool rounds after this, so a streamed reply is cut
+// off once its tool calls are complete (see findToolCallCut).
+export async function callGenerate(session, settings, pendingText, onChunk, opts = {}) {
     const idle = startStreamIdleWatch();
     state.streamIdle = idle;
     const smooth = typeof onChunk === 'function' ? createSmoothReveal(onChunk) : null;
     try {
-        const result = await _callGenerate(session, settings, pendingText, smooth ? smooth.push : onChunk);
+        const result = await _callGenerate(session, settings, pendingText, smooth ? smooth.push : onChunk, opts);
         if (smooth && result) {
             // Finish revealing before the caller's final render, as ST does. Stop shows the rest at once.
             const reveal = new AbortController();
@@ -617,13 +619,26 @@ export async function sendViaLiveConnection(ctx, messages, maxTokens, stream, si
     throw new Error('No active API connection found. Please select a profile in Connection Manager or configure the main API.');
 }
 
-async function _callGenerate(session, settings, pendingText, onChunk) {
+async function _callGenerate(session, settings, pendingText, onChunk, opts = {}) {
     const ctx = SillyTavern.getContext();
     const messages = await assembleMessages(session, settings, pendingText);
     const maxTokens = parseInt(settings.maxTokens) || 8200;
 
     const abort = new AbortController();
     state.abortController = abort;
+
+    // Stops the request once the reply's tool calls are complete: the rest would be written
+    // without their results, and the next round writes it again. Returns the cut text.
+    let toolCut = false;
+    const cutAtToolCall = (t) => {
+        if (!opts.stopAtToolCall || toolCut) return t;
+        const cut = findToolCallCut(t);
+        if (!cut?.settled) return t;
+        toolCut = true;
+        _dbgAdd('GEN_TOOL_CALL_CUT', { dropped: t.length - cut.end });
+        abort.abort();
+        return t.slice(0, cut.end);
+    };
     // Filled in below: the custom model, or the model in the request body ST builds for us.
     state.genMeta = { model: settings.connectionSource === 'custom' ? (settings.customModel || null) : null, profile: null };
 
@@ -750,23 +765,25 @@ async function _callGenerate(session, settings, pendingText, onChunk) {
                 const decoder = new TextDecoder("utf-8");
                 let buffer = "";
 
-                while (true) {
+                read: while (true) {
+                    if (toolCut) break;
                     if (abort.signal.aborted) { state.abortController = null; return null; }
                     const { done, value } = await reader.read();
                     if (done) break;
-                    
+
                     buffer += decoder.decode(value, { stream: true });
                     const lines = buffer.split('\n');
-                    buffer = lines.pop(); 
+                    buffer = lines.pop();
 
                     for (const line of lines) {
+                        if (toolCut) break read;
                         const l = line.trim();
                         if (!l || l.startsWith(':') || l === 'data: [DONE]') continue;
                         if (l.startsWith('data: ')) {
                             try {
                                 const data = JSON.parse(l.slice(6));
                                 const ext = deepExtract(data);
-                                if (ext.t) text += ext.t;
+                                if (ext.t) text = cutAtToolCall(text + ext.t);
                                 if (ext.r) reasoning = (reasoning || '') + ext.r;
                                 logProgress(text, reasoning);
                                 if (typeof onChunk === 'function') {
@@ -979,7 +996,7 @@ async function _callGenerate(session, settings, pendingText, onChunk) {
             lastValue = value;
 
             const ext = deepExtract(value);
-            text = ext.t;
+            text = cutAtToolCall(ext.t);
             const newReasoning = ext.r;
 
             if (newReasoning) reasoning = newReasoning;
@@ -988,6 +1005,12 @@ async function _callGenerate(session, settings, pendingText, onChunk) {
             if (typeof onChunk === 'function') {
                 const rc = reasoningClock(reasoning, text);
                 onChunk(text, reasoning, rc.ms, rc.done);
+            }
+            if (toolCut) {
+                // Lets the generator's own cleanup run; the request is already aborted.
+                Promise.resolve().then(() => gen.return?.()).catch(() => {});
+                lastValue = null;
+                break;
             }
         }
     } catch (e) {
@@ -1003,6 +1026,10 @@ async function _callGenerate(session, settings, pendingText, onChunk) {
     return { text: text.trim(), reasoning, isMaxTokens };
 }
 
+export function toolRoundsEnabled(settings) {
+    return !!settings.toolsEnabled && (settings.toolsMaxRounds ?? 5) > 0 && getEnabledTools().length > 0;
+}
+
 // The text-based tool loop, shared by new replies and swipes: runs the tool calls in the
 // reply, feeds the results back, and continues generating, up to toolsMaxRounds. Rounds
 // render live into msgEl/contentEl. excludeMsgId is the message being written (left out of
@@ -1010,7 +1037,9 @@ async function _callGenerate(session, settings, pendingText, onChunk) {
 // later round keeps what was generated before it.
 export async function runToolRounds({ session, settings, result, msgEl, contentEl, excludeMsgId, getReasoningMs = () => null }) {
     const maxRounds = settings.toolsMaxRounds ?? 5;
-    let roundText = result.text || '';
+    // A round ends at its tool calls (findToolCallCut). Streaming already stops there; this
+    // also covers non-streamed replies.
+    let roundText = cutAfterToolCalls(result.text || '');
     let accumulatedText = roundText;
     let accumulatedReasoning = result.reasoning || null;
     const extraHistory = [];
@@ -1074,7 +1103,7 @@ export async function runToolRounds({ session, settings, result, msgEl, contentE
         const toolResultsText = roundEntries.map(e =>
             `<tool_result name="${e.name}" status="${e.status}">\n${typeof e.result === 'string' ? e.result : JSON.stringify(e.result, null, 2)}\n</tool_result>`
         ).join('\n');
-        extraHistory.push({ role: 'user', content: `<tool_results>\n${toolResultsText}\n</tool_results>\n\nCONTINUE your response using these results. Write exactly where you left off.` });
+        extraHistory.push({ role: 'user', content: `<tool_results>\n${toolResultsText}\n</tool_results>\n\nCONTINUE your response using these results, from exactly where you left off. Do not repeat anything you already wrote.` });
 
         const thinkingText = document.getElementById('scp-thinking-text');
         if (thinkingText) thinkingText.textContent = `Round ${round + 2}/${maxRounds + 1}…`;
@@ -1091,7 +1120,7 @@ export async function runToolRounds({ session, settings, result, msgEl, contentE
 
         let nextResult;
         try {
-            nextResult = await callGenerate(tempSession, settings, null, (t, r) => updateLiveUI(t, r, cursor2));
+            nextResult = await callGenerate(tempSession, settings, null, (t, r) => updateLiveUI(t, r, cursor2), { stopAtToolCall: round + 1 < maxRounds });
         } finally {
             cancelStreamRender();
             session.messages = session.messages.filter(m => !m._tcTemp);
@@ -1099,7 +1128,7 @@ export async function runToolRounds({ session, settings, result, msgEl, contentE
         }
         if (nextResult === null) break;
 
-        roundText = nextResult.text || '';
+        roundText = round + 1 < maxRounds ? cutAfterToolCalls(nextResult.text || '') : (nextResult.text || '');
         accumulatedText += '\n\n' + roundText;
         if (nextResult.reasoning) {
             accumulatedReasoning = accumulatedReasoning ? accumulatedReasoning + '\n\n' + nextResult.reasoning : nextResult.reasoning;
@@ -1219,7 +1248,7 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
             tokensIn
         });
 
-        let result = await callGenerate(session, settings, null, onChunk);
+        let result = await callGenerate(session, settings, null, onChunk, { stopAtToolCall: toolRoundsEnabled(settings) });
 
         cancelStreamRender();
         cleanupCursor();
@@ -1228,7 +1257,7 @@ export async function runGenerate(session, userText, addUserMsg = true, processe
             toastr.warning(translate('⚠ Generation failed: AI returned an empty response.'), EXT_DISPLAY, { timeOut: 10000 });
         }
 
-        if (result !== null && settings.toolsEnabled && getEnabledTools().length > 0) {
+        if (result !== null && toolRoundsEnabled(settings)) {
             result = await runToolRounds({
                 session, settings, result,
                 msgEl: streamMsgEl, contentEl: streamContentEl, excludeMsgId: streamMsgId,
