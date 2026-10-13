@@ -9,6 +9,7 @@
 // Text Completion > Generic (OpenAI-compatible) at http://127.0.0.1:5005 uses /v1/completions;
 // each request logs the start of its prompt, temperature and stop strings.
 
+import fs from 'node:fs';
 import http from 'node:http';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => {
@@ -24,7 +25,10 @@ const MD = args.md === '1';
 // stops them), until the request carries tool results; then plain text. Logs when the client
 // closes a stream before it finished, which is how a tool-call cut-off shows up here.
 const TOOL = args.tool === '1';
-const TOOL_CALL = 'Greeting 1 is only a preview, so I will read it first.\n```tool_call\n{"name": "get_char_info", "input": {"fields": ["alternate_greetings"], "greeting_ids": [1]}}\n```\n\n';
+// --reply-file <path>: every reply streams this file's text (re-read per request), e.g.
+// tools/ui-screens-reply.md, which proposes one edit of each kind for the UI screenshots.
+const REPLY_FILE = args['reply-file'] || '';
+const TOOL_CALL ='Greeting 1 is only a preview, so I will read it first.\n```tool_call\n{"name": "get_char_info", "input": {"fields": ["alternate_greetings"], "greeting_ids": [1]}}\n```\n\n';
 
 const WORDS = ('the lantern road bends north past the ford where the ferryman waits and the river runs ' +
     'high with spring rain so we take the ridge path instead keeping the map dry under oilcloth ' +
@@ -102,6 +106,7 @@ http.createServer((req, res) => {
         const id = `chatcmpl-bench-${Date.now()}`;
         const reasoningToks = text(REASONING);
         let contentToks = (MD ? markdown : text)(Math.min(TOKENS, body.max_tokens || TOKENS));
+        if (REPLY_FILE) contentToks = fs.readFileSync(REPLY_FILE, 'utf8').match(/[\s\S]{1,4}/g) || [];
         if (TOOL) {
             const hasResults = JSON.stringify(body.messages || body.prompt || '').includes('<tool_results>');
             contentToks = hasResults

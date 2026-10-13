@@ -57,6 +57,7 @@ node tools/mock-openai.mjs [--port 5005] [--tps 40] [--tokens 600] [--reasoning 
 `--tool 1` makes the first round call `get_char_info` and keep writing after the call; once
 the request carries tool results it streams plain text. The log shows "client closed the
 stream after N/M chunks" when Copilot stops the reply at its tool call.
+`--reply-file <path>` streams that file's text as every reply (re-read per request).
 
 In SillyTavern: Chat Completion, source Custom (OpenAI-compatible), URL
 `http://127.0.0.1:5005/v1`, model `mock-model`. Save it as a Connection Manager profile
@@ -65,3 +66,25 @@ so Copilot uses the same path real setups do.
 Text completion: API type Generic (OpenAI-compatible), server `http://127.0.0.1:5005`.
 The mock answers `/v1/completions` and logs each prompt's start and end, temperature and
 stop strings, which shows whether instruct formatting and the live samplers arrived.
+
+## ui-screens.mjs
+
+Screenshots every Copilot screen (window, settings tabs, managers, dialogs, proposal cards)
+into `docs/screens/`, by clicking through the UI in headless Chrome. It logs in as the test
+user and refuses to run as anyone else, so only synthetic data appears in the images.
+Needs a running SillyTavern, Chrome, and `npm install` (it uses `puppeteer-core`).
+
+```
+node tools/ui-screens.mjs [--st http://localhost:8001] [--user fresh-user-test] [--out docs/screens] [--only id,id] [--cards 1]
+```
+
+`--cards 1` also captures the proposal cards. It sends one Copilot message, so it checks that
+the active connection profile is the mock, which must stream `tools/ui-screens-reply.md`:
+`node tools/mock-openai.mjs --tps 400 --reply-file tools/ui-screens-reply.md`.
+
+## build-ui-map.mjs
+
+Builds the UI map page (`docs/ui-map/index.html`) from `docs/ui-inventory.json`, the list
+of every screen with its controls, source and review findings. It fails if a screen names a
+missing screenshot or two findings share an id. Finding ids key the review answers stored
+in the published map, so never renumber them; give a new finding a new id.

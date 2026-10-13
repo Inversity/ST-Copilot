@@ -1,0 +1,582 @@
+<title>ST-Copilot UI Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: two views over the same inventory. "By screen": an index of every screen on the left,
+   the selected screen's sheet on the right (screenshot, findings to answer, controls, source).
+   "All findings": every finding in one list, answered in place. Stacks on phones. */
+:root {
+  --bg: #f4f3f9;
+  --panel: #ffffff;
+  --raise: #ecebf5;
+  --line: #dcd9ea;
+  --fg: #1c1a27;
+  --muted: #615d78;
+  --accent: #5a49d6;
+  --accent-soft: #e6e2fb;
+  --ok: #1f8a5b;
+  --warn: #b26a00;
+  --bad: #c2384a;
+  --info: #2f6fb8;
+  --shot-bg: #15141b;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111017; --panel: #19181f; --raise: #22202b; --line: #2f2c3b; --fg: #e8e6f2; --muted: #9a96b0;
+    --accent: #9a8fff; --accent-soft: #2a2546; --ok: #4cc38a; --warn: #e3a33b; --bad: #ef6b7c; --info: #6aa7ec; --shot-bg: #0b0a10;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111017; --panel: #19181f; --raise: #22202b; --line: #2f2c3b; --fg: #e8e6f2; --muted: #9a96b0;
+  --accent: #9a8fff; --accent-soft: #2a2546; --ok: #4cc38a; --warn: #e3a33b; --bad: #ef6b7c; --info: #6aa7ec; --shot-bg: #0b0a10;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); padding-inline: 16px; padding-block: 18px 40px; }
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: .5; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code { font-family: var(--mono); font-size: 12.5px; }
+textarea { width: 100%; resize: vertical; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; line-height: 1.45; }
+
+.top { max-width: 1320px; margin: 0 auto 14px; display: flex; flex-wrap: wrap; align-items: end; gap: 10px 24px; }
+.top h1 { font: 700 26px/1.1 var(--display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.top .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.progress { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; color: var(--muted); }
+.stat b { color: var(--fg); font-variant-numeric: tabular-nums; font-size: 15px; margin-right: 4px; }
+
+.bar { max-width: 1320px; margin: 0 auto 14px; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.views { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; padding: 3px; background: var(--panel); }
+.views button { border: 0; background: none; border-radius: 6px; padding: 5px 12px; }
+.views button[aria-pressed="true"] { background: var(--accent-soft); font-weight: 700; }
+.bar input[type=search] { flex: 1 1 220px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+.chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 10px; font-size: 12.5px; display: inline-flex; gap: 6px; align-items: center; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
+.chip .n { font-variant-numeric: tabular-nums; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+
+.layout { max-width: 1320px; margin: 0 auto; display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.index { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); max-height: calc(100vh - 24px); overflow: auto; }
+.area { margin-bottom: 6px; }
+.area > h2 { font: 600 11px/1 var(--body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 10px 8px 6px; }
+.node { display: flex; width: 100%; align-items: center; gap: 8px; text-align: left; background: none; border: 0; border-radius: 6px; padding: 6px 8px; }
+.node:hover { background: var(--raise); }
+.node[aria-current="true"] { background: var(--accent-soft); }
+.node.child { padding-left: 24px; }
+.node .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node .fc { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.node .fc.done { color: var(--ok); }
+
+.sheet, .list { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px 22px; min-width: 0; display: grid; gap: 18px; }
+.list { max-width: 1000px; margin: 0 auto; }
+.sheet-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; }
+.sheet-head h2 { font: 700 22px/1.15 var(--display); margin: 0; text-wrap: balance; }
+.crumb { color: var(--muted); font-size: 13px; }
+.kind { font: 500 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; color: var(--muted); }
+.purpose { margin: 0; max-width: 70ch; font-size: 16px; }
+.opens { margin: 0; color: var(--muted); font-size: 13.5px; }
+.opens b { color: var(--fg); }
+
+.shots { display: grid; gap: 10px; }
+.shot-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.shot-frame { background: var(--shot-bg); border-radius: 8px; padding: 12px; overflow: auto; max-height: 600px; text-align: center; }
+.shot-frame img { max-width: 100%; height: auto; display: inline-block; border-radius: 4px; }
+.shot-frame.tall img { max-width: min(100%, 620px); }
+.no-shot { color: var(--muted); font-size: 13px; font-style: italic; margin: 0; }
+
+h3 { font: 600 12px/1 var(--body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
+.section-note { color: var(--muted); font-size: 13px; margin: -4px 0 10px; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.controls { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.controls li { display: grid; gap: 2px; padding: 7px 10px; background: var(--raise); border-radius: 6px; }
+.controls .k { font: 11px var(--mono); color: var(--muted); }
+.controls .s { font: 11.5px var(--mono); color: var(--accent); overflow-wrap: anywhere; }
+.none { color: var(--muted); font-size: 13.5px; margin: 0; }
+.src { display: flex; flex-wrap: wrap; gap: 6px; }
+.src code { background: var(--raise); border-radius: 4px; padding: 2px 6px; overflow-wrap: anywhere; }
+
+/* One finding: what was found, then your answer. */
+.findings { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.finding { border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; }
+.finding.answered { background: color-mix(in srgb, var(--raise) 55%, transparent); }
+.f-head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.f-head .ty { font: 600 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.05em; }
+.f-head .where { font-size: 12.5px; color: var(--muted); border: 0; background: none; padding: 0; text-decoration: underline; text-underline-offset: 2px; }
+.f-head .fid { margin-left: auto; font: 11px var(--mono); color: var(--muted); }
+.finding p { margin: 0; max-width: 78ch; }
+.finding .ref { font: 11.5px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.answer { display: flex; flex-wrap: wrap; gap: 6px; }
+.choice { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 11px; font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+.choice::before { content: ""; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid currentColor; flex: none; }
+.choice[aria-pressed="true"] { border-color: currentColor; font-weight: 700; background: var(--raise); }
+.choice[aria-pressed="true"]::before { background: currentColor; box-shadow: inset 0 0 0 2px var(--panel); }
+.choice span { color: var(--fg); }
+.c-agree { color: var(--ok); } .c-different { color: var(--accent); } .c-leave { color: var(--muted); } .c-question { color: var(--warn); }
+.finding textarea { min-height: 70px; }
+.f-state { font-size: 12px; color: var(--muted); min-height: 1em; }
+
+.t-bug { color: var(--bad); } .finding.t-bug { border-left-color: var(--bad); }
+.t-drift { color: var(--warn); } .finding.t-drift { border-left-color: var(--warn); }
+.t-dead { color: var(--muted); } .finding.t-dead { border-left-color: var(--muted); }
+.t-i18n { color: var(--info); } .finding.t-i18n { border-left-color: var(--info); }
+.t-wording { color: var(--accent); } .finding.t-wording { border-left-color: var(--accent); }
+.t-missing { color: var(--warn); } .finding.t-missing { border-left-color: var(--warn); }
+.t-ux { color: var(--ok); } .finding.t-ux { border-left-color: var(--ok); }
+.t-yours { color: var(--fg); } .finding.t-yours { border-left-color: var(--fg); border-left-style: double; }
+
+.add { display: grid; gap: 8px; }
+.add textarea { min-height: 60px; }
+.add-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: var(--raise); border-radius: 8px; padding: 6px 12px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); font-weight: 700; }
+.btn.danger { color: var(--bad); }
+
+.review { border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 10px; }
+.marks { display: flex; flex-wrap: wrap; gap: 6px; }
+.mark { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 12px; display: inline-flex; gap: 7px; align-items: center; }
+.mark[aria-pressed="true"] { border-color: currentColor; background: var(--raise); font-weight: 700; }
+.review textarea { min-height: 80px; }
+.save-state { font-size: 12.5px; color: var(--muted); min-height: 1.2em; }
+.pager { display: flex; justify-content: space-between; gap: 8px; }
+.pager button { background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; }
+
+.st-unreviewed { color: var(--muted); } .st-ok { color: var(--ok); } .st-change { color: var(--bad); } .st-question { color: var(--warn); }
+.dot.st-unreviewed { background: transparent; border: 1.5px solid var(--muted); }
+.dot.st-ok { background: var(--ok); } .dot.st-change { background: var(--bad); } .dot.st-question { background: var(--warn); }
+
+.list-group > h2 { font: 700 17px/1.2 var(--display); margin: 6px 0 10px; }
+.list-group + .list-group { border-top: 1px solid var(--line); padding-top: 16px; }
+
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .index { position: static; max-height: 320px; }
+  .cols { grid-template-columns: minmax(0, 1fr); }
+  .progress { margin-left: 0; }
+  .f-head .fid { margin-left: 0; }
+}
+@media (prefers-reduced-motion: no-preference) { .node, .chip, .mark, .choice { transition: background-color .12s, border-color .12s; } }
+</style>
+
+<header class="top">
+  <div>
+    <h1>ST-Copilot UI Map</h1>
+    <div class="sub" id="sub"></div>
+  </div>
+  <div class="progress" id="progress" aria-live="polite"></div>
+</header>
+
+<div class="bar" role="toolbar" aria-label="View and filters">
+  <div class="views" role="group" aria-label="View">
+    <button type="button" id="view-screens" aria-pressed="true">By screen</button>
+    <button type="button" id="view-findings" aria-pressed="false">All findings</button>
+  </div>
+  <input type="search" id="q" placeholder="Search screens, controls, findings" aria-label="Search screens, controls and findings">
+  <span class="chips" id="type-chips"></span>
+  <span class="chips" id="state-chips"></span>
+</div>
+
+<main class="layout" id="screens-view">
+  <nav class="index" id="index" aria-label="Screens"></nav>
+  <article class="sheet" id="sheet"></article>
+</main>
+<main id="findings-view" hidden>
+  <article class="list" id="list"></article>
+</main>
+
+<script type="application/json" id="inventory">{"about":"Every screen, panel and card of ST-Copilot, with how to reach it, what it does, its controls, the source that builds it, its screenshot (docs/screens/<screen>.jpg, made by tools/ui-screens.mjs) and open findings. Built for the UI review; keep it in step with the code: a new screen or setting gets a node here.","version":"3.0.8","builtFrom":"9b1e8ff","findingTypes":{"bug":"Broken behaviour or markup","drift":"Two places that should match do not","dead":"Code or setting nothing uses","i18n":"Visible text that is not translatable","wording":"Unclear, inconsistent or outdated text","missing":"Something expected that is not there","ux":"Works, but confusing or awkward"},"areas":[{"id":"entry","title":"SillyTavern entry points","blurb":"Where Copilot plugs into SillyTavern's own UI."},{"id":"window","title":"Copilot window","blurb":"The floating chat window and everything inside it."},{"id":"cards","title":"Proposal cards","blurb":"Edits Copilot proposes in a reply; nothing changes until you accept."},{"id":"settings","title":"Settings overlay","blurb":"The gear button in the window header. Seven tabs."},{"id":"managers","title":"Managers","blurb":"Full-screen editors opened from the window's menu."},{"id":"modals","title":"Dialogs and modals","blurb":"Smaller pop-ups opened from the window."}],"nodes":[{"id":"st-wand","area":"entry","title":"Wand menu entry","kind":"entry","opens":"SillyTavern's wand (Extensions) menu, bottom left of the chat bar","purpose":"Opens or hides the Copilot window.","screens":["st-wand-menu"],"source":["src/index.js:144"],"controls":[{"label":"ST-Copilot","kind":"menu item"}],"findings":[{"type":"wording","text":"The extension is named \"Copilot (ST)\" in manifest.json (what SillyTavern's Manage Extensions list shows) but \"ST-Copilot\" here, in the window title and in the drawer.","ref":"manifest.json:2","id":"st-wand-1"}]},{"id":"st-drawer","area":"entry","title":"Extensions panel drawer","kind":"panel","opens":"SillyTavern > Extensions (puzzle icon) > ST-Copilot","purpose":"A second, older settings surface. It repeats most of the Settings overlay's AI and Interface tabs, plus a few buttons that open the overlay.","screens":["st-drawer"],"source":["settings.html","src/ui/ui-settings.js:998"],"controls":[{"label":"General: Enable, Always show floating icon, Wobbly drag, Low Performance Mode, Window Opacity","kind":"checkboxes + slider"},{"label":"Open Copilot, Clear Sessions, Clean Up Files, Debug Log","kind":"buttons"},{"label":"Shortcuts: Toggle Window, Chat Search, Toggle Ghost Mode","kind":"checkbox + hotkey field each"},{"label":"Completion Sound, Ghost Mode opacity","kind":"sound picker + slider"},{"label":"Configuration Profiles: select, save, new, duplicate, rename, delete, auto-load for character/chat","kind":"profile bar"},{"label":"Connection, Context Payload, System Prompt, Character Card AI Edits, Lorebook AI Edits, Chat Message AI Edits, Other, Interface Theme","kind":"collapsible drawers"},{"label":"Persistent Memory: Enable, Inject memory into AI context, Manage Memory","kind":"checkboxes + button"},{"label":"Tool Calls: Enable, Configure Tools","kind":"checkbox + button"}],"findings":[{"type":"bug","text":"The \"Apply Regex Scripts to context\" label closes before its checkbox, so the checkbox sits outside the label and clicking the text does nothing.","ref":"settings.html:203","id":"st-drawer-1"},{"type":"drift","text":"Two settings surfaces for the same settings. The drawer is missing: model override, Prompt Manager AI edits, show changelog on update / What's New, memory toast + memory prompt + memory list, max tool rounds, tools prompt and the tool list.","ref":"settings.html","id":"st-drawer-2"},{"type":"drift","text":"Only the drawer has \"Inject memory into AI context\" (memoryInject); the overlay's Memory tab has no such switch.","ref":"settings.html:367","id":"st-drawer-3"},{"type":"drift","text":"Wording differs from the overlay: \"Use Currently Selected API\" vs \"Use Current API\"; \"Response String Trimming\" vs \"Reasoning Trim Strings\"; \"Session History Depth Limit\" vs \"Session History Limit\"; \"Apply Regex Scripts to context\" vs \"Apply Regex to context\"; \"Clear Sessions / Clean Up Files / Debug Log\" vs \"Clear All Sessions / Clean Up Orphan Files / Download Debug Log\"; shortcut \"Toggle Ghost Mode\" vs \"Ghost Mode\".","ref":"settings.html","id":"st-drawer-4"},{"type":"wording","text":"Max Response Tokens shows placeholder 2048; the real default is 8048 (same in the overlay).","ref":"settings.html:151","id":"st-drawer-5"},{"type":"ux","text":"Expanded, the drawer is about 5,500px tall: every prompt is an auto-growing textarea. Decide whether the drawer should keep full prompt editors or point to the overlay.","id":"st-drawer-6"}]},{"id":"dock-icon","area":"entry","title":"Floating icon","kind":"entry","opens":"Minimize button in the window header, or always shown with \"Always show floating icon\"","purpose":"Restores the minimized window. Draggable; remembers its position.","screens":["dock-icon"],"source":["window.html:115","src/ui/ui-window.js:716"],"controls":[{"label":"Click to restore","kind":"icon"}],"findings":[]},{"id":"hotkeys","area":"entry","title":"Keyboard shortcuts","kind":"entry","opens":"Anywhere in SillyTavern","purpose":"Toggle the window (Alt+Shift+C), open chat search (Ctrl+F), toggle Ghost Mode (Alt+Shift+G). Each can be turned off or rebound in Settings > Interface.","screens":[],"source":["src/ui/ui-window.js:636","src/ui/ui-window.js:656","src/ui/ui-chat.js:2146"],"controls":[],"findings":[{"type":"ux","text":"Ctrl+F is captured by Copilot while enabled, which replaces the browser's own find in SillyTavern. Worth a note in the README.","id":"hotkeys-1"}]},{"id":"window","area":"window","title":"Copilot window","kind":"window","opens":"Wand menu, floating icon or Alt+Shift+C","purpose":"A floating, resizable chat with an assistant that can read the roleplay and propose edits to cards, lorebooks, chat messages and prompts.","screens":["window"],"source":["window.html","src/ui/ui-window.js"],"controls":[{"label":"Drag the header to move; drag any edge or corner to resize","kind":"window"}],"findings":[]},{"id":"window-header","area":"window","parent":"window","title":"Header","kind":"section","opens":"Top of the window","purpose":"Title, the active character badge, and window buttons.","screens":["window-header"],"source":["window.html:7"],"controls":[{"label":"Character badge","kind":"label"},{"label":"Search in chat (Ctrl+F)","kind":"button"},{"label":"Ghost Mode (transparent, click-through)","kind":"button"},{"label":"Settings (dot when session overrides are active)","kind":"button"},{"label":"Minimize to icon","kind":"button"},{"label":"Hide","kind":"button"}],"findings":[]},{"id":"window-toolbar","area":"window","parent":"window","title":"Toolbar","kind":"section","opens":"Below the header","purpose":"Session switcher, context depth and the menu to the managers.","screens":["window-toolbar"],"source":["window.html:22"],"controls":[{"label":"Session dropdown","kind":"dropdown"},{"label":"Rename session, Delete session","kind":"buttons"},{"label":"Ctx: main chat messages sent with each request (click the number to type it)","kind":"slider","setting":"contextDepth"},{"label":"Pick specific chat messages (replaces the Ctx slider)","kind":"button"},{"label":"Menu: Lorebook Manager, Character Manager, Prompt Manager","kind":"menu"}],"findings":[{"type":"wording","text":"The same setting is \"Ctx\" here and \"Main Chat Depth\" in Settings. A tooltip exists, but one name would read better.","id":"window-toolbar-1"}]},{"id":"session-menu","area":"window","parent":"window-toolbar","title":"Session dropdown","kind":"menu","opens":"Session name in the toolbar","purpose":"Lists this chat's Copilot sessions (temporary ones marked tmp), and creates, exports and imports sessions.","screens":["session-menu"],"source":["src/index.js:79"],"controls":[{"label":"Session list","kind":"list"},{"label":"New Session","kind":"button"},{"label":"Export, Import","kind":"buttons"}],"findings":[{"type":"ux","text":"Sessions belong to the current SillyTavern chat; switching chats shows a different list. The dropdown does not say so (parked idea: global sessions).","id":"session-menu-1"}]},{"id":"main-menu","area":"window","parent":"window-toolbar","title":"Menu","kind":"menu","opens":"Menu button at the right of the toolbar","purpose":"Opens the three managers.","screens":["main-menu"],"source":["window.html:58"],"controls":[{"label":"Lorebook Manager, Character Manager, Prompt Manager","kind":"menu items"}],"findings":[]},{"id":"search","area":"window","parent":"window","title":"Search bar","kind":"section","opens":"Search button or Ctrl+F","purpose":"Finds text in the current Copilot session and steps through matches.","screens":["search"],"source":["window.html:68","src/ui/ui-chat.js:1617"],"controls":[{"label":"Search messages","kind":"text field"},{"label":"W (whole word)","kind":"toggle"},{"label":"Previous, Next, Close","kind":"buttons"}],"findings":[]},{"id":"message-assistant","area":"window","parent":"window","title":"Assistant message","kind":"item","opens":"Any Copilot reply","purpose":"Shows the reply with its reasoning (collapsible, with thinking time), tool calls, model and connection, and actions on hover.","screens":["message-assistant"],"source":["src/ui/ui-chat.js:528"],"controls":[{"label":"Copy, Edit, Regen, Delete, Star, Continue response","kind":"hover buttons"},{"label":"Swipes: previous, counter, next / new swipe, delete swipe","kind":"swipe bar"},{"label":"Reasoning (Thought for N s)","kind":"collapsible"},{"label":"HTML blocks: Preview / Code / Copy","kind":"tabs"}],"findings":[{"type":"i18n","text":"Hover button titles (Copy, Edit, Regen, Delete, Star message, Unstar, Continue response) and the swipe titles (Previous swipe, New swipe) are plain strings, not translated.","ref":"src/ui/ui-chat.js:571","id":"message-assistant-1"}]},{"id":"message-user","area":"window","parent":"window","title":"Your message","kind":"item","opens":"Any message you sent","purpose":"Your message with its token count and attachments. Edit offers Save & Resend.","screens":["message-user"],"source":["src/ui/ui-chat.js:528","src/ui/ui-chat.js:1129"],"controls":[{"label":"Copy, Edit (Save & Resend, Save, Cancel), Regen, Delete, Star","kind":"hover buttons"}],"findings":[{"type":"i18n","text":"The edit buttons Save & Resend / Save / Cancel are not translated.","ref":"src/ui/ui-chat.js:1129","id":"message-user-1"}]},{"id":"tool-call","area":"window","parent":"message-assistant","title":"Tool call card","kind":"item","opens":"Inside a reply that used a tool","purpose":"Shows which tool ran, its status, and (expanded) its input and result. ask_user shows a question with an answer field.","screens":["tool-call"],"source":["src/features/feature-tools-ui.js:7"],"controls":[{"label":"Expand: Input, Result","kind":"toggle"},{"label":"ask_user: Your answer, Submit Answer","kind":"field + button"}],"findings":[]},{"id":"status-bar","area":"window","parent":"window","title":"Status bar","kind":"section","opens":"Above the actions bar while Copilot is writing","purpose":"Shows Thinking…, the tool round (Round N/6) and, after 10 s of silence, \"Model still working · no output for Ns\". Stop aborts.","screens":[],"source":["window.html:80","src/api.js:1133","src/api.js:562"],"controls":[{"label":"Stop","kind":"button"}],"findings":[{"type":"i18n","text":"\"Thinking…\" in window.html and \"Round N/6…\" in api.js are not translated (the idle notice is).","ref":"src/api.js:1133","id":"status-bar-1"},{"type":"ux","text":"\"Round 2/6\" reads like a fixed plan; it is \"tool round 2, at most 6\". Consider \"Tool round 2 (max 6)\".","id":"status-bar-2"}]},{"id":"actions-bar","area":"window","parent":"window","title":"Actions bar","kind":"section","opens":"Above the input","purpose":"Context inspector, regenerate, quick prompts, starred messages, and the estimated token and message counts.","screens":["window"],"source":["window.html:86"],"controls":[{"label":"Context (raw payload)","kind":"button"},{"label":"Regen","kind":"button"},{"label":"Quick Prompts","kind":"toggle"},{"label":"Starred Messages","kind":"toggle"},{"label":"~tokens, N msgs","kind":"labels"}],"findings":[]},{"id":"quick-prompts-bar","area":"window","parent":"window","title":"Quick prompts bar","kind":"section","opens":"Lightning button in the actions bar","purpose":"One-click prompts (Analyze, Ideas, Summary, Feelings, Next? by default). Edited in Settings > Quick Prompts.","screens":["quick-prompts-bar"],"source":["src/ui/ui-widgets.js:13"],"controls":[{"label":"Prompt chips","kind":"buttons","setting":"quickPrompts"}],"findings":[]},{"id":"starred-panel","area":"window","parent":"window","title":"Starred messages","kind":"panel","opens":"Star button in the actions bar","purpose":"Lists starred messages of the session; click one to jump to it.","screens":["starred-panel"],"source":["window.html:104","src/ui/ui-widgets.js:617"],"controls":[{"label":"Remove from starred","kind":"button"}],"findings":[]},{"id":"input-row","area":"window","parent":"window","title":"Input and attachments","kind":"section","opens":"Bottom of the window","purpose":"Type a message (Enter sends, Shift+Enter new line), attach files or images. Images go to the API directly or through Image Captioning (Settings > Interface > File Attachments).","screens":["window"],"source":["window.html:98","src/features/feature-attachments.js"],"controls":[{"label":"Attach files or images","kind":"button"},{"label":"Ask about the roleplay…","kind":"text area"},{"label":"Send","kind":"button"}],"findings":[]},{"id":"ghost-mode","area":"window","parent":"window","title":"Ghost Mode","kind":"state","opens":"Ghost button in the header or Alt+Shift+G","purpose":"Makes the window transparent and click-through so you can read the chat underneath.","screens":["ghost-mode"],"source":["src/ui/ui-window.js:656"],"controls":[{"label":"Ghost opacity","kind":"slider","setting":"ghostModeOpacity"}],"findings":[]},{"id":"card-lorebook","area":"cards","title":"Lorebook changes card","kind":"card","opens":"A reply with a lorebook-changes block","purpose":"Adds, edits, patches, appends to or deletes lorebook entries; each change has diff, edit, apply and reject.","screens":["card-lorebook"],"source":["src/features/feature-lorebook-ui.js:342"],"controls":[{"label":"Per change: View diff, Edit before applying, Apply, Reject","kind":"buttons"},{"label":"Apply All, Reject All, Dismiss","kind":"buttons"},{"label":"Edit form: name, keys, content, Constant, Outlet Entry + Outlet Name","kind":"form"}],"findings":[]},{"id":"card-character","area":"cards","title":"Character edits card","kind":"card","opens":"A reply with a character-changes block","purpose":"Overwrite, replace (anchor patches), prepend or append text to a card field, or add / rewrite alternate greetings. Accepted edits go to SillyTavern's live copy of the character (3.0.7).","screens":["card-character"],"source":["src/features/feature-character-ui.js:414","src/features/feature-character-ui.js:765"],"controls":[{"label":"Per change: View diff, Edit before applying (Add Patch, Remove), Apply, Reject","kind":"buttons"},{"label":"Change all N (when an anchor repeats)","kind":"button"},{"label":"Apply All, Reject All, Dismiss","kind":"buttons"}],"findings":[{"type":"wording","text":"Two different actions both read APPEND: \"+ Append\" adds a new alternate greeting, \"⬇ Append\" adds text to the end of a field. Suggest \"+ New greeting\" for the first.","ref":"src/features/feature-character-ui.js:508","id":"card-character-1"}]},{"id":"card-character-create","area":"cards","title":"New character card","kind":"card","opens":"A reply with a character-create block","purpose":"Review and edit a proposed new character, then create it in SillyTavern.","screens":["card-character-create"],"source":["src/features/feature-character-ui.js:259"],"controls":[{"label":"Name, Tags, Description, Personality, Scenario, First Message, Example Dialogue","kind":"fields"},{"label":"Create, Cancel, Dismiss","kind":"buttons"}],"findings":[]},{"id":"card-chat","area":"cards","title":"Chat edits card","kind":"card","opens":"A reply with a chat-changes block","purpose":"Edits SillyTavern chat messages: prepend, append, add, delete, hide/unhide, overwrite, patch, regex, bulk replace, rename the chat.","screens":["card-chat"],"source":["src/features/feature-chatedit-ui.js:37"],"controls":[{"label":"Per change: View diff, Edit before applying, Apply, Reject","kind":"buttons"},{"label":"Apply All, Reject All, Dismiss all","kind":"buttons"}],"findings":[]},{"id":"card-prompt","area":"cards","title":"Prompt edits card","kind":"card","opens":"A reply with a prompt-changes block (needs Prompt Manager AI edits on)","purpose":"Edits or toggles prompts in SillyTavern's Prompt Manager; saved to settings, and to the preset file only via Update preset file.","screens":["card-prompt"],"source":["src/features/feature-prompt-manager-ui.js:194"],"controls":[{"label":"Per change: View diff, Apply, Reject","kind":"buttons"},{"label":"Reject all remaining (header ×)","kind":"button"}],"findings":[{"type":"drift","text":"Unlike the other cards: no Apply All / Reject All buttons, no Edit before applying, and no text preview under the change (only the diff button).","ref":"src/features/feature-prompt-manager-ui.js:194","id":"card-prompt-1"}]},{"id":"diff-modal","area":"cards","title":"Diff view","kind":"modal","opens":"View diff on any card","purpose":"Before and after of one change, split or unified.","screens":[],"source":["lorebook_manager.html:110","src/utils/util-diff.js:170"],"controls":[{"label":"Split, Unified","kind":"tabs"}],"findings":[{"type":"i18n","text":"The title \"Diff View\" is not translated.","ref":"lorebook_manager.html:113","id":"diff-modal-1"},{"type":"ux","text":"The diff modal's markup lives in lorebook_manager.html though every card uses it.","id":"diff-modal-2"}]},{"id":"settings-global","area":"settings","title":"AI tab","kind":"tab","opens":"Gear button > AI","purpose":"Everything that shapes requests: configuration profile, connection, what context is sent, and the prompts for each kind of edit. All of it belongs to the selected configuration profile.","screens":["settings-global"],"source":["settings_overlay.html:34","src/ui/ui-settings.js:1130"],"controls":[{"label":"Configuration Profiles: select, save, new, duplicate, rename, delete; auto-load for character / chat","kind":"profile bar","setting":"profiles, activeProfile, profileBindings"},{"label":"Connection: Use Current API / Use Specific Profile / Custom Endpoint","kind":"select","setting":"connectionSource"},{"label":"Connection Profile + Model (blank = profile's model) + load model list","kind":"select + combo","setting":"connectionProfileId, modelOverride"},{"label":"Endpoint URL, API Key, Model Name","kind":"fields","setting":"customUrl, customKey, customModel"},{"label":"Max Response Tokens","kind":"number","setting":"maxTokens"},{"label":"Streaming: Auto / Force On / Force Off","kind":"segmented","setting":"forceStreaming"},{"label":"Include my ST roleplay prompt, User Persona, auto-expand macros, hidden messages, alternate swipes","kind":"checkboxes"},{"label":"Character fields sent (10) + which greetings to include","kind":"checkboxes","setting":"charEditFields, altGreetingIndices"},{"label":"Main Chat Depth, Session History Limit, Reasoning Trim Strings","kind":"slider + number + text"},{"label":"Third-party: Apply Regex, Summaryception, Aspect: Evolutia","kind":"checkboxes"},{"label":"System Prompt + Reset to Default","kind":"text area","setting":"systemPrompt"},{"label":"Character Card AI Edits: enable + prompt","kind":"checkbox + text area","setting":"charEditAIEnabled, charEditPrompt"},{"label":"Lorebook AI Edits: enable, Auto-Keywords, scan depth, prompt","kind":"mixed","setting":"lorebookAIManageEnabled, lorebookAutoKeyword, lorebookCopilotScanDepth, lorebookManagePrompt"},{"label":"Chat Message AI Edits: enable + prompt","kind":"checkbox + text area","setting":"chatEditAIEnabled, chatEditPrompt"},{"label":"Prompt Manager AI Edits: enable","kind":"checkbox","setting":"promptEditAIEnabled"}],"findings":[{"type":"wording","text":"\"Copilot keytriggers scan depth\" is jargon; it is how many of your own Copilot messages are scanned for lorebook keys. The drawer's note that main chat entries follow SillyTavern's World Info is missing here.","ref":"settings_overlay.html:168","id":"settings-global-1"},{"type":"wording","text":"\"Reasoning Trim Strings\" removes strings from replies (empty <think><\/think> blocks); the name suggests it only touches reasoning.","id":"settings-global-2"},{"type":"missing","text":"System prompt presets exist only in the Session tab; the AI tab has just Reset.","id":"settings-global-3"}]},{"id":"settings-interface","area":"settings","title":"Interface tab","kind":"tab","opens":"Gear button > Interface","purpose":"Look and behaviour of the window: general switches, shortcuts, completion sound, Ghost Mode, background, message picker previews, attachments, theme, and the danger zone.","screens":["settings-interface"],"source":["settings_overlay.html:197","src/ui/ui-settings.js:368","src/ui/ui-settings.js:1363","src/ui/ui-widgets.js:1112"],"controls":[{"label":"Enable, floating icon, wobbly drag, Low Performance Mode, show changelog on update, What's New, Window Opacity","kind":"mixed"},{"label":"Shortcuts (3)","kind":"checkbox + hotkey field"},{"label":"Completion Sound: presets, custom upload, test, delete, volume, only when unfocused","kind":"picker"},{"label":"Ghost Opacity","kind":"slider"},{"label":"Window Background: none / custom, upload or URL, rename, delete, dim","kind":"picker"},{"label":"Context Message Picker: first N lines, last N lines","kind":"numbers"},{"label":"Image Analysis Mode: Direct / Caption","kind":"select"},{"label":"Interface Theme: 12 presets, custom themes (save, new, duplicate, rename, delete, export, import), 20 color and style fields","kind":"theme editor"},{"label":"Danger Zone: Clear All Sessions, Clean Up Orphan Files, Download Debug Log","kind":"buttons"}],"findings":[{"type":"ux","text":"The Danger Zone (sessions, files, debug log) is not about the interface. A Data or Maintenance group, or its own place, would be easier to find.","id":"settings-interface-1"},{"type":"wording","text":"\"Clear All Sessions\" deletes the sessions of the current chat only (the confirm says so; the button does not).","id":"settings-interface-2"},{"type":"i18n","text":"Theme field labels (Background, Accent, Header BG, …) and the theme preset names are not translated.","ref":"src/constants.js:767","id":"settings-interface-3"}]},{"id":"settings-prompts","area":"settings","title":"Quick Prompts tab","kind":"tab","opens":"Gear button > Quick Prompts","purpose":"Edit the quick prompts bar and save or load whole sets of them.","screens":["settings-prompts"],"source":["settings_overlay.html:298","src/ui/ui-settings.js:1447","src/ui/ui-widgets.js:325"],"controls":[{"label":"Prompt Sets: load, save, new, rename, delete","kind":"set manager","setting":"quickPromptSets, activeQuickPromptSet"},{"label":"Each prompt: icon, label, move up/down, delete, text (macros allowed)","kind":"list","setting":"quickPrompts"},{"label":"Add Prompt","kind":"button"}],"findings":[]},{"id":"settings-session","area":"settings","title":"Session tab","kind":"tab","opens":"Gear button > Session","purpose":"Overrides for the current Copilot session only; each has a reset (↺). Includes prompt presets for the system prompt and each edit prompt.","screens":["settings-session"],"source":["settings_overlay.html:311"],"controls":[{"label":"Connection source / profile / custom endpoint, Max Tokens, Streaming","kind":"overrides"},{"label":"Include roleplay prompt, User Persona, alternate swipes","kind":"overrides"},{"label":"Character fields (10) + greetings picker, Apply Regex","kind":"overrides"},{"label":"Main Chat Depth, History Limit, Reasoning Trim","kind":"overrides"},{"label":"System prompt with presets","kind":"override + preset manager"},{"label":"Character / Lorebook / Chat edit switches and prompts, each with presets","kind":"overrides"},{"label":"Reset All","kind":"button"}],"findings":[{"type":"missing","text":"No session override for: auto-expand macros, include hidden messages, Summaryception, Aspect: Evolutia, Prompt Manager AI edits, memory, tools.","id":"settings-session-1"},{"type":"ux","text":"Three layers decide which character fields are sent: global (AI tab), this session (here) and per character (Character Manager > Overrides). Nothing shows which layer wins.","id":"settings-session-2"}]},{"id":"settings-memory","area":"settings","title":"Memory tab","kind":"tab","opens":"Gear button > Memory (dot when memory is active)","purpose":"Persistent memory about you as a user of Copilot (preferences, standing instructions). Copilot adds memories itself; you can add, edit, disable or delete them.","screens":["settings-memory"],"source":["settings_overlay.html:549","src/features/feature-memory.js:208","src/features/feature-memory.js:468"],"controls":[{"label":"Enable persistent memory, toast when memory is saved","kind":"checkboxes","setting":"memoryEnabled, memoryNotify"},{"label":"Memory AI Prompt + Reset","kind":"text area","setting":"memoryManagePrompt"},{"label":"Stored Memories: enable/disable, edit, delete, expand; Add (category, value, scope)","kind":"list + form","setting":"memories"},{"label":"Clear All Memories","kind":"button"}],"findings":[{"type":"drift","text":"No \"Inject memory into AI context\" switch here (memoryInject); it is only in the drawer.","id":"settings-memory-1"},{"type":"dead","text":"memoryScope and memoryTag defaults are never read.","ref":"src/session.js:107","id":"settings-memory-2"}]},{"id":"settings-tools","area":"settings","title":"Tools tab","kind":"tab","opens":"Gear button > Tools","purpose":"Lets Copilot look things up before answering, with one switch per tool.","screens":["settings-tools"],"source":["settings_overlay.html:576","src/features/feature-tools-ui.js:77"],"controls":[{"label":"Enable tool calls","kind":"checkbox","setting":"toolsEnabled"},{"label":"Max tool call rounds (1-10)","kind":"number","setting":"toolsMaxRounds"},{"label":"Tools System Prompt + Reset","kind":"text area","setting":"toolsSystemPrompt"},{"label":"13 tools: Search Chat History, Search Lorebook Entries, Get Lorebooks, Ask User, Get Character Info, Read Messages, Get Generation Settings, Get Regex Scripts, Get Quick Replies, Get Lorebook Entry, Get Roleplay Prompts, Get Chat Statistics, Get Recent Messages","kind":"checkboxes","setting":"toolsEnabled_*"}],"findings":[{"type":"dead","text":"toolsThinking default is never read.","ref":"src/session.js:112","id":"settings-tools-1"},{"type":"drift","text":"toolsEnabled_get_prompts has no default (works because unset counts as on); every other tool has one.","ref":"src/session.js:114","id":"settings-tools-2"},{"type":"i18n","text":"Tool names and descriptions, and the \"requires streaming\" warning for Ask User, are not translated.","ref":"src/features/feature-tools-ui.js:125","id":"settings-tools-3"}]},{"id":"settings-stats","area":"settings","title":"Stats tab","kind":"tab","opens":"Gear button > Stats","purpose":"Usage counts (messages, regens, sessions, tokens in/out, quick prompts, lorebook changes, edits) as cards and a chart over time.","screens":["settings-stats"],"source":["src/features/feature-stats.js:142"],"controls":[{"label":"Scope: Global / Character / Chat; Period: 30 Days / 12 Weeks / 12 Mo / All Years","kind":"pill rows"},{"label":"Metric cards and chart","kind":"chart"},{"label":"Reset Statistics","kind":"button"}],"findings":[{"type":"wording","text":"Abbreviated metric names (QPrompts, LB Changes) and the \"12 Mo\" period; the metric names and the Scope / Period row labels are not translated.","ref":"src/features/feature-stats.js:9","id":"settings-stats-1"}]},{"id":"lorebook-manager","area":"managers","title":"Lorebook Manager","kind":"overlay","opens":"Menu > Lorebook Manager","purpose":"Browse the active lorebooks (global, character, chat, persona), choose which are sent to Copilot, and see which entries are in context.","screens":["lorebook-manager","lorebook-entries"],"source":["lorebook_manager.html","src/features/feature-lorebook-ui.js:833"],"controls":[{"label":"Search entries","kind":"text field"},{"label":"Lorebooks list with source badge (G/C/Ch/P) and include checkbox; Refresh","kind":"list","setting":"lorebookSelectedBooks, lorebookExcludedBooks"},{"label":"Force All On, Force All Off, Reset All, New Entry","kind":"buttons","setting":"lorebookEntryOverrides"},{"label":"Entry rows: in-context marker (active in ST / in context), force toggle","kind":"list"}],"findings":[{"type":"i18n","text":"\"New Entry\", \"Select a lorebook\" and the entry count line are not translated.","ref":"lorebook_manager.html:43","id":"lorebook-manager-1"},{"type":"dead","text":"lorebookEnabled default is never read.","ref":"src/session.js:52","id":"lorebook-manager-2"}]},{"id":"lorebook-entry-detail","area":"managers","parent":"lorebook-manager","title":"Lorebook entry","kind":"panel","opens":"Click an entry in the Lorebook Manager","purpose":"Edit an entry's name, keys and content, toggle it in the lorebook, and choose whether Copilot always, never or normally sees it.","screens":["lorebook-entry-detail"],"source":["src/features/feature-lorebook-ui.js:1109"],"controls":[{"label":"Back, Copy, Save, Delete","kind":"buttons"},{"label":"Name / Comment, Trigger Keys, Content","kind":"fields"},{"label":"Lorebook Status (Enabled / Disabled)","kind":"toggle"},{"label":"Copilot Context Injection: Default / Force On / Force Off","kind":"segmented"}],"findings":[{"type":"i18n","text":"The initial \"Entry\" title and \"Enabled\" status are not translated in the template.","ref":"lorebook_manager.html:60","id":"lorebook-entry-detail-1"}]},{"id":"character-manager","area":"managers","title":"Character Manager","kind":"overlay","opens":"Menu > Character Manager","purpose":"View and edit the card fields of the chat's characters and your persona, with token counts, and choose per character which fields Copilot sees.","screens":["character-manager","character-manager-full","character-manager-persona"],"source":["character_manager.html","src/features/feature-character-manager-ui.js:571"],"controls":[{"label":"Participants: persona (locked) and characters, each with an include-in-context checkbox","kind":"list"},{"label":"Banner: avatar, name, total tokens, Save, Revert","kind":"header"},{"label":"Current Info: Identity (Name, Tags), Description, Personality, Scene (Scenario, First Message, Example Dialogue), Advanced (Main Prompt Override, Post-History Instructions), Alternate Greetings (edit, delete, add)","kind":"fields"},{"label":"Unsaved changes dialog: Cancel, Discard, Save & Exit","kind":"dialog"}],"findings":[{"type":"i18n","text":"Tab names \"Current Info\" / \"Overrides\" and the field group labels are not translated.","ref":"src/features/feature-character-manager-ui.js:529","id":"character-manager-1"},{"type":"ux","text":"The persona shows only its description, with a lock icon and no hint why; \"Adding Persona to context is managed in global settings\" appears only as a tooltip.","id":"character-manager-2"}]},{"id":"character-manager-overrides","area":"managers","parent":"character-manager","title":"Character overrides","kind":"panel","opens":"Character Manager > Overrides tab","purpose":"Per character: which card fields are sent to Copilot. Unchecked falls back to the global setting.","screens":["character-manager-overrides"],"source":["src/features/feature-character-manager-ui.js:484"],"controls":[{"label":"Field checkboxes with Clear override","kind":"overrides"}],"findings":[]},{"id":"prompt-manager","area":"managers","title":"Prompt Manager","kind":"overlay","opens":"Menu > Prompt Manager","purpose":"SillyTavern's roleplay prompts in send order: turn each on or off, edit its text, and write the result into the preset file.","screens":["prompt-manager","prompt-manager-edit"],"source":["prompt_manager.html","src/features/feature-prompt-manager-ui.js:324"],"controls":[{"label":"Prompts (send order), slots marked; Send this prompt toggle","kind":"list"},{"label":"Prompt text with token count, Save, Revert","kind":"editor"},{"label":"Update preset file","kind":"button"}],"findings":[]},{"id":"inspector","area":"modals","title":"Context inspector","kind":"modal","opens":"Context button in the actions bar","purpose":"Shows exactly what Copilot sends: the assembled messages (Formatted), the raw JSON, and the last request bodies SillyTavern actually sent (Last sent).","screens":["inspector-formatted","inspector-json","inspector-sent"],"source":["window.html:119","src/ui/ui-widgets.js:1044"],"controls":[{"label":"Formatted, JSON, Last sent","kind":"tabs"},{"label":"Copy","kind":"button"}],"findings":[{"type":"i18n","text":"The title \"Raw Context Payload\" is not translated.","ref":"window.html:122","id":"inspector-1"}]},{"id":"whats-new","area":"modals","title":"What's New","kind":"modal","opens":"Settings > Interface > What's New, or automatically after an update","purpose":"Release notes for this fork (3.0.0 on) and upstream's earlier versions.","screens":["whats-new"],"source":["window.html:141","src/ui/ui-widgets.js:580"],"controls":[],"findings":[]},{"id":"chat-picker","area":"modals","title":"Pick context messages","kind":"modal","opens":"Pick button in the toolbar","purpose":"Choose exactly which SillyTavern chat messages Copilot sees, instead of the last N.","screens":["chat-picker"],"source":["chat_picker.html","src/ui/ui-chat.js:1806"],"controls":[{"label":"Message rows (Shift+Click range, Ctrl same sender, Alt opposite sender)","kind":"list"},{"label":"All, Invert, Clear Selection, Apply","kind":"buttons"}],"findings":[{"type":"i18n","text":"\"Apply\" and the initial \"0 selected\" are not translated.","ref":"chat_picker.html:16","id":"chat-picker-1"}]},{"id":"session-new-dialog","area":"modals","title":"New session","kind":"dialog","opens":"Session dropdown > New Session","purpose":"Name a new session, optionally temporary (deleted when you switch away).","screens":["session-new-dialog"],"source":["src/session.js:776"],"controls":[{"label":"Session name","kind":"text field"},{"label":"Temporary — auto-delete when switching","kind":"toggle"},{"label":"Cancel, Create","kind":"buttons"}],"findings":[{"type":"drift","text":"Still a Copilot-styled overlay, while alert/confirm/prompt moved to SillyTavern's Popup in 3.0.6 (known, parked).","ref":"src/session.js:776","id":"session-new-dialog-1"}]},{"id":"dialogs","area":"modals","title":"Confirm and prompt dialogs","kind":"dialog","opens":"Deletes, renames, resets throughout","purpose":"SillyTavern's own Popup for alerts, confirmations (destructive ones count down) and name prompts.","screens":[],"source":["src/utils/util-dom.js:62"],"controls":[],"findings":[]},{"id":"generation-error","area":"modals","title":"Generation error","kind":"dialog","opens":"A request that fails","purpose":"Shows the provider's error with its cause.","screens":[],"source":["src/ui/ui-chat.js:2019"],"controls":[],"findings":[]},{"id":"storage-cleanup","area":"modals","title":"Clean up session files","kind":"dialog","opens":"Settings > Interface > Clean Up Orphan Files (or the drawer's Clean Up Files)","purpose":"Finds Copilot session files no chat points to (deleted chats, old branches) and offers to delete empty ones, then ones that still hold messages.","screens":[],"source":["src/features/feature-storage-cleanup.js:88"],"controls":[],"findings":[]}],"deadSettings":[{"key":"lorebookEnabled","ref":"src/session.js:52"},{"key":"toolsThinking","ref":"src/session.js:112"},{"key":"memoryScope","ref":"src/session.js:107"},{"key":"memoryTag","ref":"src/session.js:108"},{"key":"attachedFiles","ref":"src/session.js:104"}]}</script>
+<script>
+const INV = JSON.parse(document.getElementById('inventory').textContent);
+const NODES = INV.nodes;
+const byId = Object.fromEntries(NODES.map(n => [n.id, n]));
+const FINDINGS = NODES.flatMap(n => (n.findings || []).map(f => ({ ...f, node: n.id })));
+
+const SCREEN_MARKS = [['unreviewed', 'Not reviewed'], ['ok', 'Looks right'], ['change', 'Needs change'], ['question', 'Question']];
+const MARK_LABEL = Object.fromEntries(SCREEN_MARKS);
+// Answers to one finding. Anything but "agree" opens a text box.
+const CHOICES = [
+  ['agree', 'Agree, fix it', ''],
+  ['different', 'Fix it differently', 'How should it change instead?'],
+  ['leave', 'Leave as is', 'Why keep it? (optional)'],
+  ['question', 'Question', 'What do you want to know?'],
+];
+const CHOICE_LABEL = Object.fromEntries(CHOICES.map(([k, l]) => [k, l]));
+
+// Local copies of the review store; the page renders from these.
+const reviews = {};   // node id -> { status, note, updatedAt }
+const answers = {};   // finding id -> { choice, note, updatedAt }
+const items = {};     // your own issue id -> { nodeId, text, createdAt }
+let db = null;
+let view = 'screens';
+let current = null;
+const filters = { q: '', types: new Set(), state: null };
+
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k);
+  return e;
+};
+const markOf = id => reviews[id]?.status || 'unreviewed';
+const answered = fid => !!answers[fid]?.choice;
+const nodeFindings = id => FINDINGS.filter(f => f.node === id);
+const nodeItems = id => Object.entries(items).filter(([, it]) => it.nodeId === id).sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
+const when = t => t ? new Date(t).toLocaleString() : '';
+
+document.getElementById('sub').textContent =
+  `Version ${INV.version} · ${NODES.length} screens and parts · ${FINDINGS.length} findings · built from ${INV.builtFrom}`;
+
+// ── Saving: one write at a time per document, only on a real change ──
+const chains = {};
+function store(coll, id, data) {
+  if (!db) return Promise.reject({ code: 'no_store' });
+  const key = `${coll}/${id}`;
+  const run = () => db.collection(coll).doc(id).set(data);
+  chains[key] = (chains[key] || Promise.resolve()).catch(() => {}).then(run);
+  return chains[key];
+}
+function savedText(e) {
+  if (!e) return '';
+  if (e.code === 'no_store') return 'Not saved: the review store is not available in this view. Your answer stays on screen while the page is open.';
+  if (e.code === 'invalid_argument') return 'You can read this map but not save answers on it.';
+  return `Not saved (${e.code || 'error'}). Try again in a moment.`;
+}
+
+function renderProgress() {
+  const done = FINDINGS.filter(f => answered(f.id)).length;
+  const marked = NODES.filter(n => markOf(n.id) !== 'unreviewed').length;
+  const mine = Object.keys(items).length;
+  document.getElementById('progress').replaceChildren(
+    el('span', { class: 'stat' }, el('b', { text: `${done}/${FINDINGS.length}` }), 'findings answered'),
+    el('span', { class: 'stat' }, el('b', { text: `${marked}/${NODES.length}` }), 'screens marked'),
+    el('span', { class: 'stat' }, el('b', { text: String(mine) }), mine === 1 ? 'issue you added' : 'issues you added'));
+}
+
+function renderChips() {
+  const counts = {};
+  for (const f of FINDINGS) counts[f.type] = (counts[f.type] || 0) + 1;
+  document.getElementById('type-chips').replaceChildren(...Object.keys(INV.findingTypes).filter(t => counts[t]).map(t =>
+    el('button', {
+      class: 'chip', type: 'button', 'aria-pressed': String(filters.types.has(t)), title: INV.findingTypes[t],
+      onclick: () => { filters.types.has(t) ? filters.types.delete(t) : filters.types.add(t); renderChips(); renderView(); },
+    }, el('span', { class: `dot t-${t}`, style: 'background: currentColor' }), el('span', { class: `t-${t}`, text: t }), el('span', { class: 'n', text: String(counts[t]) }))));
+  const states = view === 'findings'
+    ? [['unanswered', 'Unanswered'], ...CHOICES.map(([k, l]) => [k, l])]
+    : SCREEN_MARKS;
+  document.getElementById('state-chips').replaceChildren(...states.map(([k, label]) =>
+    el('button', {
+      class: 'chip', type: 'button', 'aria-pressed': String(filters.state === k),
+      onclick: () => { filters.state = filters.state === k ? null : k; renderChips(); renderView(); },
+    }, view === 'findings' ? el('span', { class: `dot c-${k}`, style: 'border: 1.5px solid currentColor' }) : el('span', { class: `dot st-${k}` }), label)));
+}
+
+// ── A finding with its answer controls (used in both views) ──
+function findingEl(f, { showScreen }) {
+  const a = () => answers[f.id] || {};
+  const li = el('li', { class: `finding t-${f.type}${answered(f.id) ? ' answered' : ''}`, 'data-fid': f.id });
+  const note = el('textarea', { id: `note-${f.id}`, 'aria-label': `Your feedback on ${f.id}` });
+  note.value = a().note || '';
+  const state = el('div', { class: 'f-state', 'aria-live': 'polite', text: a().updatedAt ? `Saved ${when(a().updatedAt)}` : '' });
+  const showNote = () => {
+    const c = a().choice;
+    note.hidden = !(c && c !== 'agree') && !note.value;
+    note.placeholder = CHOICES.find(([k]) => k === c)?.[2] || 'Notes';
+  };
+  const save = async () => {
+    const next = { choice: a().choice || null, note: note.value, updatedAt: Date.now() };
+    answers[f.id] = next;
+    li.classList.toggle('answered', !!next.choice);
+    renderProgress();
+    updateIndexCounts();
+    state.textContent = 'Saving…';
+    try { await store('answers', f.id, next); state.textContent = `Saved ${when(next.updatedAt)}`; }
+    catch (e) { state.textContent = savedText(e); }
+  };
+  const buttons = CHOICES.map(([k, label]) => el('button', {
+    class: `choice c-${k}`, type: 'button', 'aria-pressed': String(a().choice === k),
+    onclick: () => {
+      const choice = a().choice === k ? null : k;   // clicking the chosen answer again clears it
+      answers[f.id] = { ...a(), choice };
+      buttons.forEach(b => b.setAttribute('aria-pressed', String(b.classList.contains(`c-${choice}`))));
+      showNote();
+      if (choice && choice !== 'agree' && !note.value) note.focus();
+      save();
+    },
+  }, el('span', { text: label })));
+  let timer = null;
+  note.addEventListener('input', () => { clearTimeout(timer); state.textContent = 'Editing…'; timer = setTimeout(() => { timer = null; save(); }, 900); });
+  note.addEventListener('blur', () => { if (timer) { clearTimeout(timer); timer = null; save(); } });
+  showNote();
+  li.append(
+    el('div', { class: 'f-head' },
+      el('span', { class: `ty t-${f.type}`, text: f.type, title: INV.findingTypes[f.type] }),
+      showScreen ? el('button', { type: 'button', class: 'where', text: byId[f.node].title, onclick: () => openScreen(f.node) }) : null,
+      el('span', { class: 'fid', text: f.id })),
+    el('p', { text: f.text }),
+    f.ref ? el('span', { class: 'ref', text: f.ref }) : null,
+    el('div', { class: 'answer', role: 'group', 'aria-label': `Your answer to ${f.id}` }, buttons),
+    note, state);
+  return li;
+}
+
+// An issue you added: shown like a finding, with its text and a delete.
+function itemEl(id, it, { showScreen }) {
+  let armed = false;
+  const del = el('button', { type: 'button', class: 'btn danger', text: 'Delete',
+    onclick: async () => {
+      if (!armed) { armed = true; del.textContent = 'Click again to delete'; setTimeout(() => { armed = false; del.textContent = 'Delete'; }, 3000); return; }
+      delete items[id];
+      renderProgress(); renderView();
+      if (db && !id.startsWith('local-')) { try { await db.collection('items').doc(id).delete(); } catch (_) {} }
+    } });
+  return el('li', { class: 'finding t-yours answered' },
+    el('div', { class: 'f-head' },
+      el('span', { class: 'ty t-yours', text: 'yours' }),
+      showScreen ? el('button', { type: 'button', class: 'where', text: byId[it.nodeId]?.title || it.nodeId, onclick: () => openScreen(it.nodeId) }) : null,
+      el('span', { class: 'fid', text: when(it.createdAt) })),
+    el('p', { text: it.text }),
+    el('div', { class: 'add-row' }, del));
+}
+
+function addIssueEl(nodeId) {
+  const ta = el('textarea', { id: `add-${nodeId}`, placeholder: 'Something I missed on this screen: text, layout, behaviour, anything.', 'aria-label': 'New issue' });
+  const state = el('span', { class: 'f-state', 'aria-live': 'polite' });
+  const btn = el('button', { type: 'button', class: 'btn primary', text: 'Add issue',
+    onclick: async () => {
+      const text = ta.value.trim();
+      if (!text) { ta.focus(); return; }
+      const it = { nodeId, text, createdAt: Date.now() };
+      btn.disabled = true;
+      try {
+        if (!db) throw { code: 'no_store' };
+        const ref = await db.collection('items').add(it);
+        items[ref.id] = it;
+      } catch (e) {
+        items[`local-${it.createdAt}`] = it;
+        state.textContent = savedText(e);
+      }
+      ta.value = '';
+      btn.disabled = false;
+      renderProgress(); renderView();
+    } });
+  return el('div', { class: 'add' }, ta, el('div', { class: 'add-row' }, btn, state));
+}
+
+// ── By screen ──
+function renderIndex() {
+  document.getElementById('index').replaceChildren(...INV.areas.map(a => {
+    const nodes = NODES.filter(n => n.area === a.id && screenMatches(n));
+    if (!nodes.length) return null;
+    return el('section', { class: 'area' }, el('h2', { text: a.title }), nodes.map(n => {
+      const fs = nodeFindings(n.id);
+      const done = fs.filter(f => answered(f.id)).length;
+      return el('button', {
+        class: `node${n.parent ? ' child' : ''}`, type: 'button', 'data-id': n.id,
+        'aria-current': String(n.id === current), onclick: () => select(n.id),
+      }, el('span', { class: `dot st-${markOf(n.id)}`, title: MARK_LABEL[markOf(n.id)] }),
+         el('span', { class: 't', text: n.title }),
+         fs.length ? el('span', { class: `fc${done === fs.length ? ' done' : ''}`, title: `${done} of ${fs.length} findings answered`, text: `${done}/${fs.length}` }) : null);
+    }));
+  }).filter(Boolean));
+}
+function updateIndexCounts() {
+  document.querySelectorAll('.node').forEach(b => {
+    const fs = nodeFindings(b.dataset.id);
+    const fc = b.querySelector('.fc');
+    if (!fc) return;
+    const done = fs.filter(f => answered(f.id)).length;
+    fc.textContent = `${done}/${fs.length}`;
+    fc.classList.toggle('done', done === fs.length);
+  });
+}
+function screenMatches(n) {
+  if (filters.state && markOf(n.id) !== filters.state) return false;
+  if (filters.types.size && !nodeFindings(n.id).some(f => filters.types.has(f.type))) return false;
+  if (!filters.q) return true;
+  const hay = [n.title, n.purpose, n.opens, ...(n.controls || []).map(c => `${c.label} ${c.setting || ''}`), ...nodeFindings(n.id).map(f => `${f.text} ${answers[f.id]?.note || ''}`), reviews[n.id]?.note || '', ...nodeItems(n.id).map(([, it]) => it.text)].join(' ').toLowerCase();
+  return hay.includes(filters.q);
+}
+function screenOrder() { return [...document.querySelectorAll('.node')].map(b => b.dataset.id); }
+
+function renderSheet() {
+  const n = byId[current];
+  const sheet = document.getElementById('sheet');
+  if (!n) { sheet.replaceChildren(el('p', { class: 'none', text: 'Pick a screen on the left.' })); return; }
+  const area = INV.areas.find(a => a.id === n.area);
+  const parent = n.parent ? byId[n.parent] : null;
+
+  const frame = el('div', { class: 'shot-frame' });
+  const tabs = el('div', { class: 'shot-tabs' });
+  const showShot = i => {
+    const id = n.screens[i];
+    const img = el('img', { src: `screens/${id}.jpg`, alt: `${n.title} screenshot (${id})`, loading: 'lazy' });
+    img.addEventListener('load', () => frame.classList.toggle('tall', img.naturalHeight > img.naturalWidth * 1.6));
+    frame.replaceChildren(img);
+    tabs.querySelectorAll('.chip').forEach((c, j) => c.setAttribute('aria-pressed', String(j === i)));
+  };
+  if ((n.screens || []).length > 1) tabs.append(...n.screens.map((s, i) => el('button', { class: 'chip', type: 'button', 'aria-pressed': 'false', onclick: () => showShot(i), text: s })));
+
+  const fs = nodeFindings(n.id);
+  const mine = nodeItems(n.id);
+  const note = el('textarea', { id: 'screen-note', placeholder: 'Anything about this screen as a whole.', 'aria-label': `Notes for ${n.title}` });
+  note.value = reviews[n.id]?.note || '';
+  const saveState = el('div', { class: 'save-state', 'aria-live': 'polite', text: reviews[n.id]?.updatedAt ? `Saved ${when(reviews[n.id].updatedAt)}` : '' });
+  const saveScreen = async patch => {
+    const next = { status: markOf(n.id), note: reviews[n.id]?.note || '', ...patch, updatedAt: Date.now() };
+    reviews[n.id] = next;
+    renderProgress();
+    document.querySelectorAll(`.node[data-id="${n.id}"] .dot`).forEach(d => { d.className = `dot st-${next.status}`; d.title = MARK_LABEL[next.status]; });
+    document.querySelectorAll('.mark').forEach(m => m.setAttribute('aria-pressed', String(m.classList.contains(`st-${next.status}`))));
+    saveState.textContent = 'Saving…';
+    try { await store('reviews', n.id, next); saveState.textContent = `Saved ${when(next.updatedAt)}`; }
+    catch (e) { saveState.textContent = savedText(e); }
+  };
+  let timer = null;
+  note.addEventListener('input', () => { clearTimeout(timer); saveState.textContent = 'Editing…'; timer = setTimeout(() => { timer = null; saveScreen({ note: note.value }); }, 900); });
+  note.addEventListener('blur', () => { if (timer) { clearTimeout(timer); timer = null; saveScreen({ note: note.value }); } });
+
+  const order = screenOrder();
+  const idx = order.indexOf(n.id);
+  sheet.replaceChildren(
+    el('div', { class: 'sheet-head' },
+      el('h2', { text: n.title }),
+      el('span', { class: 'kind', text: n.kind }),
+      el('span', { class: 'crumb', text: [area?.title, parent?.title].filter(Boolean).join(' › ') })),
+    el('p', { class: 'purpose', text: n.purpose }),
+    el('p', { class: 'opens' }, el('b', { text: 'How to open: ' }), n.opens),
+    el('div', { class: 'shots' }, tabs, (n.screens || []).length ? frame : el('p', { class: 'no-shot', text: 'No screenshot: this is a behaviour or a dialog the capture script does not open.' })),
+    el('section', {},
+      el('h3', { text: `Findings (${fs.length})` }),
+      fs.length ? el('p', { class: 'section-note', text: 'Answer each one. Anything but "Agree, fix it" opens a box for your feedback.' }) : null,
+      fs.length || mine.length
+        ? el('ul', { class: 'findings' }, fs.map(f => findingEl(f, { showScreen: false })), mine.map(([id, it]) => itemEl(id, it, { showScreen: false })))
+        : el('p', { class: 'none', text: 'Nothing found in the code review. Your eyes may find more.' })),
+    el('section', {}, el('h3', { text: 'Add an issue' }), addIssueEl(n.id)),
+    el('div', { class: 'cols' },
+      el('section', {},
+        el('h3', { text: 'Controls' }),
+        (n.controls || []).length
+          ? el('ul', { class: 'controls' }, n.controls.map(c => el('li', {},
+              el('span', { text: c.label }),
+              el('span', { class: 'k', text: c.kind }),
+              c.setting ? el('span', { class: 's', text: c.setting }) : null)))
+          : el('p', { class: 'none', text: 'No controls of its own.' })),
+      el('section', {},
+        el('h3', { text: 'Source' }),
+        el('div', { class: 'src' }, (n.source || []).map(s => el('code', { text: s }))))),
+    el('section', { class: 'review' },
+      el('h3', { text: 'This screen overall' }),
+      el('div', { class: 'marks', role: 'group', 'aria-label': 'Screen mark' }, SCREEN_MARKS.map(([k, label]) => el('button', {
+        class: `mark st-${k}`, type: 'button', 'aria-pressed': String(markOf(n.id) === k),
+        onclick: () => saveScreen({ status: k, note: note.value }),
+      }, el('span', { class: `dot st-${k}` }), el('span', { text: label, style: 'color: var(--fg)' })))),
+      note, saveState,
+      el('div', { class: 'pager' },
+        el('button', { type: 'button', disabled: idx <= 0, onclick: () => select(order[idx - 1]), text: '← Previous screen' }),
+        el('button', { type: 'button', disabled: idx < 0 || idx >= order.length - 1, onclick: () => select(order[idx + 1]), text: 'Next screen →' }))));
+  if ((n.screens || []).length) showShot(0);
+}
+
+function select(id) {
+  if (!byId[id]) return;
+  current = id;
+  document.querySelectorAll('.node').forEach(b => b.setAttribute('aria-current', String(b.dataset.id === id)));
+  renderSheet();
+  try { history.replaceState(null, '', '#' + id); } catch (_) {}
+  if (matchMedia('(max-width: 860px)').matches) document.getElementById('sheet').scrollIntoView({ block: 'start' });
+}
+
+// ── All findings ──
+function findingMatches(f) {
+  if (filters.types.size && !filters.types.has(f.type)) return false;
+  const c = answers[f.id]?.choice || null;
+  if (filters.state === 'unanswered' && c) return false;
+  if (filters.state && filters.state !== 'unanswered' && c !== filters.state) return false;
+  if (!filters.q) return true;
+  return [f.text, f.ref, byId[f.node].title, answers[f.id]?.note || ''].join(' ').toLowerCase().includes(filters.q);
+}
+function renderList() {
+  const list = document.getElementById('list');
+  const groups = INV.areas.map(a => {
+    const fs = FINDINGS.filter(f => byId[f.node].area === a.id && findingMatches(f));
+    const mine = filters.types.size || (filters.state && filters.state !== 'unanswered') ? [] :
+      Object.entries(items).filter(([, it]) => byId[it.nodeId]?.area === a.id && (!filters.q || it.text.toLowerCase().includes(filters.q)));
+    if (!fs.length && !mine.length) return null;
+    return el('section', { class: 'list-group' },
+      el('h2', { text: a.title }),
+      el('ul', { class: 'findings' }, fs.map(f => findingEl(f, { showScreen: true })), mine.map(([id, it]) => itemEl(id, it, { showScreen: true }))));
+  }).filter(Boolean);
+  list.replaceChildren(...(groups.length ? groups : [el('p', { class: 'none', text: 'No findings match these filters.' })]));
+}
+
+function setView(v) {
+  view = v;
+  filters.state = null;
+  document.getElementById('view-screens').setAttribute('aria-pressed', String(v === 'screens'));
+  document.getElementById('view-findings').setAttribute('aria-pressed', String(v === 'findings'));
+  document.getElementById('screens-view').hidden = v !== 'screens';
+  document.getElementById('findings-view').hidden = v !== 'findings';
+  renderChips();
+  renderView();
+  try { history.replaceState(null, '', '#' + (v === 'findings' ? 'findings' : current)); } catch (_) {}
+}
+function openScreen(id) { current = id; setView('screens'); select(id); window.scrollTo(0, 0); }
+function renderView() {
+  if (view === 'findings') renderList();
+  else { renderIndex(); renderSheet(); }
+}
+
+// Store updates from elsewhere re-render, but never under a box being typed in.
+let pending = false;
+function refresh() {
+  const typing = document.activeElement?.tagName === 'TEXTAREA';
+  if (typing) { pending = true; return; }
+  pending = false;
+  renderProgress();
+  renderView();
+}
+document.addEventListener('focusout', () => setTimeout(() => { if (pending) refresh(); }, 0));
+
+document.getElementById('view-screens').addEventListener('click', () => setView('screens'));
+document.getElementById('view-findings').addEventListener('click', () => setView('findings'));
+document.getElementById('q').addEventListener('input', e => { filters.q = e.target.value.trim().toLowerCase(); renderView(); });
+
+const start = location.hash.slice(1);
+current = byId[start] ? start : NODES[0].id;
+renderProgress();
+setView(start === 'findings' ? 'findings' : 'screens');
+
+(async () => {
+  try { db = await window.claude?.use?.('db'); } catch (_) { db = null; }
+  if (!db) return;
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const watch = (coll, target, shape) => db.collection(coll).onSnapshot(snap => {
+    let changed = false;
+    const seen = new Set();
+    for (const d of snap.docs) {
+      const v = d.data();
+      if (!v) continue;
+      seen.add(d.id);
+      const next = shape(v);
+      if (!same(target[d.id], next)) { target[d.id] = next; changed = true; }
+    }
+    for (const id of Object.keys(target)) if (!seen.has(id) && !id.startsWith('local-')) { delete target[id]; changed = true; }
+    if (changed) refresh();
+  }, () => {});
+  watch('reviews', reviews, v => ({ status: v.status || 'unreviewed', note: v.note || '', updatedAt: v.updatedAt }));
+  watch('answers', answers, v => ({ choice: v.choice || null, note: v.note || '', updatedAt: v.updatedAt }));
+  watch('items', items, v => ({ nodeId: v.nodeId, text: v.text || '', createdAt: v.createdAt }));
+})();
+</script>

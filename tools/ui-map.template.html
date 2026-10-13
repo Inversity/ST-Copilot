@@ -1,0 +1,582 @@
+<title>ST-Copilot UI Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: two views over the same inventory. "By screen": an index of every screen on the left,
+   the selected screen's sheet on the right (screenshot, findings to answer, controls, source).
+   "All findings": every finding in one list, answered in place. Stacks on phones. */
+:root {
+  --bg: #f4f3f9;
+  --panel: #ffffff;
+  --raise: #ecebf5;
+  --line: #dcd9ea;
+  --fg: #1c1a27;
+  --muted: #615d78;
+  --accent: #5a49d6;
+  --accent-soft: #e6e2fb;
+  --ok: #1f8a5b;
+  --warn: #b26a00;
+  --bad: #c2384a;
+  --info: #2f6fb8;
+  --shot-bg: #15141b;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111017; --panel: #19181f; --raise: #22202b; --line: #2f2c3b; --fg: #e8e6f2; --muted: #9a96b0;
+    --accent: #9a8fff; --accent-soft: #2a2546; --ok: #4cc38a; --warn: #e3a33b; --bad: #ef6b7c; --info: #6aa7ec; --shot-bg: #0b0a10;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111017; --panel: #19181f; --raise: #22202b; --line: #2f2c3b; --fg: #e8e6f2; --muted: #9a96b0;
+  --accent: #9a8fff; --accent-soft: #2a2546; --ok: #4cc38a; --warn: #e3a33b; --bad: #ef6b7c; --info: #6aa7ec; --shot-bg: #0b0a10;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--body); padding-inline: 16px; padding-block: 18px 40px; }
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: .5; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code { font-family: var(--mono); font-size: 12.5px; }
+textarea { width: 100%; resize: vertical; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; line-height: 1.45; }
+
+.top { max-width: 1320px; margin: 0 auto 14px; display: flex; flex-wrap: wrap; align-items: end; gap: 10px 24px; }
+.top h1 { font: 700 26px/1.1 var(--display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.top .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.progress { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; color: var(--muted); }
+.stat b { color: var(--fg); font-variant-numeric: tabular-nums; font-size: 15px; margin-right: 4px; }
+
+.bar { max-width: 1320px; margin: 0 auto 14px; display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.views { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; padding: 3px; background: var(--panel); }
+.views button { border: 0; background: none; border-radius: 6px; padding: 5px 12px; }
+.views button[aria-pressed="true"] { background: var(--accent-soft); font-weight: 700; }
+.bar input[type=search] { flex: 1 1 220px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+.chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 10px; font-size: 12.5px; display: inline-flex; gap: 6px; align-items: center; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
+.chip .n { font-variant-numeric: tabular-nums; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+
+.layout { max-width: 1320px; margin: 0 auto; display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.index { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); max-height: calc(100vh - 24px); overflow: auto; }
+.area { margin-bottom: 6px; }
+.area > h2 { font: 600 11px/1 var(--body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 10px 8px 6px; }
+.node { display: flex; width: 100%; align-items: center; gap: 8px; text-align: left; background: none; border: 0; border-radius: 6px; padding: 6px 8px; }
+.node:hover { background: var(--raise); }
+.node[aria-current="true"] { background: var(--accent-soft); }
+.node.child { padding-left: 24px; }
+.node .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node .fc { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.node .fc.done { color: var(--ok); }
+
+.sheet, .list { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px 22px; min-width: 0; display: grid; gap: 18px; }
+.list { max-width: 1000px; margin: 0 auto; }
+.sheet-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; }
+.sheet-head h2 { font: 700 22px/1.15 var(--display); margin: 0; text-wrap: balance; }
+.crumb { color: var(--muted); font-size: 13px; }
+.kind { font: 500 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; color: var(--muted); }
+.purpose { margin: 0; max-width: 70ch; font-size: 16px; }
+.opens { margin: 0; color: var(--muted); font-size: 13.5px; }
+.opens b { color: var(--fg); }
+
+.shots { display: grid; gap: 10px; }
+.shot-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.shot-frame { background: var(--shot-bg); border-radius: 8px; padding: 12px; overflow: auto; max-height: 600px; text-align: center; }
+.shot-frame img { max-width: 100%; height: auto; display: inline-block; border-radius: 4px; }
+.shot-frame.tall img { max-width: min(100%, 620px); }
+.no-shot { color: var(--muted); font-size: 13px; font-style: italic; margin: 0; }
+
+h3 { font: 600 12px/1 var(--body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
+.section-note { color: var(--muted); font-size: 13px; margin: -4px 0 10px; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.controls { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.controls li { display: grid; gap: 2px; padding: 7px 10px; background: var(--raise); border-radius: 6px; }
+.controls .k { font: 11px var(--mono); color: var(--muted); }
+.controls .s { font: 11.5px var(--mono); color: var(--accent); overflow-wrap: anywhere; }
+.none { color: var(--muted); font-size: 13.5px; margin: 0; }
+.src { display: flex; flex-wrap: wrap; gap: 6px; }
+.src code { background: var(--raise); border-radius: 4px; padding: 2px 6px; overflow-wrap: anywhere; }
+
+/* One finding: what was found, then your answer. */
+.findings { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.finding { border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; }
+.finding.answered { background: color-mix(in srgb, var(--raise) 55%, transparent); }
+.f-head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.f-head .ty { font: 600 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.05em; }
+.f-head .where { font-size: 12.5px; color: var(--muted); border: 0; background: none; padding: 0; text-decoration: underline; text-underline-offset: 2px; }
+.f-head .fid { margin-left: auto; font: 11px var(--mono); color: var(--muted); }
+.finding p { margin: 0; max-width: 78ch; }
+.finding .ref { font: 11.5px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.answer { display: flex; flex-wrap: wrap; gap: 6px; }
+.choice { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 11px; font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+.choice::before { content: ""; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid currentColor; flex: none; }
+.choice[aria-pressed="true"] { border-color: currentColor; font-weight: 700; background: var(--raise); }
+.choice[aria-pressed="true"]::before { background: currentColor; box-shadow: inset 0 0 0 2px var(--panel); }
+.choice span { color: var(--fg); }
+.c-agree { color: var(--ok); } .c-different { color: var(--accent); } .c-leave { color: var(--muted); } .c-question { color: var(--warn); }
+.finding textarea { min-height: 70px; }
+.f-state { font-size: 12px; color: var(--muted); min-height: 1em; }
+
+.t-bug { color: var(--bad); } .finding.t-bug { border-left-color: var(--bad); }
+.t-drift { color: var(--warn); } .finding.t-drift { border-left-color: var(--warn); }
+.t-dead { color: var(--muted); } .finding.t-dead { border-left-color: var(--muted); }
+.t-i18n { color: var(--info); } .finding.t-i18n { border-left-color: var(--info); }
+.t-wording { color: var(--accent); } .finding.t-wording { border-left-color: var(--accent); }
+.t-missing { color: var(--warn); } .finding.t-missing { border-left-color: var(--warn); }
+.t-ux { color: var(--ok); } .finding.t-ux { border-left-color: var(--ok); }
+.t-yours { color: var(--fg); } .finding.t-yours { border-left-color: var(--fg); border-left-style: double; }
+
+.add { display: grid; gap: 8px; }
+.add textarea { min-height: 60px; }
+.add-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: var(--raise); border-radius: 8px; padding: 6px 12px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); font-weight: 700; }
+.btn.danger { color: var(--bad); }
+
+.review { border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 10px; }
+.marks { display: flex; flex-wrap: wrap; gap: 6px; }
+.mark { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 12px; display: inline-flex; gap: 7px; align-items: center; }
+.mark[aria-pressed="true"] { border-color: currentColor; background: var(--raise); font-weight: 700; }
+.review textarea { min-height: 80px; }
+.save-state { font-size: 12.5px; color: var(--muted); min-height: 1.2em; }
+.pager { display: flex; justify-content: space-between; gap: 8px; }
+.pager button { background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; }
+
+.st-unreviewed { color: var(--muted); } .st-ok { color: var(--ok); } .st-change { color: var(--bad); } .st-question { color: var(--warn); }
+.dot.st-unreviewed { background: transparent; border: 1.5px solid var(--muted); }
+.dot.st-ok { background: var(--ok); } .dot.st-change { background: var(--bad); } .dot.st-question { background: var(--warn); }
+
+.list-group > h2 { font: 700 17px/1.2 var(--display); margin: 6px 0 10px; }
+.list-group + .list-group { border-top: 1px solid var(--line); padding-top: 16px; }
+
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .index { position: static; max-height: 320px; }
+  .cols { grid-template-columns: minmax(0, 1fr); }
+  .progress { margin-left: 0; }
+  .f-head .fid { margin-left: 0; }
+}
+@media (prefers-reduced-motion: no-preference) { .node, .chip, .mark, .choice { transition: background-color .12s, border-color .12s; } }
+</style>
+
+<header class="top">
+  <div>
+    <h1>ST-Copilot UI Map</h1>
+    <div class="sub" id="sub"></div>
+  </div>
+  <div class="progress" id="progress" aria-live="polite"></div>
+</header>
+
+<div class="bar" role="toolbar" aria-label="View and filters">
+  <div class="views" role="group" aria-label="View">
+    <button type="button" id="view-screens" aria-pressed="true">By screen</button>
+    <button type="button" id="view-findings" aria-pressed="false">All findings</button>
+  </div>
+  <input type="search" id="q" placeholder="Search screens, controls, findings" aria-label="Search screens, controls and findings">
+  <span class="chips" id="type-chips"></span>
+  <span class="chips" id="state-chips"></span>
+</div>
+
+<main class="layout" id="screens-view">
+  <nav class="index" id="index" aria-label="Screens"></nav>
+  <article class="sheet" id="sheet"></article>
+</main>
+<main id="findings-view" hidden>
+  <article class="list" id="list"></article>
+</main>
+
+<script type="application/json" id="inventory">/*INVENTORY*/</script>
+<script>
+const INV = JSON.parse(document.getElementById('inventory').textContent);
+const NODES = INV.nodes;
+const byId = Object.fromEntries(NODES.map(n => [n.id, n]));
+const FINDINGS = NODES.flatMap(n => (n.findings || []).map(f => ({ ...f, node: n.id })));
+
+const SCREEN_MARKS = [['unreviewed', 'Not reviewed'], ['ok', 'Looks right'], ['change', 'Needs change'], ['question', 'Question']];
+const MARK_LABEL = Object.fromEntries(SCREEN_MARKS);
+// Answers to one finding. Anything but "agree" opens a text box.
+const CHOICES = [
+  ['agree', 'Agree, fix it', ''],
+  ['different', 'Fix it differently', 'How should it change instead?'],
+  ['leave', 'Leave as is', 'Why keep it? (optional)'],
+  ['question', 'Question', 'What do you want to know?'],
+];
+const CHOICE_LABEL = Object.fromEntries(CHOICES.map(([k, l]) => [k, l]));
+
+// Local copies of the review store; the page renders from these.
+const reviews = {};   // node id -> { status, note, updatedAt }
+const answers = {};   // finding id -> { choice, note, updatedAt }
+const items = {};     // your own issue id -> { nodeId, text, createdAt }
+let db = null;
+let view = 'screens';
+let current = null;
+const filters = { q: '', types: new Set(), state: null };
+
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const k of kids.flat()) if (k != null) e.append(k);
+  return e;
+};
+const markOf = id => reviews[id]?.status || 'unreviewed';
+const answered = fid => !!answers[fid]?.choice;
+const nodeFindings = id => FINDINGS.filter(f => f.node === id);
+const nodeItems = id => Object.entries(items).filter(([, it]) => it.nodeId === id).sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
+const when = t => t ? new Date(t).toLocaleString() : '';
+
+document.getElementById('sub').textContent =
+  `Version ${INV.version} · ${NODES.length} screens and parts · ${FINDINGS.length} findings · built from ${INV.builtFrom}`;
+
+// ── Saving: one write at a time per document, only on a real change ──
+const chains = {};
+function store(coll, id, data) {
+  if (!db) return Promise.reject({ code: 'no_store' });
+  const key = `${coll}/${id}`;
+  const run = () => db.collection(coll).doc(id).set(data);
+  chains[key] = (chains[key] || Promise.resolve()).catch(() => {}).then(run);
+  return chains[key];
+}
+function savedText(e) {
+  if (!e) return '';
+  if (e.code === 'no_store') return 'Not saved: the review store is not available in this view. Your answer stays on screen while the page is open.';
+  if (e.code === 'invalid_argument') return 'You can read this map but not save answers on it.';
+  return `Not saved (${e.code || 'error'}). Try again in a moment.`;
+}
+
+function renderProgress() {
+  const done = FINDINGS.filter(f => answered(f.id)).length;
+  const marked = NODES.filter(n => markOf(n.id) !== 'unreviewed').length;
+  const mine = Object.keys(items).length;
+  document.getElementById('progress').replaceChildren(
+    el('span', { class: 'stat' }, el('b', { text: `${done}/${FINDINGS.length}` }), 'findings answered'),
+    el('span', { class: 'stat' }, el('b', { text: `${marked}/${NODES.length}` }), 'screens marked'),
+    el('span', { class: 'stat' }, el('b', { text: String(mine) }), mine === 1 ? 'issue you added' : 'issues you added'));
+}
+
+function renderChips() {
+  const counts = {};
+  for (const f of FINDINGS) counts[f.type] = (counts[f.type] || 0) + 1;
+  document.getElementById('type-chips').replaceChildren(...Object.keys(INV.findingTypes).filter(t => counts[t]).map(t =>
+    el('button', {
+      class: 'chip', type: 'button', 'aria-pressed': String(filters.types.has(t)), title: INV.findingTypes[t],
+      onclick: () => { filters.types.has(t) ? filters.types.delete(t) : filters.types.add(t); renderChips(); renderView(); },
+    }, el('span', { class: `dot t-${t}`, style: 'background: currentColor' }), el('span', { class: `t-${t}`, text: t }), el('span', { class: 'n', text: String(counts[t]) }))));
+  const states = view === 'findings'
+    ? [['unanswered', 'Unanswered'], ...CHOICES.map(([k, l]) => [k, l])]
+    : SCREEN_MARKS;
+  document.getElementById('state-chips').replaceChildren(...states.map(([k, label]) =>
+    el('button', {
+      class: 'chip', type: 'button', 'aria-pressed': String(filters.state === k),
+      onclick: () => { filters.state = filters.state === k ? null : k; renderChips(); renderView(); },
+    }, view === 'findings' ? el('span', { class: `dot c-${k}`, style: 'border: 1.5px solid currentColor' }) : el('span', { class: `dot st-${k}` }), label)));
+}
+
+// ── A finding with its answer controls (used in both views) ──
+function findingEl(f, { showScreen }) {
+  const a = () => answers[f.id] || {};
+  const li = el('li', { class: `finding t-${f.type}${answered(f.id) ? ' answered' : ''}`, 'data-fid': f.id });
+  const note = el('textarea', { id: `note-${f.id}`, 'aria-label': `Your feedback on ${f.id}` });
+  note.value = a().note || '';
+  const state = el('div', { class: 'f-state', 'aria-live': 'polite', text: a().updatedAt ? `Saved ${when(a().updatedAt)}` : '' });
+  const showNote = () => {
+    const c = a().choice;
+    note.hidden = !(c && c !== 'agree') && !note.value;
+    note.placeholder = CHOICES.find(([k]) => k === c)?.[2] || 'Notes';
+  };
+  const save = async () => {
+    const next = { choice: a().choice || null, note: note.value, updatedAt: Date.now() };
+    answers[f.id] = next;
+    li.classList.toggle('answered', !!next.choice);
+    renderProgress();
+    updateIndexCounts();
+    state.textContent = 'Saving…';
+    try { await store('answers', f.id, next); state.textContent = `Saved ${when(next.updatedAt)}`; }
+    catch (e) { state.textContent = savedText(e); }
+  };
+  const buttons = CHOICES.map(([k, label]) => el('button', {
+    class: `choice c-${k}`, type: 'button', 'aria-pressed': String(a().choice === k),
+    onclick: () => {
+      const choice = a().choice === k ? null : k;   // clicking the chosen answer again clears it
+      answers[f.id] = { ...a(), choice };
+      buttons.forEach(b => b.setAttribute('aria-pressed', String(b.classList.contains(`c-${choice}`))));
+      showNote();
+      if (choice && choice !== 'agree' && !note.value) note.focus();
+      save();
+    },
+  }, el('span', { text: label })));
+  let timer = null;
+  note.addEventListener('input', () => { clearTimeout(timer); state.textContent = 'Editing…'; timer = setTimeout(() => { timer = null; save(); }, 900); });
+  note.addEventListener('blur', () => { if (timer) { clearTimeout(timer); timer = null; save(); } });
+  showNote();
+  li.append(
+    el('div', { class: 'f-head' },
+      el('span', { class: `ty t-${f.type}`, text: f.type, title: INV.findingTypes[f.type] }),
+      showScreen ? el('button', { type: 'button', class: 'where', text: byId[f.node].title, onclick: () => openScreen(f.node) }) : null,
+      el('span', { class: 'fid', text: f.id })),
+    el('p', { text: f.text }),
+    f.ref ? el('span', { class: 'ref', text: f.ref }) : null,
+    el('div', { class: 'answer', role: 'group', 'aria-label': `Your answer to ${f.id}` }, buttons),
+    note, state);
+  return li;
+}
+
+// An issue you added: shown like a finding, with its text and a delete.
+function itemEl(id, it, { showScreen }) {
+  let armed = false;
+  const del = el('button', { type: 'button', class: 'btn danger', text: 'Delete',
+    onclick: async () => {
+      if (!armed) { armed = true; del.textContent = 'Click again to delete'; setTimeout(() => { armed = false; del.textContent = 'Delete'; }, 3000); return; }
+      delete items[id];
+      renderProgress(); renderView();
+      if (db && !id.startsWith('local-')) { try { await db.collection('items').doc(id).delete(); } catch (_) {} }
+    } });
+  return el('li', { class: 'finding t-yours answered' },
+    el('div', { class: 'f-head' },
+      el('span', { class: 'ty t-yours', text: 'yours' }),
+      showScreen ? el('button', { type: 'button', class: 'where', text: byId[it.nodeId]?.title || it.nodeId, onclick: () => openScreen(it.nodeId) }) : null,
+      el('span', { class: 'fid', text: when(it.createdAt) })),
+    el('p', { text: it.text }),
+    el('div', { class: 'add-row' }, del));
+}
+
+function addIssueEl(nodeId) {
+  const ta = el('textarea', { id: `add-${nodeId}`, placeholder: 'Something I missed on this screen: text, layout, behaviour, anything.', 'aria-label': 'New issue' });
+  const state = el('span', { class: 'f-state', 'aria-live': 'polite' });
+  const btn = el('button', { type: 'button', class: 'btn primary', text: 'Add issue',
+    onclick: async () => {
+      const text = ta.value.trim();
+      if (!text) { ta.focus(); return; }
+      const it = { nodeId, text, createdAt: Date.now() };
+      btn.disabled = true;
+      try {
+        if (!db) throw { code: 'no_store' };
+        const ref = await db.collection('items').add(it);
+        items[ref.id] = it;
+      } catch (e) {
+        items[`local-${it.createdAt}`] = it;
+        state.textContent = savedText(e);
+      }
+      ta.value = '';
+      btn.disabled = false;
+      renderProgress(); renderView();
+    } });
+  return el('div', { class: 'add' }, ta, el('div', { class: 'add-row' }, btn, state));
+}
+
+// ── By screen ──
+function renderIndex() {
+  document.getElementById('index').replaceChildren(...INV.areas.map(a => {
+    const nodes = NODES.filter(n => n.area === a.id && screenMatches(n));
+    if (!nodes.length) return null;
+    return el('section', { class: 'area' }, el('h2', { text: a.title }), nodes.map(n => {
+      const fs = nodeFindings(n.id);
+      const done = fs.filter(f => answered(f.id)).length;
+      return el('button', {
+        class: `node${n.parent ? ' child' : ''}`, type: 'button', 'data-id': n.id,
+        'aria-current': String(n.id === current), onclick: () => select(n.id),
+      }, el('span', { class: `dot st-${markOf(n.id)}`, title: MARK_LABEL[markOf(n.id)] }),
+         el('span', { class: 't', text: n.title }),
+         fs.length ? el('span', { class: `fc${done === fs.length ? ' done' : ''}`, title: `${done} of ${fs.length} findings answered`, text: `${done}/${fs.length}` }) : null);
+    }));
+  }).filter(Boolean));
+}
+function updateIndexCounts() {
+  document.querySelectorAll('.node').forEach(b => {
+    const fs = nodeFindings(b.dataset.id);
+    const fc = b.querySelector('.fc');
+    if (!fc) return;
+    const done = fs.filter(f => answered(f.id)).length;
+    fc.textContent = `${done}/${fs.length}`;
+    fc.classList.toggle('done', done === fs.length);
+  });
+}
+function screenMatches(n) {
+  if (filters.state && markOf(n.id) !== filters.state) return false;
+  if (filters.types.size && !nodeFindings(n.id).some(f => filters.types.has(f.type))) return false;
+  if (!filters.q) return true;
+  const hay = [n.title, n.purpose, n.opens, ...(n.controls || []).map(c => `${c.label} ${c.setting || ''}`), ...nodeFindings(n.id).map(f => `${f.text} ${answers[f.id]?.note || ''}`), reviews[n.id]?.note || '', ...nodeItems(n.id).map(([, it]) => it.text)].join(' ').toLowerCase();
+  return hay.includes(filters.q);
+}
+function screenOrder() { return [...document.querySelectorAll('.node')].map(b => b.dataset.id); }
+
+function renderSheet() {
+  const n = byId[current];
+  const sheet = document.getElementById('sheet');
+  if (!n) { sheet.replaceChildren(el('p', { class: 'none', text: 'Pick a screen on the left.' })); return; }
+  const area = INV.areas.find(a => a.id === n.area);
+  const parent = n.parent ? byId[n.parent] : null;
+
+  const frame = el('div', { class: 'shot-frame' });
+  const tabs = el('div', { class: 'shot-tabs' });
+  const showShot = i => {
+    const id = n.screens[i];
+    const img = el('img', { src: `screens/${id}.jpg`, alt: `${n.title} screenshot (${id})`, loading: 'lazy' });
+    img.addEventListener('load', () => frame.classList.toggle('tall', img.naturalHeight > img.naturalWidth * 1.6));
+    frame.replaceChildren(img);
+    tabs.querySelectorAll('.chip').forEach((c, j) => c.setAttribute('aria-pressed', String(j === i)));
+  };
+  if ((n.screens || []).length > 1) tabs.append(...n.screens.map((s, i) => el('button', { class: 'chip', type: 'button', 'aria-pressed': 'false', onclick: () => showShot(i), text: s })));
+
+  const fs = nodeFindings(n.id);
+  const mine = nodeItems(n.id);
+  const note = el('textarea', { id: 'screen-note', placeholder: 'Anything about this screen as a whole.', 'aria-label': `Notes for ${n.title}` });
+  note.value = reviews[n.id]?.note || '';
+  const saveState = el('div', { class: 'save-state', 'aria-live': 'polite', text: reviews[n.id]?.updatedAt ? `Saved ${when(reviews[n.id].updatedAt)}` : '' });
+  const saveScreen = async patch => {
+    const next = { status: markOf(n.id), note: reviews[n.id]?.note || '', ...patch, updatedAt: Date.now() };
+    reviews[n.id] = next;
+    renderProgress();
+    document.querySelectorAll(`.node[data-id="${n.id}"] .dot`).forEach(d => { d.className = `dot st-${next.status}`; d.title = MARK_LABEL[next.status]; });
+    document.querySelectorAll('.mark').forEach(m => m.setAttribute('aria-pressed', String(m.classList.contains(`st-${next.status}`))));
+    saveState.textContent = 'Saving…';
+    try { await store('reviews', n.id, next); saveState.textContent = `Saved ${when(next.updatedAt)}`; }
+    catch (e) { saveState.textContent = savedText(e); }
+  };
+  let timer = null;
+  note.addEventListener('input', () => { clearTimeout(timer); saveState.textContent = 'Editing…'; timer = setTimeout(() => { timer = null; saveScreen({ note: note.value }); }, 900); });
+  note.addEventListener('blur', () => { if (timer) { clearTimeout(timer); timer = null; saveScreen({ note: note.value }); } });
+
+  const order = screenOrder();
+  const idx = order.indexOf(n.id);
+  sheet.replaceChildren(
+    el('div', { class: 'sheet-head' },
+      el('h2', { text: n.title }),
+      el('span', { class: 'kind', text: n.kind }),
+      el('span', { class: 'crumb', text: [area?.title, parent?.title].filter(Boolean).join(' › ') })),
+    el('p', { class: 'purpose', text: n.purpose }),
+    el('p', { class: 'opens' }, el('b', { text: 'How to open: ' }), n.opens),
+    el('div', { class: 'shots' }, tabs, (n.screens || []).length ? frame : el('p', { class: 'no-shot', text: 'No screenshot: this is a behaviour or a dialog the capture script does not open.' })),
+    el('section', {},
+      el('h3', { text: `Findings (${fs.length})` }),
+      fs.length ? el('p', { class: 'section-note', text: 'Answer each one. Anything but "Agree, fix it" opens a box for your feedback.' }) : null,
+      fs.length || mine.length
+        ? el('ul', { class: 'findings' }, fs.map(f => findingEl(f, { showScreen: false })), mine.map(([id, it]) => itemEl(id, it, { showScreen: false })))
+        : el('p', { class: 'none', text: 'Nothing found in the code review. Your eyes may find more.' })),
+    el('section', {}, el('h3', { text: 'Add an issue' }), addIssueEl(n.id)),
+    el('div', { class: 'cols' },
+      el('section', {},
+        el('h3', { text: 'Controls' }),
+        (n.controls || []).length
+          ? el('ul', { class: 'controls' }, n.controls.map(c => el('li', {},
+              el('span', { text: c.label }),
+              el('span', { class: 'k', text: c.kind }),
+              c.setting ? el('span', { class: 's', text: c.setting }) : null)))
+          : el('p', { class: 'none', text: 'No controls of its own.' })),
+      el('section', {},
+        el('h3', { text: 'Source' }),
+        el('div', { class: 'src' }, (n.source || []).map(s => el('code', { text: s }))))),
+    el('section', { class: 'review' },
+      el('h3', { text: 'This screen overall' }),
+      el('div', { class: 'marks', role: 'group', 'aria-label': 'Screen mark' }, SCREEN_MARKS.map(([k, label]) => el('button', {
+        class: `mark st-${k}`, type: 'button', 'aria-pressed': String(markOf(n.id) === k),
+        onclick: () => saveScreen({ status: k, note: note.value }),
+      }, el('span', { class: `dot st-${k}` }), el('span', { text: label, style: 'color: var(--fg)' })))),
+      note, saveState,
+      el('div', { class: 'pager' },
+        el('button', { type: 'button', disabled: idx <= 0, onclick: () => select(order[idx - 1]), text: '← Previous screen' }),
+        el('button', { type: 'button', disabled: idx < 0 || idx >= order.length - 1, onclick: () => select(order[idx + 1]), text: 'Next screen →' }))));
+  if ((n.screens || []).length) showShot(0);
+}
+
+function select(id) {
+  if (!byId[id]) return;
+  current = id;
+  document.querySelectorAll('.node').forEach(b => b.setAttribute('aria-current', String(b.dataset.id === id)));
+  renderSheet();
+  try { history.replaceState(null, '', '#' + id); } catch (_) {}
+  if (matchMedia('(max-width: 860px)').matches) document.getElementById('sheet').scrollIntoView({ block: 'start' });
+}
+
+// ── All findings ──
+function findingMatches(f) {
+  if (filters.types.size && !filters.types.has(f.type)) return false;
+  const c = answers[f.id]?.choice || null;
+  if (filters.state === 'unanswered' && c) return false;
+  if (filters.state && filters.state !== 'unanswered' && c !== filters.state) return false;
+  if (!filters.q) return true;
+  return [f.text, f.ref, byId[f.node].title, answers[f.id]?.note || ''].join(' ').toLowerCase().includes(filters.q);
+}
+function renderList() {
+  const list = document.getElementById('list');
+  const groups = INV.areas.map(a => {
+    const fs = FINDINGS.filter(f => byId[f.node].area === a.id && findingMatches(f));
+    const mine = filters.types.size || (filters.state && filters.state !== 'unanswered') ? [] :
+      Object.entries(items).filter(([, it]) => byId[it.nodeId]?.area === a.id && (!filters.q || it.text.toLowerCase().includes(filters.q)));
+    if (!fs.length && !mine.length) return null;
+    return el('section', { class: 'list-group' },
+      el('h2', { text: a.title }),
+      el('ul', { class: 'findings' }, fs.map(f => findingEl(f, { showScreen: true })), mine.map(([id, it]) => itemEl(id, it, { showScreen: true }))));
+  }).filter(Boolean);
+  list.replaceChildren(...(groups.length ? groups : [el('p', { class: 'none', text: 'No findings match these filters.' })]));
+}
+
+function setView(v) {
+  view = v;
+  filters.state = null;
+  document.getElementById('view-screens').setAttribute('aria-pressed', String(v === 'screens'));
+  document.getElementById('view-findings').setAttribute('aria-pressed', String(v === 'findings'));
+  document.getElementById('screens-view').hidden = v !== 'screens';
+  document.getElementById('findings-view').hidden = v !== 'findings';
+  renderChips();
+  renderView();
+  try { history.replaceState(null, '', '#' + (v === 'findings' ? 'findings' : current)); } catch (_) {}
+}
+function openScreen(id) { current = id; setView('screens'); select(id); window.scrollTo(0, 0); }
+function renderView() {
+  if (view === 'findings') renderList();
+  else { renderIndex(); renderSheet(); }
+}
+
+// Store updates from elsewhere re-render, but never under a box being typed in.
+let pending = false;
+function refresh() {
+  const typing = document.activeElement?.tagName === 'TEXTAREA';
+  if (typing) { pending = true; return; }
+  pending = false;
+  renderProgress();
+  renderView();
+}
+document.addEventListener('focusout', () => setTimeout(() => { if (pending) refresh(); }, 0));
+
+document.getElementById('view-screens').addEventListener('click', () => setView('screens'));
+document.getElementById('view-findings').addEventListener('click', () => setView('findings'));
+document.getElementById('q').addEventListener('input', e => { filters.q = e.target.value.trim().toLowerCase(); renderView(); });
+
+const start = location.hash.slice(1);
+current = byId[start] ? start : NODES[0].id;
+renderProgress();
+setView(start === 'findings' ? 'findings' : 'screens');
+
+(async () => {
+  try { db = await window.claude?.use?.('db'); } catch (_) { db = null; }
+  if (!db) return;
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const watch = (coll, target, shape) => db.collection(coll).onSnapshot(snap => {
+    let changed = false;
+    const seen = new Set();
+    for (const d of snap.docs) {
+      const v = d.data();
+      if (!v) continue;
+      seen.add(d.id);
+      const next = shape(v);
+      if (!same(target[d.id], next)) { target[d.id] = next; changed = true; }
+    }
+    for (const id of Object.keys(target)) if (!seen.has(id) && !id.startsWith('local-')) { delete target[id]; changed = true; }
+    if (changed) refresh();
+  }, () => {});
+  watch('reviews', reviews, v => ({ status: v.status || 'unreviewed', note: v.note || '', updatedAt: v.updatedAt }));
+  watch('answers', answers, v => ({ choice: v.choice || null, note: v.note || '', updatedAt: v.updatedAt }));
+  watch('items', items, v => ({ nodeId: v.nodeId, text: v.text || '', createdAt: v.createdAt }));
+})();
+</script>
