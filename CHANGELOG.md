@@ -2,6 +2,12 @@
 
 This fork continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker, whose last release was 2.9.0 (2026-07-02). Versions before 3.0.0 are upstream's and are listed in the extension's "What's New" panel.
 
+## 3.0.5 (2026-10-12)
+
+- **"Change all N" for repeated text.** When a proposed change targets text that appears word for word in several places (asking to change a sentence that occurs twice), the proposal card says how many times it appears and offers **Change all N**. The diff shows every occurrence before you apply. Without that choice nothing changes, as before. This was the last failing scenario in the 3.0.4 eval.
+- **Copilot can read your generation settings, regex scripts and quick replies** (read-only): API, model, preset, samplers, context and response length; global, character and preset regex scripts; quick reply sets and their STscript. All three read through SillyTavern's own APIs and never include keys.
+- Proposal previews, validation and applying now share one path for anchored edits, so what the card shows is what gets applied.
+
 ## 3.0.4 (2026-10-12)
 
 - **Copilot can read what it edits.** Its read tools only returned previews (messages cut at 500-600 characters, lorebook entries at 200, no way to read a whole entry), so edits deep in a long message or entry were guessed and failed. New tools: **Read Messages** (main-chat messages in full) and **Get Lorebook Entry** (full content plus keys and settings). Previews now say they are cut short and name the tool for the full text, and the instructions say never to overwrite from a preview.

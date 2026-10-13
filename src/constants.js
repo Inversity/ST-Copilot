@@ -301,6 +301,15 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     // ─── Changelog Data ──────────────────────────────────────────────────────────
 export const CHANGELOG = [
     {
+        version: '3.0.5',
+        date: '10/12/2026',
+        announce: true,
+        notes: [
+            '<strong>"Change all N"</strong>: when a change targets text that appears several times, the card offers to change every occurrence (check the diff first).',
+            '<strong>New read-only tools</strong>: Copilot can look at your generation settings, regex scripts, and quick replies.',
+        ],
+    },
+    {
         version: '3.0.4',
         date: '10/12/2026',
         announce: true,
