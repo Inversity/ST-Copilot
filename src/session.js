@@ -172,22 +172,13 @@ export function getBindingKey() {
     let charId = 'global';
     if (ctx.characterId !== undefined && ctx.characterId !== null) {
         charId = String(ctx.characterId);
-    } else if (typeof window.this_chid !== 'undefined' && window.this_chid !== null) {
-        charId = String(window.this_chid);
     }
 
     let chatId = 'default';
     try {
-        if (typeof window.chat_file_name === 'string' && window.chat_file_name) {
-            chatId = String(window.chat_file_name);
-        } else if (typeof ctx.getCurrentChatId === 'function') {
-            const r = ctx.getCurrentChatId(); if (r) chatId = String(r);
-        }
-        
-        if (chatId === 'default' || !chatId) {
-            if (ctx.chatId) chatId = String(ctx.chatId);
-            else if (typeof window.chat_id !== 'undefined' && window.chat_id !== null) chatId = String(window.chat_id);
-        }
+        const r = ctx.getCurrentChatId?.();
+        if (r) chatId = String(r);
+        else if (ctx.chatId) chatId = String(ctx.chatId);
     } catch (_) {}
     
     return { charId, chatId };
@@ -678,9 +669,6 @@ export function expandMacros(text) {
         const ctx = SillyTavern.getContext();
         if (typeof ctx.substituteParams === 'function') {
             return ctx.substituteParams(text);
-        }
-        if (typeof window.substituteParams === 'function') {
-            return window.substituteParams(text, ctx.name1, ctx.name2);
         }
     } catch (e) {
         console.warn(`[${EXT_DISPLAY}] Macro expansion error:`, e);

@@ -21,6 +21,7 @@ import * as apiMod from './api.js';
 export let ST_WorldInfo = null;
 export let ST_Utils = null;
 export let ST_Script = null;
+export let ST_Personas = null;
 export let extVersion = '?';
 export let __extPath = 'third-party/ST-Copilot';
 
@@ -519,6 +520,7 @@ async function init() {
     try { ST_WorldInfo = await import('/scripts/world-info.js'); } catch(e) { console.warn('ST-Copilot: Could not import world-info.js'); }
     try { ST_Utils = await import('/scripts/utils.js'); } catch(e) { console.warn('ST-Copilot: Could not import utils.js'); }
     try { ST_Script = await import('/script.js'); } catch(e) { console.warn('ST-Copilot: Could not import script.js'); }
+    try { ST_Personas = await import('/scripts/personas.js'); } catch(e) { console.warn('ST-Copilot: Could not import personas.js'); }
     
     await loadManifestVersion();
     
@@ -569,8 +571,8 @@ async function init() {
     await onChatChanged();
     refreshSessionDropdown();
     
-    const es = ctx.eventSource || window.eventSource;
-    const et = ctx.event_types || window.event_types || {};
+    const es = ctx.eventSource;
+    const et = ctx.eventTypes || {};
 
     if (es) {
         es.on(et.CHAT_CHANGED || 'chat_changed', async () => {

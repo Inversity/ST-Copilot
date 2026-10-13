@@ -1198,10 +1198,10 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       const enabledExtensions = allExts.filter(ext => !disabledExts.includes(ext));
 
       const stEnv = {
-          stVersion: document.getElementById('st_version')?.textContent?.trim() || document.querySelector('.drawer-version')?.textContent?.trim() || window.system_version || 'unknown',
+          stVersion: document.getElementById('st_version')?.textContent?.trim() || document.querySelector('.drawer-version')?.textContent?.trim() || 'unknown',
           userAgent: navigator.userAgent,
           mainApi: ctx.api_server || document.getElementById('main_api')?.value || 'unknown',
-          stMaxContext: ctx.chatCompletionSettings?.openai_max_context || ctx.textCompletionSettings?.max_context || window.token_max || 'unknown',
+          stMaxContext: ctx.chatCompletionSettings?.openai_max_context || ctx.textCompletionSettings?.max_context || ctx.maxContext || 'unknown',
           stStreamingEnabled: ctx.textCompletionSettings?.streaming || ctx.chatCompletionSettings?.stream_openai || false,
           enabledExtensions: enabledExtensions,
           characterId: ctx.characterId,
@@ -1878,22 +1878,13 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       let charId = 'global';
       if (ctx.characterId !== undefined && ctx.characterId !== null) {
           charId = String(ctx.characterId);
-      } else if (typeof window.this_chid !== 'undefined' && window.this_chid !== null) {
-          charId = String(window.this_chid);
       }
 
       let chatId = 'default';
       try {
-          if (typeof window.chat_file_name === 'string' && window.chat_file_name) {
-              chatId = String(window.chat_file_name);
-          } else if (typeof ctx.getCurrentChatId === 'function') {
-              const r = ctx.getCurrentChatId(); if (r) chatId = String(r);
-          }
-          
-          if (chatId === 'default' || !chatId) {
-              if (ctx.chatId) chatId = String(ctx.chatId);
-              else if (typeof window.chat_id !== 'undefined' && window.chat_id !== null) chatId = String(window.chat_id);
-          }
+          const r = ctx.getCurrentChatId?.();
+          if (r) chatId = String(r);
+          else if (ctx.chatId) chatId = String(ctx.chatId);
       } catch (_) {}
       
       return { charId, chatId };
@@ -2385,9 +2376,6 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           if (typeof ctx.substituteParams === 'function') {
               return ctx.substituteParams(text);
           }
-          if (typeof window.substituteParams === 'function') {
-              return window.substituteParams(text, ctx.name1, ctx.name2);
-          }
       } catch (e) {
           console.warn(`[${EXT_DISPLAY}] Macro expansion error:`, e);
       }
@@ -2612,8 +2600,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       if (_wiExternalListenerBound) return;
       _wiExternalListenerBound = true;
       const ctx = SillyTavern.getContext();
-      const es = ctx.eventSource || window.eventSource;
-      const et = ctx.event_types || window.event_types || {};
+      const es = ctx.eventSource;
+      const et = ctx.eventTypes || {};
       if (!es) return;
       es.on(et.WORLDINFO_UPDATED || 'worldinfo_updated', (name) => {
           if (name) delete wiCache[name];
@@ -2905,7 +2893,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       const ctx = SillyTavern.getContext();
       const names = new Set();
 
-      const globalBooks = exports.ST_WorldInfo?.selected_world_info || window.selected_world_info ||[];
+      const globalBooks = exports.ST_WorldInfo?.selected_world_info || [];
       if (Array.isArray(globalBooks)) {
           globalBooks.forEach(n => n && names.add(n));
       }
@@ -2920,7 +2908,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           if (exports.ST_Utils && typeof exports.ST_Utils.getCharaFilename === 'function') {
               fileName = exports.ST_Utils.getCharaFilename(charId);
           }
-          const charLoreList = exports.ST_WorldInfo?.world_info?.charLore || window.world_info?.charLore;
+          const charLoreList = exports.ST_WorldInfo?.world_info?.charLore;
           if (fileName && Array.isArray(charLoreList)) {
               const extraCharLore = charLoreList.find(e => e.name === fileName);
               if (extraCharLore && Array.isArray(extraCharLore.extraBooks)) {
@@ -2929,7 +2917,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           }
       }
 
-      const wiKey = exports.ST_WorldInfo?.METADATA_KEY || window.WI_METADATA_KEY || 'world_info';
+      const wiKey = exports.ST_WorldInfo?.METADATA_KEY || 'world_info';
       const chatWorldName = ctx.chatMetadata?.[wiKey];
       if (chatWorldName && typeof chatWorldName === 'string') names.add(chatWorldName);
 
@@ -2943,7 +2931,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       if (name === EMBEDDED_BOOK_KEY) return 'embedded';
       const ctx = SillyTavern.getContext();
       
-      const globalBooks = exports.ST_WorldInfo?.selected_world_info || window.selected_world_info || [];
+      const globalBooks = exports.ST_WorldInfo?.selected_world_info || [];
       if (Array.isArray(globalBooks) && globalBooks.includes(name)) {
           return 'global';
       }
@@ -2958,14 +2946,14 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           if (exports.ST_Utils && typeof exports.ST_Utils.getCharaFilename === 'function') {
               fileName = exports.ST_Utils.getCharaFilename(charId);
           }
-          const charLoreList = exports.ST_WorldInfo?.world_info?.charLore || window.world_info?.charLore;
+          const charLoreList = exports.ST_WorldInfo?.world_info?.charLore;
           if (fileName && Array.isArray(charLoreList)) {
               const extraCharLore = charLoreList.find(e => e.name === fileName);
               if (extraCharLore?.extraBooks?.includes(name)) return 'character';
           }
       }
 
-      const wiKey = exports.ST_WorldInfo?.METADATA_KEY || window.WI_METADATA_KEY || 'world_info';
+      const wiKey = exports.ST_WorldInfo?.METADATA_KEY || 'world_info';
       if (ctx.chatMetadata?.[wiKey] === name) return 'chat';
       
       if (ctx.powerUserSettings?.persona_description_lorebook === name) return 'chat';
@@ -3199,15 +3187,13 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       try {
           const ctx = SillyTavern.getContext();
 
-          const allBooks = window.world_names || exports.ST_WorldInfo?.world_names || [];
+          const allBooks = ctx.getWorldInfoNames?.() || exports.ST_WorldInfo?.world_names || [];
           const isNew = !allBooks.includes(bookName);
 
           if (isNew) {
               console.log('[ST-Copilot-Debug] Lorebook is new. Requesting ST to create...');
               if (typeof exports.ST_WorldInfo?.createNewWorldInfo === 'function') {
                   await exports.ST_WorldInfo.createNewWorldInfo(bookName);
-              } else if (typeof window.createNewWorldInfo === 'function') {
-                  await window.createNewWorldInfo(bookName);
               } else {
                   const payload = { entries: {}, extensions: {} };
                   await fetch('/api/worldinfo/edit', {
@@ -3216,50 +3202,33 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                       body: JSON.stringify({ name: bookName, data: payload }),
                   });
                   if (typeof ctx.updateWorldInfoList === 'function') await ctx.updateWorldInfoList();
-                  else if (typeof window.loadWorldInfoList === 'function') await window.loadWorldInfoList();
               }
               toastr.success(t`Lorebook "${bookName}" created successfully.`, EXT_DISPLAY);
           }
 
           delete wiCache[bookName];
 
-          const charId = ctx.characterId;
-          if (charId === undefined || charId === null) return;
+          const char = ctx.characters?.[ctx.characterId];
+          if (!char?.avatar) return;
 
-          let fileName = ctx.characters?.[charId]?.avatar;
-          if (exports.ST_Utils && typeof exports.ST_Utils.getCharaFilename === 'function') {
-              fileName = exports.ST_Utils.getCharaFilename(charId);
-          } else if (typeof window.getCharaFilename === 'function') {
-              fileName = window.getCharaFilename(charId);
-          }
-          if (!fileName) return;
-
-          let wiSettings = window.world_info || exports.ST_WorldInfo?.world_info;
+          // ST keeps a character's extra books in world_info.charLore, keyed by its file name.
+          const fileName = exports.ST_Utils?.getCharaFilename?.(null, { manualAvatarKey: char.avatar }) || char.avatar.replace(/\.[^.]+$/, '');
+          const wiSettings = exports.ST_WorldInfo?.world_info;
           if (!wiSettings) return;
+          const current = (wiSettings.charLore || []).find(e => e.name === fileName)?.extraBooks || [];
+          if (current.includes(bookName)) return;
 
-          if (!Array.isArray(wiSettings.charLore)) wiSettings.charLore = [];
-
-          const charLoreList = wiSettings.charLore;
-          let extraCharLore = charLoreList.find(e => e.name === fileName);
-          if (!extraCharLore) {
-              extraCharLore = { name: fileName, extraBooks: [] };
-              charLoreList.push(extraCharLore);
+          // charUpdateAddAuxWorld updates the list and saves ST's settings.
+          if (typeof exports.ST_WorldInfo.charUpdateAddAuxWorld === 'function') {
+              await exports.ST_WorldInfo.charUpdateAddAuxWorld(char.avatar, bookName);
+          } else {
+              if (!Array.isArray(wiSettings.charLore)) wiSettings.charLore = [];
+              const existing = wiSettings.charLore.find(e => e.name === fileName);
+              if (existing) existing.extraBooks = [...(existing.extraBooks || []), bookName];
+              else wiSettings.charLore.push({ name: fileName, extraBooks: [bookName] });
+              ctx.saveSettingsDebounced();
           }
-          if (!Array.isArray(extraCharLore.extraBooks)) extraCharLore.extraBooks = [];
-
-          if (!extraCharLore.extraBooks.includes(bookName)) {
-              extraCharLore.extraBooks.push(bookName);
-              console.log(`[ST-Copilot-Debug] Added "${bookName}" to extraBooks.`);
-
-              if (typeof exports.ST_WorldInfo?.saveWorldInfoSettings === 'function') exports.ST_WorldInfo.saveWorldInfoSettings();
-              else if (typeof window.saveWorldInfoSettings === 'function') window.saveWorldInfoSettings();
-
-              if (typeof window.saveSettingsDebounced === 'function') window.saveSettingsDebounced();
-              else if (typeof saveSettingsDebounced === 'function') saveSettingsDebounced();
-
-              if (typeof exports.ST_WorldInfo?.printWorldInfoCharacters === 'function') exports.ST_WorldInfo.printWorldInfoCharacters();
-              else if (typeof window.printWorldInfoCharacters === 'function') window.printWorldInfoCharacters();
-          }
+          console.log(`[ST-Copilot-Debug] Added "${bookName}" to extraBooks.`);
       } catch (e) {
           _dbgAdd('LB_AUTO_BIND_NEW_BOOK_FAILED', { bookName, error: e.message });
           console.error(`[ST-Copilot-Debug] Exception in bindNewLorebookToCharacter:`, e);
@@ -3611,6 +3580,12 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       return out;
   }
 
+  // The selected persona's avatar id. ST keeps it in personas.js (user_avatar); getContext()
+  // has no field for it.
+  function getCurrentPersonaId() {
+      return exports.ST_Personas?.user_avatar || '';
+  }
+
   function getTagsForCharacter(char) {
       if (!char) return [];
       const ctx = SillyTavern.getContext();
@@ -3720,25 +3695,13 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       const ctx = SillyTavern.getContext();
       
       try {
-          let expanded = '';
-          if (typeof ctx.substituteParams === 'function') {
-              expanded = ctx.substituteParams('{{persona}}');
-          } else if (typeof window.substituteParams === 'function') {
-              expanded = window.substituteParams('{{persona}}');
-          }
+          const expanded = ctx.substituteParams('{{persona}}');
           if (expanded && expanded !== '{{persona}}') return expanded;
       } catch (_) {}
 
       try {
-          const pu = window.power_user || ctx.powerUserSettings || {};
-          let personaId = window.user_avatar || ctx.user_avatar || ctx.userAvatar || ctx.personaId || ctx.activePersonaId || ctx.active_persona_id;
-          if (!personaId && typeof document !== 'undefined') {
-              const selected = document.querySelector('#user_avatar_block .avatar-container.selected, #persona_container .avatar-container.selected, .persona_selected');
-              if (selected) personaId = selected.getAttribute('data-avatar-id') || selected.dataset?.avatarId;
-          }
-          if (typeof personaId === 'object' && personaId !== null) {
-              personaId = personaId.avatarId || personaId.avatar_id || personaId.user_avatar || personaId.userAvatar || personaId.id;
-          }
+          const pu = ctx.powerUserSettings || {};
+          const personaId = getCurrentPersonaId();
 
           if (personaId && pu.persona_descriptions) {
               const pd = pu.persona_descriptions[personaId];
@@ -5359,15 +5322,14 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       const globalBooks = ST_WorldInfo?.selected_world_info || (ctx.worldInfoSettings?.globalSelect || []);
           
       // (Ch)
-      const chatMetadata = window.chat_metadata || ctx.chatMetadata || {};
+      const chatMetadata = ctx.chatMetadata || {};
       const chatBook = chatMetadata.world_info || null;
 
       // (P)
-      const pu = window.power_user || ctx.powerUserSettings || {};
+      const pu = ctx.powerUserSettings || {};
       let personaBook = pu.persona_description_lorebook || null;
       if (!personaBook) {
-          let personaId = window.user_avatar || ctx.user_avatar || ctx.userAvatar || ctx.personaId || ctx.activePersonaId || ctx.active_persona_id;
-          if (typeof personaId === 'object' && personaId !== null) personaId = personaId.avatarId || personaId.id;
+          const personaId = getCurrentPersonaId();
           if (personaId && pu.persona_descriptions?.[personaId]?.lorebook) {
               personaBook = pu.persona_descriptions[personaId].lorebook;
           }
@@ -5375,7 +5337,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
       //(C) - Primary + Additional
       const charBooks = new Set();
-      const chars = window.characters || ctx.characters || [];
+      const chars = ctx.characters || [];
       
       chars.forEach((char, idx) => {
           if (!char) return;
@@ -5764,8 +5726,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       });
 
       const ctx = SillyTavern.getContext();
-      const es = ctx.eventSource || window.eventSource;
-      const et = ctx.event_types || window.event_types || {};
+      const es = ctx.eventSource;
+      const et = ctx.eventTypes || {};
       es?.on?.(et.WORLDINFO_UPDATED || 'worldinfo_updated', (name) => {
           const overlay = document.getElementById('scp-lb-overlay');
           if (!overlay || overlay.style.display === 'none') return;
@@ -5822,13 +5784,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
   function _getAspectEvolutiaPersonaFields() {
       try {
           const ctx = SillyTavern.getContext();
-          const pu = window.power_user || ctx.powerUserSettings || {};
-          let personaId = window.user_avatar || ctx.user_avatar || ctx.userAvatar || ctx.personaId || ctx.activePersonaId || ctx.active_persona_id;
-          if (!personaId && typeof document !== 'undefined') {
-              const selected = document.querySelector('#user_avatar_block .avatar-container.selected, #persona_container .avatar-container.selected, .persona_selected');
-              if (selected) personaId = selected.getAttribute('data-avatar-id') || selected.dataset?.avatarId;
-          }
-          if (typeof personaId === 'object' && personaId !== null) personaId = personaId.avatarId || personaId.avatar_id || personaId.user_avatar || personaId.userAvatar || personaId.id;
+          const pu = ctx.powerUserSettings || {};
+          const personaId = getCurrentPersonaId();
           if (!personaId) return null;
 
           const AE_KEY = 'st-description-swap-fields';
@@ -6364,8 +6321,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
   }
 
   function _emitCharacterEdited(ctx, char) {
-      const es = ctx.eventSource || window.eventSource;
-      const et = ctx.event_types || window.event_types;
+      const es = ctx.eventSource;
+      const et = ctx.eventTypes;
       if (!es || !et?.CHARACTER_EDITED) return;
       const id = (ctx.characters || []).findIndex(c => c.avatar === char.avatar);
       es.emit(et.CHARACTER_EDITED, { detail: { id: id >= 0 ? id : ctx.characterId, character: char } });
@@ -6422,13 +6379,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
       if (fieldId.startsWith('evolutia_user:')) {
           const aeName = fieldId.split('evolutia_user:')[1];
-          const pu = window.power_user || ctx.powerUserSettings || {};
-          let personaId = window.user_avatar || ctx.user_avatar || ctx.userAvatar || ctx.personaId || ctx.activePersonaId || ctx.active_persona_id;
-          if (!personaId && typeof document !== 'undefined') {
-              const selected = document.querySelector('#user_avatar_block .avatar-container.selected, #persona_container .avatar-container.selected, .persona_selected');
-              if (selected) personaId = selected.getAttribute('data-avatar-id') || selected.dataset?.avatarId;
-          }
-          if (typeof personaId === 'object' && personaId !== null) personaId = personaId.avatarId || personaId.avatar_id || personaId.user_avatar || personaId.userAvatar || personaId.id;
+          const pu = ctx.powerUserSettings || {};
+          const personaId = getCurrentPersonaId();
           
           const AE_KEY = 'st-description-swap-fields';
           const personaState = pu[AE_KEY]?.personaDynamicFields?.[personaId];
@@ -6448,8 +6400,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           
           f.content = newValue;
           
-          if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
-          else if (typeof window.saveSettingsDebounced === 'function') window.saveSettingsDebounced();
+          ctx.saveSettingsDebounced();
           return;
       }
 
@@ -6476,24 +6427,15 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           }
           char.name = trimmedName;
           if (char.data) char.data.name = trimmedName;
-          if (typeof ctx.getCharacters === 'function') await ctx.getCharacters().catch(() => {});
-          else if (typeof window.getCharacters === 'function') await window.getCharacters().catch(() => {});
+          await ctx.getCharacters().catch(() => {});
           _emitCharacterEdited(ctx, char);
-          if (typeof window.PrintCharacterList === 'function') window.PrintCharacterList();
+          await exports.ST_Script?.printCharacters?.(false);
           return;
       }
       
       if (fieldId === 'user_persona') {
-          const pu = window.power_user || ctx.powerUserSettings || {};
-          
-          let avatar = window.user_avatar || ctx.user_avatar || ctx.userAvatar || ctx.personaId || ctx.activePersonaId || ctx.active_persona_id;
-          if (!avatar && typeof document !== 'undefined') {
-              const selected = document.querySelector('#user_avatar_block .avatar-container.selected, #persona_container .avatar-container.selected, .persona_selected');
-              if (selected) avatar = selected.getAttribute('data-avatar-id') || selected.dataset?.avatarId;
-          }
-          if (typeof avatar === 'object' && avatar !== null) {
-              avatar = avatar.avatarId || avatar.avatar_id || avatar.user_avatar || avatar.userAvatar || avatar.id;
-          }
+          const pu = ctx.powerUserSettings || {};
+          const avatar = getCurrentPersonaId();
 
           if (avatar) {
               try {
@@ -6515,8 +6457,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               pu.persona_description = newValue;
           }
           
-          if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
-          else if (typeof window.saveSettingsDebounced === 'function') window.saveSettingsDebounced();
+          ctx.saveSettingsDebounced();
           
           ['persona_description', 'user_persona_edit', 'user_persona_textarea', 'persona_description_textarea'].forEach(id => {
               const el = document.getElementById(id);
@@ -6555,8 +6496,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
               if (toUnlink.length > 0) {
                   ctx.tagMap[avatar] = currentTagIds.filter(id => !toUnlink.includes(id));
-                  if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
-                  else if (typeof window.saveSettingsDebounced === 'function') window.saveSettingsDebounced();
+                  ctx.saveSettingsDebounced();
               }
           }
           
@@ -6700,17 +6640,13 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       await new Promise(r => setTimeout(r, 400));
 
       try {
-          if (typeof ctx.getCharacters === 'function') {
-              await ctx.getCharacters();
-          } else if (typeof window.getCharacters === 'function') {
-              await window.getCharacters();
-          }
+          await ctx.getCharacters();
       } catch(e) {
           console.warn('[ST-Copilot-Debug] Failed to reload list of characters:', e);
           _dbgAdd('CHAR_CREATE_RELOAD_ERR', { error: e.message });
       }
 
-      const chars = ctx.characters || window.characters || [];
+      const chars = ctx.characters || [];
       
       const foundChar = chars.find(c => c.avatar === newAvatar);
       if (foundChar) {
@@ -6733,11 +6669,9 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       }
 
       try {
-          if (typeof window.PrintCharacterList === 'function') {
-              window.PrintCharacterList();
-          }
-          const es = ctx.eventSource || window.eventSource;
-          const et = ctx.event_types || window.event_types;
+          await exports.ST_Script?.printCharacters?.(true);
+          const es = ctx.eventSource;
+          const et = ctx.eventTypes;
           if (es && et?.CHARACTERS_UPDATED) {
               es.emit(et.CHARACTERS_UPDATED);
           }
@@ -7542,7 +7476,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       if (!settings.chatEditAIEnabled) return '';
       const ctx = SillyTavern.getContext();
       const stMsgs = ctx.chat || [];
-      const chatDisplayName = ctx.chatMetadata?.name || (typeof window.chat_file_name === 'string' ? window.chat_file_name : '') || 'unknown';
+      const chatDisplayName = ctx.chatMetadata?.name || ctx.getCurrentChatId?.() || 'unknown';
       const depth = Math.max(0, parseInt(settings.contextDepth) || 0);
       let slice;
       try {
@@ -7658,10 +7592,9 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
   async function _saveChatMessage(ctx, idx, msg) {
       try {
-          if (typeof ctx.saveChat === 'function') await ctx.saveChat();
-          else if (typeof window.saveChat === 'function') await window.saveChat();
-          const es = ctx.eventSource || window.eventSource;
-          const et = ctx.event_types || window.event_types;
+          await ctx.saveChat();
+          const es = ctx.eventSource;
+          const et = ctx.eventTypes;
           if (es && et?.MESSAGE_UPDATED) {
               es.emit(et.MESSAGE_UPDATED, idx);
           }
@@ -7670,18 +7603,16 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
   async function _saveChatAfterDelete(ctx) {
       try {
-          if (typeof ctx.saveChat === 'function') await ctx.saveChat();
-          else if (typeof window.saveChat === 'function') await window.saveChat();
+          await ctx.saveChat();
       } catch(e) {}
   }
 
   function _refreshSTChatDOM(ctx) {
       try {
-          const es = ctx.eventSource || window.eventSource;
-          const et = ctx.event_types || window.event_types;
+          const es = ctx.eventSource;
+          const et = ctx.eventTypes;
           if (es && et?.CHAT_CHANGED) es.emit(et.CHAT_CHANGED);
-          if (typeof window.printMessages === 'function') window.printMessages();
-          else if (typeof ctx.printMessages === 'function') ctx.printMessages();
+          ctx.printMessages();
       } catch(_) {}
   }
 
@@ -7724,20 +7655,13 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               if (change.action === 'rename_chat') {
                   const newName = change.name.trim();
                   const ctx2 = SillyTavern.getContext();
-                  const oldFileName = window.chat_file_name;
-                  
+
                   try {
+                      // Copilot's sessions live in the chat's metadata, so they move with the file.
                       if (typeof ctx2.executeSlashCommandsWithOptions === 'function') {
                           await ctx2.executeSlashCommandsWithOptions(`/renamechat ${newName}`);
                       }
-                      
-                      if (window.chat_file_name && window.chat_file_name !== oldFileName) {
-                          const sess = getCurrentSession();
-                          if (sess && sess.stChatId === oldFileName) {
-                              sess.stChatId = window.chat_file_name;
-                          }
-                      }
-                      
+
                       if (ctx2.chatMetadata) {
                           ctx2.chatMetadata.name = newName;
                       }
@@ -13804,7 +13728,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
   function updateDepthSlidersMax() {
       const ctx = SillyTavern.getContext();
-      const chat = ctx.chat || window.chat ||[];
+      const chat = ctx.chat || [];
       const maxVal = Math.max(1, chat.length);
       
       if (state.lastChatLen === -1) {
@@ -14276,10 +14200,6 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           }
       } else {
           fullError = String(err);
-      }
-
-      if (window.last_api_error && errorSummary.includes('userStopped') === false) {
-          fullError += '\n\n--- ST LAST API ERROR ---\n' + (typeof window.last_api_error === 'object' ? JSON.stringify(window.last_api_error, null, 2) : String(window.last_api_error));
       }
 
       showCustomDialog({
@@ -15340,14 +15260,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
   function _getPersonaEntity() {
       const ctx = SillyTavern.getContext();
-      let avatar = window.user_avatar || ctx.user_avatar || ctx.userAvatar || ctx.personaId || ctx.activePersonaId || ctx.active_persona_id;
-      if (!avatar && typeof document !== 'undefined') {
-          const selected = document.querySelector('#user_avatar_block .avatar-container.selected, #persona_container .avatar-container.selected, .persona_selected');
-          if (selected) avatar = selected.getAttribute('data-avatar-id') || selected.dataset?.avatarId;
-      }
-      if (typeof avatar === 'object' && avatar !== null) {
-          avatar = avatar.avatarId || avatar.avatar_id || avatar.user_avatar || avatar.userAvatar || avatar.id;
-      }
+      const avatar = getCurrentPersonaId();
       return { id: '__persona__', name: ctx.name1 || 'User', avatar: avatar || '', isPersona: true };
   }
 
@@ -16211,14 +16124,12 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           
           try {
               if (typeof ctx.getTokenCountAsync === 'function') return await ctx.getTokenCountAsync(str);
-              if (typeof window.getTokenCountAsync === 'function') return await window.getTokenCountAsync(str);
           } catch (_) {}
           
           await new Promise(resolve => setTimeout(resolve, 0));
 
           try {
               if (typeof ctx.getTokenCount === 'function') return ctx.getTokenCount(str);
-              if (typeof window.getTokenCount === 'function') return window.getTokenCount(str);
           } catch (_) {}
           
           try {
@@ -18714,6 +18625,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
   exports.ST_WorldInfo = null;
   exports.ST_Utils = null;
   exports.ST_Script = null;
+  exports.ST_Personas = null;
   exports.extVersion = '?';
   exports.__extPath = 'third-party/ST-Copilot';
 
@@ -19212,6 +19124,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       try { exports.ST_WorldInfo = await import('/scripts/world-info.js'); } catch(e) { console.warn('ST-Copilot: Could not import world-info.js'); }
       try { exports.ST_Utils = await import('/scripts/utils.js'); } catch(e) { console.warn('ST-Copilot: Could not import utils.js'); }
       try { exports.ST_Script = await import('../../../../script.js'); } catch(e) { console.warn('ST-Copilot: Could not import script.js'); }
+      try { exports.ST_Personas = await import('../../../../scripts/personas.js'); } catch(e) { console.warn('ST-Copilot: Could not import personas.js'); }
       
       await loadManifestVersion();
       
@@ -19262,8 +19175,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       await onChatChanged();
       refreshSessionDropdown();
       
-      const es = ctx.eventSource || window.eventSource;
-      const et = ctx.event_types || window.event_types || {};
+      const es = ctx.eventSource;
+      const et = ctx.eventTypes || {};
 
       if (es) {
           es.on(et.CHAT_CHANGED || 'chat_changed', async () => {
@@ -19358,6 +19271,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
   var index = /*#__PURE__*/Object.freeze({
     __proto__: null,
+    get ST_Personas () { return exports.ST_Personas; },
     get ST_Script () { return exports.ST_Script; },
     get ST_Utils () { return exports.ST_Utils; },
     get ST_WorldInfo () { return exports.ST_WorldInfo; },

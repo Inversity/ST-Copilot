@@ -319,14 +319,12 @@ export async function estimateTokens(text) {
         
         try {
             if (typeof ctx.getTokenCountAsync === 'function') return await ctx.getTokenCountAsync(str);
-            if (typeof window.getTokenCountAsync === 'function') return await window.getTokenCountAsync(str);
         } catch (_) {}
         
         await new Promise(resolve => setTimeout(resolve, 0));
 
         try {
             if (typeof ctx.getTokenCount === 'function') return ctx.getTokenCount(str);
-            if (typeof window.getTokenCount === 'function') return window.getTokenCount(str);
         } catch (_) {}
         
         try {

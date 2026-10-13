@@ -16,7 +16,7 @@ export function buildChatEditAIInstructions(settings) {
     if (!settings.chatEditAIEnabled) return '';
     const ctx = SillyTavern.getContext();
     const stMsgs = ctx.chat || [];
-    const chatDisplayName = ctx.chatMetadata?.name || (typeof window.chat_file_name === 'string' ? window.chat_file_name : '') || 'unknown';
+    const chatDisplayName = ctx.chatMetadata?.name || ctx.getCurrentChatId?.() || 'unknown';
     const depth = Math.max(0, parseInt(settings.contextDepth) || 0);
     let slice;
     try {
@@ -132,10 +132,9 @@ export function _resolveStMsgByIndexOrId(change) {
 
 export async function _saveChatMessage(ctx, idx, msg) {
     try {
-        if (typeof ctx.saveChat === 'function') await ctx.saveChat();
-        else if (typeof window.saveChat === 'function') await window.saveChat();
-        const es = ctx.eventSource || window.eventSource;
-        const et = ctx.event_types || window.event_types;
+        await ctx.saveChat();
+        const es = ctx.eventSource;
+        const et = ctx.eventTypes;
         if (es && et?.MESSAGE_UPDATED) {
             es.emit(et.MESSAGE_UPDATED, idx);
         }
@@ -144,18 +143,16 @@ export async function _saveChatMessage(ctx, idx, msg) {
 
 export async function _saveChatAfterDelete(ctx) {
     try {
-        if (typeof ctx.saveChat === 'function') await ctx.saveChat();
-        else if (typeof window.saveChat === 'function') await window.saveChat();
+        await ctx.saveChat();
     } catch(e) {}
 }
 
 export function _refreshSTChatDOM(ctx) {
     try {
-        const es = ctx.eventSource || window.eventSource;
-        const et = ctx.event_types || window.event_types;
+        const es = ctx.eventSource;
+        const et = ctx.eventTypes;
         if (es && et?.CHAT_CHANGED) es.emit(et.CHAT_CHANGED);
-        if (typeof window.printMessages === 'function') window.printMessages();
-        else if (typeof ctx.printMessages === 'function') ctx.printMessages();
+        ctx.printMessages();
     } catch(_) {}
 }
 
@@ -198,20 +195,13 @@ export async function applyChatChanges(changes, afterMsgId = null) {
             if (change.action === 'rename_chat') {
                 const newName = change.name.trim();
                 const ctx2 = SillyTavern.getContext();
-                const oldFileName = window.chat_file_name;
-                
+
                 try {
+                    // Copilot's sessions live in the chat's metadata, so they move with the file.
                     if (typeof ctx2.executeSlashCommandsWithOptions === 'function') {
                         await ctx2.executeSlashCommandsWithOptions(`/renamechat ${newName}`);
                     }
-                    
-                    if (window.chat_file_name && window.chat_file_name !== oldFileName) {
-                        const sess = getCurrentSession();
-                        if (sess && sess.stChatId === oldFileName) {
-                            sess.stChatId = window.chat_file_name;
-                        }
-                    }
-                    
+
                     if (ctx2.chatMetadata) {
                         ctx2.chatMetadata.name = newName;
                     }

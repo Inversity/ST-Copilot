@@ -1,3 +1,5 @@
+import { getCurrentPersonaId } from '../utils/util-st.js';
+
 export function _getAspectEvolutiaCharFields() {
     try {
         const ctx = SillyTavern.getContext();
@@ -19,13 +21,8 @@ export function _getAspectEvolutiaCharFields() {
 export function _getAspectEvolutiaPersonaFields() {
     try {
         const ctx = SillyTavern.getContext();
-        const pu = window.power_user || ctx.powerUserSettings || {};
-        let personaId = window.user_avatar || ctx.user_avatar || ctx.userAvatar || ctx.personaId || ctx.activePersonaId || ctx.active_persona_id;
-        if (!personaId && typeof document !== 'undefined') {
-            const selected = document.querySelector('#user_avatar_block .avatar-container.selected, #persona_container .avatar-container.selected, .persona_selected');
-            if (selected) personaId = selected.getAttribute('data-avatar-id') || selected.dataset?.avatarId;
-        }
-        if (typeof personaId === 'object' && personaId !== null) personaId = personaId.avatarId || personaId.avatar_id || personaId.user_avatar || personaId.userAvatar || personaId.id;
+        const pu = ctx.powerUserSettings || {};
+        const personaId = getCurrentPersonaId();
         if (!personaId) return null;
 
         const AE_KEY = 'st-description-swap-fields';

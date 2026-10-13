@@ -3,7 +3,8 @@ import { getSettings, saveSettings, getCurrentSession } from '../session.js';
 import { _dbgAdd } from '../utils/util-debug.js';
 import { escHtml } from '../utils/util-dom.js';
 import { _sanitizeProposedTags, applySearchReplaceToField, _repairJSON, _ensureWrapped } from '../utils/util-text.js';
-import { getTagsForCharacter, getUserPersona, getAuthorsNote } from '../utils/util-st.js';
+import { getTagsForCharacter, getUserPersona, getAuthorsNote, getCurrentPersonaId } from '../utils/util-st.js';
+import { ST_Script } from '../index.js';
 import { _getAspectEvolutiaCharFields, _getAspectEvolutiaPersonaFields } from '../integrations/integ-evolutia.js';
 
 export function getEffectiveCharField(settings, k) {
@@ -530,8 +531,8 @@ function _refreshOpenAltGreetingsPopup(greetings) {
 }
 
 function _emitCharacterEdited(ctx, char) {
-    const es = ctx.eventSource || window.eventSource;
-    const et = ctx.event_types || window.event_types;
+    const es = ctx.eventSource;
+    const et = ctx.eventTypes;
     if (!es || !et?.CHARACTER_EDITED) return;
     const id = (ctx.characters || []).findIndex(c => c.avatar === char.avatar);
     es.emit(et.CHARACTER_EDITED, { detail: { id: id >= 0 ? id : ctx.characterId, character: char } });
@@ -588,13 +589,8 @@ export async function saveCharacterField(char, fieldId, newValue) {
 
     if (fieldId.startsWith('evolutia_user:')) {
         const aeName = fieldId.split('evolutia_user:')[1];
-        const pu = window.power_user || ctx.powerUserSettings || {};
-        let personaId = window.user_avatar || ctx.user_avatar || ctx.userAvatar || ctx.personaId || ctx.activePersonaId || ctx.active_persona_id;
-        if (!personaId && typeof document !== 'undefined') {
-            const selected = document.querySelector('#user_avatar_block .avatar-container.selected, #persona_container .avatar-container.selected, .persona_selected');
-            if (selected) personaId = selected.getAttribute('data-avatar-id') || selected.dataset?.avatarId;
-        }
-        if (typeof personaId === 'object' && personaId !== null) personaId = personaId.avatarId || personaId.avatar_id || personaId.user_avatar || personaId.userAvatar || personaId.id;
+        const pu = ctx.powerUserSettings || {};
+        const personaId = getCurrentPersonaId();
         
         const AE_KEY = 'st-description-swap-fields';
         const personaState = pu[AE_KEY]?.personaDynamicFields?.[personaId];
@@ -614,8 +610,7 @@ export async function saveCharacterField(char, fieldId, newValue) {
         
         f.content = newValue;
         
-        if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
-        else if (typeof window.saveSettingsDebounced === 'function') window.saveSettingsDebounced();
+        ctx.saveSettingsDebounced();
         return;
     }
 
@@ -642,24 +637,15 @@ export async function saveCharacterField(char, fieldId, newValue) {
         }
         char.name = trimmedName;
         if (char.data) char.data.name = trimmedName;
-        if (typeof ctx.getCharacters === 'function') await ctx.getCharacters().catch(() => {});
-        else if (typeof window.getCharacters === 'function') await window.getCharacters().catch(() => {});
+        await ctx.getCharacters().catch(() => {});
         _emitCharacterEdited(ctx, char);
-        if (typeof window.PrintCharacterList === 'function') window.PrintCharacterList();
+        await ST_Script?.printCharacters?.(false);
         return;
     }
     
     if (fieldId === 'user_persona') {
-        const pu = window.power_user || ctx.powerUserSettings || {};
-        
-        let avatar = window.user_avatar || ctx.user_avatar || ctx.userAvatar || ctx.personaId || ctx.activePersonaId || ctx.active_persona_id;
-        if (!avatar && typeof document !== 'undefined') {
-            const selected = document.querySelector('#user_avatar_block .avatar-container.selected, #persona_container .avatar-container.selected, .persona_selected');
-            if (selected) avatar = selected.getAttribute('data-avatar-id') || selected.dataset?.avatarId;
-        }
-        if (typeof avatar === 'object' && avatar !== null) {
-            avatar = avatar.avatarId || avatar.avatar_id || avatar.user_avatar || avatar.userAvatar || avatar.id;
-        }
+        const pu = ctx.powerUserSettings || {};
+        const avatar = getCurrentPersonaId();
 
         if (avatar) {
             try {
@@ -681,8 +667,7 @@ export async function saveCharacterField(char, fieldId, newValue) {
             pu.persona_description = newValue;
         }
         
-        if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
-        else if (typeof window.saveSettingsDebounced === 'function') window.saveSettingsDebounced();
+        ctx.saveSettingsDebounced();
         
         ['persona_description', 'user_persona_edit', 'user_persona_textarea', 'persona_description_textarea'].forEach(id => {
             const el = document.getElementById(id);
@@ -721,8 +706,7 @@ export async function saveCharacterField(char, fieldId, newValue) {
 
             if (toUnlink.length > 0) {
                 ctx.tagMap[avatar] = currentTagIds.filter(id => !toUnlink.includes(id));
-                if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
-                else if (typeof window.saveSettingsDebounced === 'function') window.saveSettingsDebounced();
+                ctx.saveSettingsDebounced();
             }
         }
         
@@ -866,17 +850,13 @@ export async function createCharacterAPI(data) {
     await new Promise(r => setTimeout(r, 400));
 
     try {
-        if (typeof ctx.getCharacters === 'function') {
-            await ctx.getCharacters();
-        } else if (typeof window.getCharacters === 'function') {
-            await window.getCharacters();
-        }
+        await ctx.getCharacters();
     } catch(e) {
         console.warn('[ST-Copilot-Debug] Failed to reload list of characters:', e);
         _dbgAdd('CHAR_CREATE_RELOAD_ERR', { error: e.message });
     }
 
-    const chars = ctx.characters || window.characters || [];
+    const chars = ctx.characters || [];
     
     const foundChar = chars.find(c => c.avatar === newAvatar);
     if (foundChar) {
@@ -899,11 +879,9 @@ export async function createCharacterAPI(data) {
     }
 
     try {
-        if (typeof window.PrintCharacterList === 'function') {
-            window.PrintCharacterList();
-        }
-        const es = ctx.eventSource || window.eventSource;
-        const et = ctx.event_types || window.event_types;
+        await ST_Script?.printCharacters?.(true);
+        const es = ctx.eventSource;
+        const et = ctx.eventTypes;
         if (es && et?.CHARACTERS_UPDATED) {
             es.emit(et.CHARACTERS_UPDATED);
         }

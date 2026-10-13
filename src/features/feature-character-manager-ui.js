@@ -1,7 +1,7 @@
 import { EXT_DISPLAY, I, THEME_PRESETS } from '../constants.js';
 import { getSettings, saveSettings } from '../session.js';
 import { applyCustomTheme, bringWindowToFront } from '../ui/ui-window.js';
-import { getUserPersona } from '../utils/util-st.js';
+import { getUserPersona, getCurrentPersonaId } from '../utils/util-st.js';
 import { t, translate } from '../utils/util-i18n.js';
 import {
     getActiveCharacterEntities, getCharFieldValue, saveCharacterField,
@@ -73,14 +73,7 @@ function _showUnsavedDialog(onSave, onDiscard) {
 
 function _getPersonaEntity() {
     const ctx = SillyTavern.getContext();
-    let avatar = window.user_avatar || ctx.user_avatar || ctx.userAvatar || ctx.personaId || ctx.activePersonaId || ctx.active_persona_id;
-    if (!avatar && typeof document !== 'undefined') {
-        const selected = document.querySelector('#user_avatar_block .avatar-container.selected, #persona_container .avatar-container.selected, .persona_selected');
-        if (selected) avatar = selected.getAttribute('data-avatar-id') || selected.dataset?.avatarId;
-    }
-    if (typeof avatar === 'object' && avatar !== null) {
-        avatar = avatar.avatarId || avatar.avatar_id || avatar.user_avatar || avatar.userAvatar || avatar.id;
-    }
+    const avatar = getCurrentPersonaId();
     return { id: '__persona__', name: ctx.name1 || 'User', avatar: avatar || '', isPersona: true };
 }
 

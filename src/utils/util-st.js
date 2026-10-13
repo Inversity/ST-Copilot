@@ -1,4 +1,11 @@
 import { expandMacros } from '../session.js';
+import { ST_Personas } from '../index.js';
+
+// The selected persona's avatar id. ST keeps it in personas.js (user_avatar); getContext()
+// has no field for it.
+export function getCurrentPersonaId() {
+    return ST_Personas?.user_avatar || '';
+}
 
 export function getTagsForCharacter(char) {
     if (!char) return [];
@@ -109,25 +116,13 @@ export function getUserPersona() {
     const ctx = SillyTavern.getContext();
     
     try {
-        let expanded = '';
-        if (typeof ctx.substituteParams === 'function') {
-            expanded = ctx.substituteParams('{{persona}}');
-        } else if (typeof window.substituteParams === 'function') {
-            expanded = window.substituteParams('{{persona}}');
-        }
+        const expanded = ctx.substituteParams('{{persona}}');
         if (expanded && expanded !== '{{persona}}') return expanded;
     } catch (_) {}
 
     try {
-        const pu = window.power_user || ctx.powerUserSettings || {};
-        let personaId = window.user_avatar || ctx.user_avatar || ctx.userAvatar || ctx.personaId || ctx.activePersonaId || ctx.active_persona_id;
-        if (!personaId && typeof document !== 'undefined') {
-            const selected = document.querySelector('#user_avatar_block .avatar-container.selected, #persona_container .avatar-container.selected, .persona_selected');
-            if (selected) personaId = selected.getAttribute('data-avatar-id') || selected.dataset?.avatarId;
-        }
-        if (typeof personaId === 'object' && personaId !== null) {
-            personaId = personaId.avatarId || personaId.avatar_id || personaId.user_avatar || personaId.userAvatar || personaId.id;
-        }
+        const pu = ctx.powerUserSettings || {};
+        const personaId = getCurrentPersonaId();
 
         if (personaId && pu.persona_descriptions) {
             const pd = pu.persona_descriptions[personaId];

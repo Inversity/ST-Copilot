@@ -1562,7 +1562,7 @@ export function updateMsgCount(session) {
 
 export function updateDepthSlidersMax() {
     const ctx = SillyTavern.getContext();
-    const chat = ctx.chat || window.chat ||[];
+    const chat = ctx.chat || [];
     const maxVal = Math.max(1, chat.length);
     
     if (state.lastChatLen === -1) {
@@ -2034,10 +2034,6 @@ export function showGenerationError(err) {
         }
     } else {
         fullError = String(err);
-    }
-
-    if (window.last_api_error && errorSummary.includes('userStopped') === false) {
-        fullError += '\n\n--- ST LAST API ERROR ---\n' + (typeof window.last_api_error === 'object' ? JSON.stringify(window.last_api_error, null, 2) : String(window.last_api_error));
     }
 
     showCustomDialog({

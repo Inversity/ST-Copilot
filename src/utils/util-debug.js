@@ -111,10 +111,10 @@ export function dbgDownload() {
     const enabledExtensions = allExts.filter(ext => !disabledExts.includes(ext));
 
     const stEnv = {
-        stVersion: document.getElementById('st_version')?.textContent?.trim() || document.querySelector('.drawer-version')?.textContent?.trim() || window.system_version || 'unknown',
+        stVersion: document.getElementById('st_version')?.textContent?.trim() || document.querySelector('.drawer-version')?.textContent?.trim() || 'unknown',
         userAgent: navigator.userAgent,
         mainApi: ctx.api_server || document.getElementById('main_api')?.value || 'unknown',
-        stMaxContext: ctx.chatCompletionSettings?.openai_max_context || ctx.textCompletionSettings?.max_context || window.token_max || 'unknown',
+        stMaxContext: ctx.chatCompletionSettings?.openai_max_context || ctx.textCompletionSettings?.max_context || ctx.maxContext || 'unknown',
         stStreamingEnabled: ctx.textCompletionSettings?.streaming || ctx.chatCompletionSettings?.stream_openai || false,
         enabledExtensions: enabledExtensions,
         characterId: ctx.characterId,

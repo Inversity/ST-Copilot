@@ -14,8 +14,8 @@ export function setupExternalWIChangeListener() {
     if (_wiExternalListenerBound) return;
     _wiExternalListenerBound = true;
     const ctx = SillyTavern.getContext();
-    const es = ctx.eventSource || window.eventSource;
-    const et = ctx.event_types || window.event_types || {};
+    const es = ctx.eventSource;
+    const et = ctx.eventTypes || {};
     if (!es) return;
     es.on(et.WORLDINFO_UPDATED || 'worldinfo_updated', (name) => {
         if (name) delete wiCache[name];
@@ -307,7 +307,7 @@ export function getActiveLorebookNames() {
     const ctx = SillyTavern.getContext();
     const names = new Set();
 
-    const globalBooks = ST_WorldInfo?.selected_world_info || window.selected_world_info ||[];
+    const globalBooks = ST_WorldInfo?.selected_world_info || [];
     if (Array.isArray(globalBooks)) {
         globalBooks.forEach(n => n && names.add(n));
     }
@@ -322,7 +322,7 @@ export function getActiveLorebookNames() {
         if (ST_Utils && typeof ST_Utils.getCharaFilename === 'function') {
             fileName = ST_Utils.getCharaFilename(charId);
         }
-        const charLoreList = ST_WorldInfo?.world_info?.charLore || window.world_info?.charLore;
+        const charLoreList = ST_WorldInfo?.world_info?.charLore;
         if (fileName && Array.isArray(charLoreList)) {
             const extraCharLore = charLoreList.find(e => e.name === fileName);
             if (extraCharLore && Array.isArray(extraCharLore.extraBooks)) {
@@ -331,7 +331,7 @@ export function getActiveLorebookNames() {
         }
     }
 
-    const wiKey = ST_WorldInfo?.METADATA_KEY || window.WI_METADATA_KEY || 'world_info';
+    const wiKey = ST_WorldInfo?.METADATA_KEY || 'world_info';
     const chatWorldName = ctx.chatMetadata?.[wiKey];
     if (chatWorldName && typeof chatWorldName === 'string') names.add(chatWorldName);
 
@@ -345,7 +345,7 @@ export function getBookSourceType(name) {
     if (name === EMBEDDED_BOOK_KEY) return 'embedded';
     const ctx = SillyTavern.getContext();
     
-    const globalBooks = ST_WorldInfo?.selected_world_info || window.selected_world_info || [];
+    const globalBooks = ST_WorldInfo?.selected_world_info || [];
     if (Array.isArray(globalBooks) && globalBooks.includes(name)) {
         return 'global';
     }
@@ -360,14 +360,14 @@ export function getBookSourceType(name) {
         if (ST_Utils && typeof ST_Utils.getCharaFilename === 'function') {
             fileName = ST_Utils.getCharaFilename(charId);
         }
-        const charLoreList = ST_WorldInfo?.world_info?.charLore || window.world_info?.charLore;
+        const charLoreList = ST_WorldInfo?.world_info?.charLore;
         if (fileName && Array.isArray(charLoreList)) {
             const extraCharLore = charLoreList.find(e => e.name === fileName);
             if (extraCharLore?.extraBooks?.includes(name)) return 'character';
         }
     }
 
-    const wiKey = ST_WorldInfo?.METADATA_KEY || window.WI_METADATA_KEY || 'world_info';
+    const wiKey = ST_WorldInfo?.METADATA_KEY || 'world_info';
     if (ctx.chatMetadata?.[wiKey] === name) return 'chat';
     
     if (ctx.powerUserSettings?.persona_description_lorebook === name) return 'chat';
@@ -601,15 +601,13 @@ export async function bindNewLorebookToCharacter(bookName) {
     try {
         const ctx = SillyTavern.getContext();
 
-        const allBooks = window.world_names || ST_WorldInfo?.world_names || [];
+        const allBooks = ctx.getWorldInfoNames?.() || ST_WorldInfo?.world_names || [];
         const isNew = !allBooks.includes(bookName);
 
         if (isNew) {
             console.log('[ST-Copilot-Debug] Lorebook is new. Requesting ST to create...');
             if (typeof ST_WorldInfo?.createNewWorldInfo === 'function') {
                 await ST_WorldInfo.createNewWorldInfo(bookName);
-            } else if (typeof window.createNewWorldInfo === 'function') {
-                await window.createNewWorldInfo(bookName);
             } else {
                 const payload = { entries: {}, extensions: {} };
                 await fetch('/api/worldinfo/edit', {
@@ -618,50 +616,33 @@ export async function bindNewLorebookToCharacter(bookName) {
                     body: JSON.stringify({ name: bookName, data: payload }),
                 });
                 if (typeof ctx.updateWorldInfoList === 'function') await ctx.updateWorldInfoList();
-                else if (typeof window.loadWorldInfoList === 'function') await window.loadWorldInfoList();
             }
             toastr.success(t`Lorebook "${bookName}" created successfully.`, EXT_DISPLAY);
         }
 
         delete wiCache[bookName];
 
-        const charId = ctx.characterId;
-        if (charId === undefined || charId === null) return;
+        const char = ctx.characters?.[ctx.characterId];
+        if (!char?.avatar) return;
 
-        let fileName = ctx.characters?.[charId]?.avatar;
-        if (ST_Utils && typeof ST_Utils.getCharaFilename === 'function') {
-            fileName = ST_Utils.getCharaFilename(charId);
-        } else if (typeof window.getCharaFilename === 'function') {
-            fileName = window.getCharaFilename(charId);
-        }
-        if (!fileName) return;
-
-        let wiSettings = window.world_info || ST_WorldInfo?.world_info;
+        // ST keeps a character's extra books in world_info.charLore, keyed by its file name.
+        const fileName = ST_Utils?.getCharaFilename?.(null, { manualAvatarKey: char.avatar }) || char.avatar.replace(/\.[^.]+$/, '');
+        const wiSettings = ST_WorldInfo?.world_info;
         if (!wiSettings) return;
+        const current = (wiSettings.charLore || []).find(e => e.name === fileName)?.extraBooks || [];
+        if (current.includes(bookName)) return;
 
-        if (!Array.isArray(wiSettings.charLore)) wiSettings.charLore = [];
-
-        const charLoreList = wiSettings.charLore;
-        let extraCharLore = charLoreList.find(e => e.name === fileName);
-        if (!extraCharLore) {
-            extraCharLore = { name: fileName, extraBooks: [] };
-            charLoreList.push(extraCharLore);
+        // charUpdateAddAuxWorld updates the list and saves ST's settings.
+        if (typeof ST_WorldInfo.charUpdateAddAuxWorld === 'function') {
+            await ST_WorldInfo.charUpdateAddAuxWorld(char.avatar, bookName);
+        } else {
+            if (!Array.isArray(wiSettings.charLore)) wiSettings.charLore = [];
+            const existing = wiSettings.charLore.find(e => e.name === fileName);
+            if (existing) existing.extraBooks = [...(existing.extraBooks || []), bookName];
+            else wiSettings.charLore.push({ name: fileName, extraBooks: [bookName] });
+            ctx.saveSettingsDebounced();
         }
-        if (!Array.isArray(extraCharLore.extraBooks)) extraCharLore.extraBooks = [];
-
-        if (!extraCharLore.extraBooks.includes(bookName)) {
-            extraCharLore.extraBooks.push(bookName);
-            console.log(`[ST-Copilot-Debug] Added "${bookName}" to extraBooks.`);
-
-            if (typeof ST_WorldInfo?.saveWorldInfoSettings === 'function') ST_WorldInfo.saveWorldInfoSettings();
-            else if (typeof window.saveWorldInfoSettings === 'function') window.saveWorldInfoSettings();
-
-            if (typeof window.saveSettingsDebounced === 'function') window.saveSettingsDebounced();
-            else if (typeof saveSettingsDebounced === 'function') saveSettingsDebounced();
-
-            if (typeof ST_WorldInfo?.printWorldInfoCharacters === 'function') ST_WorldInfo.printWorldInfoCharacters();
-            else if (typeof window.printWorldInfoCharacters === 'function') window.printWorldInfoCharacters();
-        }
+        console.log(`[ST-Copilot-Debug] Added "${bookName}" to extraBooks.`);
     } catch (e) {
         _dbgAdd('LB_AUTO_BIND_NEW_BOOK_FAILED', { bookName, error: e.message });
         console.error(`[ST-Copilot-Debug] Exception in bindNewLorebookToCharacter:`, e);

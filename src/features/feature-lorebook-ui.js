@@ -11,6 +11,7 @@ import { t, translate } from '../utils/util-i18n.js';
 import { applyCustomTheme, bringWindowToFront } from '../ui/ui-window.js';
 import { updateMsgCount, scrollToBottom, _renderMsgBodyContent, addHistoryToSwipe } from '../ui/ui-chat.js';
 import { recordStat, SM } from './feature-stats.js';
+import { getCurrentPersonaId } from '../utils/util-st.js';
 
 export function reconstructLBChangesBlock(pendingChanges) {
     if (!pendingChanges.length) return '';
@@ -892,15 +893,14 @@ export async function refreshLorebookList() {
     const globalBooks = ST_WorldInfo?.selected_world_info || (ctx.worldInfoSettings?.globalSelect || []);
         
     // (Ch)
-    const chatMetadata = window.chat_metadata || ctx.chatMetadata || {};
+    const chatMetadata = ctx.chatMetadata || {};
     const chatBook = chatMetadata.world_info || null;
 
     // (P)
-    const pu = window.power_user || ctx.powerUserSettings || {};
+    const pu = ctx.powerUserSettings || {};
     let personaBook = pu.persona_description_lorebook || null;
     if (!personaBook) {
-        let personaId = window.user_avatar || ctx.user_avatar || ctx.userAvatar || ctx.personaId || ctx.activePersonaId || ctx.active_persona_id;
-        if (typeof personaId === 'object' && personaId !== null) personaId = personaId.avatarId || personaId.id;
+        const personaId = getCurrentPersonaId();
         if (personaId && pu.persona_descriptions?.[personaId]?.lorebook) {
             personaBook = pu.persona_descriptions[personaId].lorebook;
         }
@@ -908,7 +908,7 @@ export async function refreshLorebookList() {
 
     //(C) - Primary + Additional
     const charBooks = new Set();
-    const chars = window.characters || ctx.characters || [];
+    const chars = ctx.characters || [];
     
     chars.forEach((char, idx) => {
         if (!char) return;
@@ -1297,8 +1297,8 @@ export function setupLorebookManagerListeners() {
     });
 
     const ctx = SillyTavern.getContext();
-    const es = ctx.eventSource || window.eventSource;
-    const et = ctx.event_types || window.event_types || {};
+    const es = ctx.eventSource;
+    const et = ctx.eventTypes || {};
     es?.on?.(et.WORLDINFO_UPDATED || 'worldinfo_updated', (name) => {
         const overlay = document.getElementById('scp-lb-overlay');
         if (!overlay || overlay.style.display === 'none') return;
