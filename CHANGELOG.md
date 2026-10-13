@@ -2,6 +2,12 @@
 
 This fork continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker, whose last release was 2.9.0 (2026-07-02). Versions before 3.0.0 are upstream's and are listed in the extension's "What's New" panel.
 
+## 3.0.3 (2026-10-12)
+
+- **Long replies stream smoothly.** Each frame used to re-parse and rebuild the whole reply, so streaming slowed down as a reply grew. Finished paragraphs are now rendered once and kept; only the paragraph being written is redrawn, with output identical to a full render (checked by a test over every intermediate state of many generated replies). On a ~28 KB reply, slow frames went from 30% to under 2%.
+- **Copilot follows SillyTavern's Smooth Streaming setting.** With Smooth Streaming on, Copilot replies appear at the same pace as SillyTavern's own, using its speed and "No think" options. As in SillyTavern, there is no pacing while the window is not focused. Stop shows the rest of the reply at once.
+- Benchmark mock: structured markdown replies, and accurate high streaming rates on Windows.
+
 ## 3.0.2 (2026-10-12)
 
 - **Long sessions stay smooth.** Only the newest 50 Copilot messages are rendered; "Show older messages" adds 50 more without moving the view, and search and starred-message jumps still cover the whole session. Every rendered message used to be laid out again on each frame while a reply streamed. On a 300-message session, slow frames while streaming went from 55% to 3%, and typing in the input stopped stuttering.

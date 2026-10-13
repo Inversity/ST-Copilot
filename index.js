@@ -293,6 +293,15 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       // ─── Changelog Data ──────────────────────────────────────────────────────────
   const CHANGELOG = [
       {
+          version: '3.0.3',
+          date: '10/12/2026',
+          announce: true,
+          notes: [
+              '<strong>Long replies stream smoothly</strong>: finished paragraphs are kept and only the one being written is redrawn, so streaming no longer slows down as a reply grows.',
+              '<strong>Smooth Streaming</strong>: Copilot follows SillyTavern\'s Smooth Streaming setting (speed and "No think" included). Stop shows the rest at once.',
+          ],
+      },
+      {
           version: '3.0.2',
           date: '10/12/2026',
           announce: true,
