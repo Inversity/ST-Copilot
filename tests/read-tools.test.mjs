@@ -94,6 +94,42 @@ test('context lists greetings left out of it by id, with their opening words', a
     assert.doesNotMatch(all, /not_included/);
 });
 
+test('get_generation_settings reports live chat completion settings without secrets', async () => {
+    globalThis.__stContext = {
+        mainApi: 'openai',
+        getChatCompletionModel: () => 'anthropic/claude-opus-4.6',
+        chatCompletionSettings: { chat_completion_source: 'openrouter', preset_settings_openai: 'Default', temp_openai: 0.8, top_p_openai: 0.95,
+            openai_max_context: 64000, openai_max_tokens: 2048, reasoning_effort: 'medium', stream_openai: true, reverse_proxy: 'http://x', proxy_password: 'secret' },
+        powerUserSettings: {},
+    };
+    const r = await executeTool('get_generation_settings', {});
+    assert.equal(r.model, 'anthropic/claude-opus-4.6');
+    assert.equal(r.sampling.temperature, 0.8);
+    assert.equal(r.context_size, 64000);
+    assert.doesNotMatch(JSON.stringify(r), /secret|reverse_proxy|proxy_password/);
+});
+
+test('get_quick_replies lists sets, and a named set in full', async () => {
+    globalThis.__stContext = {};
+    globalThis.quickReplyApi = {
+        listGlobalSets: () => ['Tools'], listChatSets: () => [], listSets: () => ['Tools', 'Other'],
+        getSetByName: name => name === 'Tools' ? { name: 'Tools', qrList: [{ label: 'Recap', message: '/gen Summarize', executeOnUser: true, isHidden: false }] } : undefined,
+    };
+    const list = await executeTool('get_quick_replies', {});
+    assert.deepEqual(list.active_sets, { global: ['Tools'], chat: [] });
+    const set = await executeTool('get_quick_replies', { set_name: 'Tools' });
+    assert.deepEqual(set.replies[0], { label: 'Recap', title: undefined, message: '/gen Summarize', hidden: false, runs_on: ['user'], automation_id: undefined });
+    const missing = await executeTool('get_quick_replies', { set_name: 'Nope' });
+    assert.match(missing.error, /No quick reply set/);
+    delete globalThis.quickReplyApi;
+});
+
+test('get_regex_scripts fails gracefully without the Regex extension', async () => {
+    globalThis.__stContext = {};
+    const r = await executeTool('get_regex_scripts', {});
+    assert.match(r.error, /Regex extension/);
+});
+
 test('get_char_info can return selected greetings and always the total', async () => {
     withChat([], { greetings: ['a', 'b', 'c', 'd'] });
     const r = await executeTool('get_char_info', { fields: ['alternate_greetings'], greeting_ids: [2, 4] });

@@ -19,6 +19,7 @@ const _messageView = (ctx, m, i) => ({
 });
 const _preview = (text, max) => text.length > max ? { content: text.slice(0, max) + '...[truncated]', truncated: true } : { content: text };
 import { getPromptsForTool } from './feature-prompt-engine.js';
+import { loadRegexModule } from '../integrations/integ-regex.js';
 
 export function getEnabledTools() {
     const s = getSettings();
@@ -285,6 +286,78 @@ export async function executeTool(toolName, toolInput) {
             return {
                 messages: filtered.map(m => ({ ..._messageView(ctx, m, m._idx), ..._preview(m.mes || '', 600) })),
                 note: `Use "index" values in chat-changes proposals for precise targeting. ${PREVIEW_NOTE_MESSAGES}`,
+            };
+        }
+        case 'get_generation_settings': {
+            // Read-only view of what SillyTavern is sending with right now (live settings, so
+            // unsaved changes included). Never includes keys or secrets.
+            const pu = ctx.powerUserSettings || {};
+            if (ctx.mainApi === 'openai') {
+                const s = ctx.chatCompletionSettings || {};
+                return {
+                    api: 'chat_completion',
+                    source: s.chat_completion_source,
+                    model: typeof ctx.getChatCompletionModel === 'function' ? ctx.getChatCompletionModel() : null,
+                    preset: s.preset_settings_openai,
+                    sampling: { temperature: s.temp_openai, top_p: s.top_p_openai, top_k: s.top_k_openai, min_p: s.min_p_openai,
+                        frequency_penalty: s.freq_pen_openai, presence_penalty: s.pres_pen_openai, repetition_penalty: s.repetition_penalty_openai, seed: s.seed },
+                    context_size: s.openai_max_context,
+                    max_response_tokens: s.openai_max_tokens,
+                    reasoning_effort: s.reasoning_effort,
+                    show_thoughts: s.show_thoughts,
+                    streaming: s.stream_openai,
+                };
+            }
+            const s = ctx.textCompletionSettings || {};
+            return {
+                api: ctx.mainApi === 'textgenerationwebui' ? 'text_completion' : ctx.mainApi,
+                backend: s.type,
+                preset: s.preset_settings_textgenerationwebui ?? null,
+                sampling: { temperature: s.temp, top_p: s.top_p, top_k: s.top_k, min_p: s.min_p, repetition_penalty: s.rep_pen, seed: s.seed },
+                context_size: ctx.maxContext,
+                context_template: pu.context?.preset ?? null,
+                instruct_template: pu.instruct?.enabled ? (pu.instruct?.preset ?? null) : 'disabled',
+                streaming: s.streaming,
+            };
+        }
+        case 'get_regex_scripts': {
+            const mod = await loadRegexModule();
+            if (!mod?.getScriptsByType || !mod?.SCRIPT_TYPES) return { error: 'The Regex extension is not available.' };
+            const placementNames = Object.fromEntries(Object.entries(mod.regex_placement || {}).map(([k, v]) => [v, k.toLowerCase()]));
+            const scopes = [['global', mod.SCRIPT_TYPES.GLOBAL], ['character', mod.SCRIPT_TYPES.SCOPED], ['preset', mod.SCRIPT_TYPES.PRESET]];
+            const scripts = scopes.flatMap(([scope, type]) => (mod.getScriptsByType(type, { allowedOnly: false }) || []).map(r => ({
+                scope,
+                name: r.scriptName,
+                find: r.findRegex,
+                replace: r.replaceString,
+                trim: r.trimStrings?.length ? r.trimStrings : undefined,
+                applies_to: (r.placement || []).map(p => placementNames[p] ?? p),
+                disabled: !!r.disabled,
+                display_only: !!r.markdownOnly,
+                prompt_only: !!r.promptOnly,
+                run_on_edit: !!r.runOnEdit,
+                depth: (r.minDepth ?? null) !== null || (r.maxDepth ?? null) !== null ? { min: r.minDepth ?? null, max: r.maxDepth ?? null } : undefined,
+            })));
+            return { count: scripts.length, scripts };
+        }
+        case 'get_quick_replies': {
+            const api = globalThis.quickReplyApi;
+            if (!api) return { error: 'The Quick Replies extension is not available.' };
+            const active = { global: api.listGlobalSets?.() || [], chat: api.listChatSets?.() || [] };
+            if (!toolInput.set_name) return { active_sets: active, all_sets: api.listSets?.() || [], note: 'Pass set_name to read a set\'s replies in full.' };
+            const set = api.getSetByName?.(toolInput.set_name);
+            if (!set) return { error: `No quick reply set named "${toolInput.set_name}".`, all_sets: api.listSets?.() || [] };
+            return {
+                set: set.name,
+                replies: (set.qrList || []).map(q => ({
+                    label: q.label,
+                    title: q.title || undefined,
+                    message: q.message,
+                    hidden: !!q.isHidden,
+                    runs_on: ['executeOnStartup', 'executeOnUser', 'executeOnAi', 'executeOnChatChange', 'executeOnGroupMemberDraft', 'executeOnNewChat']
+                        .filter(k => q[k]).map(k => k.replace(/^executeOn/, '').replace(/^./, c => c.toLowerCase())),
+                    automation_id: q.automationId || undefined,
+                })),
             };
         }
         case 'read_messages': {
