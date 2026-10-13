@@ -1021,8 +1021,8 @@ export async function renderEntryList(bookName, search = '') {
     const s = getSettings();
     const overrides = s.lorebookEntryOverrides || {};
     const isBookSelected = (s.lorebookSelectedBooks || []).includes(bookName);
-    const activeEntryUids = new Set(
-        lastActiveEntries.filter(e => e.bookName === bookName).map(e => e.uid)
+    const activeEntryReasons = new Map(
+        lastActiveEntries.filter(e => e.bookName === bookName).map(e => [e.uid, e.reason])
     );
     const lowerSearch = search.toLowerCase();
     const filtered = search ? entries.filter(e => {
@@ -1039,7 +1039,10 @@ export async function renderEntryList(bookName, search = '') {
         const overKey = getEntryOverrideKey(bookName, entry);
         const override = overrides[overKey];
         const isDisabled = !!entry.disable;
-        const isInCtx = activeEntryUids.has(entry.uid);
+        const isInCtx = activeEntryReasons.has(entry.uid);
+        const inCtxBadge = activeEntryReasons.get(entry.uid) === 'st'
+            ? ' <span class="scp-lb-in-ctx-badge" data-i18n="[title]In SillyTavern\'s roleplay prompt and in Copilot\'s context;active in ST" title="In SillyTavern\'s roleplay prompt and in Copilot\'s context">active in ST</span>'
+            : ' <span class="scp-lb-in-ctx-badge" data-i18n="[title]In Copilot\'s context only, not in SillyTavern\'s roleplay prompt;in context" title="In Copilot\'s context only, not in SillyTavern\'s roleplay prompt">in context</span>';
         const row = document.createElement('div');
         row.className = `scp-lb-entry-row${isDisabled ? ' lb-disabled' : ''}${isInCtx ? ' lb-in-ctx' : ''}`;
         row.dataset.uid = entry.uid;
@@ -1053,7 +1056,7 @@ export async function renderEntryList(bookName, search = '') {
         row.innerHTML = `
             <div class="scp-lb-entry-indicator ${indClass}"></div>
             <div class="scp-lb-entry-info">
-                <span class="scp-lb-entry-name">${escHtml(entry.comment || `#${entry.uid}`)}${isInCtx ? ' <span class="scp-lb-in-ctx-badge" data-i18n="in context">in context</span>' : ''}</span>
+                <span class="scp-lb-entry-name">${escHtml(entry.comment || `#${entry.uid}`)}${isInCtx ? inCtxBadge : ''}</span>
                 <span class="scp-lb-entry-keys">${entry.key?.slice(0, 5).map(k => escHtml(k)).join(' · ') || '—'}</span>
             </div>
             <div class="scp-lb-entry-actions">

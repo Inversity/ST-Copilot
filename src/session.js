@@ -55,7 +55,6 @@ export function getSettings() {
         lorebookEntryOverrides: {},
         lorebookAIManageEnabled: true,
         lorebookManagePrompt: '',
-        lorebookSTScanDepth: 5,
         lorebookCopilotScanDepth: 6,
         floatingIconPersistent: false,
         reasoningTrimStrings: '',

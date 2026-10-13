@@ -81,11 +81,11 @@ The crown jewel of ST-Copilot. A dedicated UI for managing your World Info.
 *   **AI-Edits:** Ask Copilot to "Create a lorebook entry about the city we just entered." It will generate a Proposal Card in the chat. You can review the diff, edit the text inline, and apply it directly to your ST Lorebook with one click!
 
 Stop guessing if the AI knows about a lorebook entry.
-*   **Visual Indicators:** See exactly which entries were injected into Copilot's last API request (marked with an "in context" badge).
+*   **Visual Indicators:** See exactly which entries were injected into Copilot's last API request. "active in ST" marks entries that are also in SillyTavern's roleplay prompt; "in context" marks entries only Copilot sees.
 *   **Manual Overrides:** Force an entry to ALWAYS be included in Copilot's context, or NEVER be included, overriding SillyTavern's default keyword triggers.
 
 > **Does Copilot automatically know my lore?**
-> Yes! By default, "Auto-keywords" is ON. Copilot will scan your recent chat history and automatically inject relevant lorebook entries into its own memory, just like the main ST chat does.
+> Yes! By default, "Auto-keywords" is ON. Copilot sees the entries SillyTavern itself activated for the roleplay (from its last reply, or from a dry run of its World Info scan before the first one), plus entries your own Copilot messages activate under the same World Info rules and settings. Each entry is labelled with why it is there, so Copilot can tell you which ones the roleplay actually uses.
 
 ### 4. Lightning-Fast Quick Prompts
 ![Quick Prompts](Assets/Github/Settings_QuickPrompts.png)

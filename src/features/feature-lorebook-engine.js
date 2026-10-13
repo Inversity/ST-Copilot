@@ -1,7 +1,7 @@
 import { EXT_DISPLAY, EMBEDDED_BOOK_KEY, DEFAULT_LB_MANAGE_PROMPT, LB_FORMAT_BLOCK } from '../constants.js';
 import { getSettings, getCurrentSession, saveSettings, expandMacros } from '../session.js';
 import { _dbgAdd } from '../utils/util-debug.js';
-import { ST_WorldInfo, ST_Utils } from '../index.js';
+import { ST_WorldInfo, ST_Utils, ST_Script } from '../index.js';
 import { _repairJSON } from '../utils/util-text.js';
 import { t, translate } from '../utils/util-i18n.js';
 
@@ -23,6 +23,141 @@ export function setupExternalWIChangeListener() {
     es.on(et.WORLDINFO_SETTINGS_UPDATED || 'worldinfo_settings_updated', () => {
         for (const key of Object.keys(wiCache)) delete wiCache[key];
     });
+
+    // What ST itself put in the roleplay prompt. ST reports the entries after the World Info scan
+    // of a real generation (WORLD_INFO_ACTIVATED, not emitted when none activate), so the result is
+    // kept once that generation's request data is built. Dry runs and quiet generations that leave
+    // World Info out (skipWIAN) do not count.
+    es.on(et.GENERATION_STARTED, (_type, opts, dryRun) => {
+        stLore.pending = dryRun || opts?.skipWIAN ? null : new Set();
+    });
+    es.on(et.WORLD_INFO_ACTIVATED, (entries) => {
+        if (stLore.pending) stLore.pending = new Set((entries || []).map(e => loreKey(e.world, e.uid)));
+    });
+    es.on(et.GENERATE_AFTER_DATA, (_data, dryRun) => {
+        if (dryRun || !stLore.pending) return;
+        stLore.lastGeneration = { chatId: currentChatId(), keys: stLore.pending };
+        stLore.pending = null;
+        stLore.forcedPending = false;
+    });
+    // Entries forced on (e.g. by STscript) wait in ST for its next scan, and a dry run of the scan
+    // would use them up, so Copilot does not scan until a real generation has taken them.
+    es.on(et.WORLDINFO_FORCE_ACTIVATE, () => { stLore.forcedPending = true; });
+}
+
+// ─── ST World Info activation ───────────────────────────────────────────────
+const stLore = { pending: null, lastGeneration: null, forcedPending: false, scans: new Map() };
+
+const loreKey = (book, uid) => `${book}.${uid}`;
+
+function currentChatId() {
+    try { return String(SillyTavern.getContext().getCurrentChatId?.() || ''); } catch (_) { return ''; }
+}
+
+// Runs ST's own World Info scan as a dry run over `lines` (newest first, as ST passes chat) and
+// returns the activated entries as 'book.uid' keys, or null when the scan is unavailable.
+// Same rules as the roleplay prompt: secondary-key logic, case and whole-word settings, scan
+// depth, recursion, inclusion groups, probability, budget. A dry run saves no timed effects,
+// but it rewrites the Author's Note prompt with its World Info, so that is put back after.
+async function runSTWorldInfoScan(lines, globalScanData = {}) {
+    const check = ST_WorldInfo?.checkWorldInfo;
+    if (typeof check !== 'function' || stLore.forcedPending) return null;
+    const ctx = SillyTavern.getContext();
+    const AN_KEY = '2_floating_prompt';
+    const savedAN = ctx.extensionPrompts?.[AN_KEY];
+    // The budget is a share of the prompt size ST generates with (context minus response length).
+    const maxContext = typeof ST_Script?.getMaxContextSize === 'function' ? ST_Script.getMaxContextSize() : ctx.maxContext;
+    try {
+        const res = await check(lines, maxContext, true, { trigger: 'normal', ...globalScanData });
+        return new Set([...(res?.allActivatedEntries?.values() || [])].map(e => loreKey(e.world, e.uid)));
+    } catch (e) {
+        _dbgAdd('LB_ST_SCAN_FAILED', { error: e.message });
+        return null;
+    } finally {
+        if (savedAN && ctx.extensionPrompts) ctx.extensionPrompts[AN_KEY] = savedAN;
+    }
+}
+
+// One scan per distinct input: the token counter rebuilds the context on every pause in typing.
+function cachedScan(stamp, run) {
+    if (!stLore.scans.has(stamp)) {
+        if (stLore.scans.size > 8) stLore.scans.clear();
+        stLore.scans.set(stamp, run());
+    }
+    return stLore.scans.get(stamp);
+}
+
+// The ST chat as ST's own scan reads it: hidden messages left out, "Name: text" when
+// World Info includes names.
+function stChatScanLines(chat) {
+    const withNames = ST_WorldInfo?.world_info_include_names ?? true;
+    return chat.filter(m => !m.is_system).map(m => withNames ? `${m.name}: ${m.mes}` : m.mes).reverse();
+}
+
+// Entries ST has in the roleplay prompt for the current chat: from its last generation, or,
+// before one in this chat, from a dry run of its scan. { keys, source: 'generation'|'scan' } or null.
+async function getSTActiveLore() {
+    const chatId = currentChatId();
+    if (stLore.lastGeneration?.chatId === chatId) return { keys: stLore.lastGeneration.keys, source: 'generation' };
+    const ctx = SillyTavern.getContext();
+    const chat = ctx.chat || [];
+    const stamp = `st\x00${chatId}\x00${chat.length}\x00${chat.at(-1)?.mes ?? ''}`;
+    const keys = await cachedScan(stamp, () => {
+        let card = {};
+        try { card = ctx.getCharacterCardFields?.() || {}; } catch (_) {}
+        return runSTWorldInfoScan(stChatScanLines(chat), {
+            personaDescription: card.persona, characterDescription: card.description,
+            characterPersonality: card.personality, characterDepthPrompt: card.charDepthPrompt,
+            scenario: card.scenario, creatorNotes: card.creatorNotes,
+        });
+    });
+    return keys ? { keys, source: 'scan' } : null;
+}
+
+// Entries the Copilot side of things activates by ST's rules: the ST messages picked for
+// Copilot plus the user's own messages among the latest Copilot messages, scanned as one newest
+// message. Copilot's replies are left out: they repeat lore it already has, and under ST's
+// budget their extra matches crowd out the entries the user asked about. The chat is padded
+// to its real length so entry delays count the same as in ST.
+async function getConversationLore(settings) {
+    const ctx = SillyTavern.getContext();
+    const msgs = ctx.chat || [];
+    let text = '';
+    let stamp = '';
+    try {
+        const session = getCurrentSession();
+        const picked = (session.pickedChatIndices || []).filter(i => i >= 0 && i < msgs.length);
+        const copilotMsgs = session.messages
+            .filter(m => !m.isLBHistory)
+            .slice(-(settings.lorebookCopilotScanDepth ?? 6))
+            .filter(m => m.role === 'user');
+        text = [...picked.map(i => msgs[i].mes), ...copilotMsgs.map(m => m.content)].filter(Boolean).join('\n');
+        stamp = `cp\x00${session.id}\x00${picked.join(',')}\x00${copilotMsgs.length}\x00${copilotMsgs.at(-1)?.content ?? ''}`;
+    } catch (_) {}
+    if (!text) return new Set();
+    const lines = [text, ...Array(Math.max(0, msgs.length - 1)).fill('')];
+    return (await cachedScan(stamp, () => runSTWorldInfoScan(lines))) || new Set();
+}
+
+const INCLUSION_LABELS = {
+    forced: 'forced on in Copilot',
+    st: 'active in SillyTavern',
+    constant: 'constant',
+    conversation: 'matched in this Copilot chat',
+    book: 'whole book included in Copilot',
+};
+
+// Why an entry goes into Copilot's lorebook context, or '' when it does not. A user override
+// wins, then what SillyTavern itself activated, constants, what the Copilot conversation
+// activates, and books picked whole for Copilot.
+export function loreInclusionReason(entry, { override, inST, inConversation, bookSelected }) {
+    if (override === false) return '';
+    if (override === true) return 'forced';
+    if (inST) return 'st';
+    if (entry.constant && !entry.disable) return 'constant';
+    if (inConversation) return 'conversation';
+    if (bookSelected) return 'book';
+    return '';
 }
 
 export async function fetchWorldInfoBook(name) {
@@ -245,30 +380,6 @@ export function wiEntriesToArray(data) {
     return Object.values(data.entries).sort((a, b) => (a.displayIndex ?? a.uid) - (b.displayIndex ?? b.uid));
 }
 
-export function keywordMatchEntry(keys, text) {
-    if (!keys?.length || !text) return false;
-    const lower = text.toLowerCase();
-    return keys.some(k => {
-        if (!k) return false;
-        try {
-            const m = k.match(/^\/(.+)\/([gimsuy]*)$/);
-            if (m) return new RegExp(m[1], m[2]).test(text);
-        } catch (_) {}
-        return lower.includes(k.toLowerCase());
-    });
-}
-
-export function getKeywordTriggeredEntries(allBooksData, text1, text2) {
-    const scanText = [text1, text2].filter(Boolean).join('\n');
-    const results = {};
-    for (const [bookName, data] of Object.entries(allBooksData)) {
-        const entries = wiEntriesToArray(data);
-        const matched = entries.filter(e => !e.disable && (keywordMatchEntry(e.key, scanText) || keywordMatchEntry(e.keysecondary, scanText)));
-        if (matched.length) results[bookName] = matched;
-    }
-    return results;
-}
-
 export function getEntryOverrideKey(bookName, entry) {
     let entryName = String(entry.comment || entry.name || '').trim();
     if (!entryName && entry.key && entry.key.length) {
@@ -288,14 +399,13 @@ export function getEntryOutletName(entry) {
 }
 
 export async function buildLorebookContextBlock(settings) {
-    lastActiveEntries = [];
     const selectedBooks = settings.lorebookSelectedBooks || [];
     const excludedBooks = new Set(settings.lorebookExcludedBooks || []);
     const overrides = settings.lorebookEntryOverrides || {};
     const loadedBooks = {};
     const _activeNamesSet = new Set(getActiveLorebookNames());
 
-    if (!_activeNamesSet.size) return '';
+    if (!_activeNamesSet.size) { lastActiveEntries = []; return ''; }
 
     await Promise.all([..._activeNamesSet].map(async name => {
         if (excludedBooks.has(name)) return;
@@ -303,50 +413,19 @@ export async function buildLorebookContextBlock(settings) {
         if (data) loadedBooks[name] = data;
     }));
 
-    if (!Object.keys(loadedBooks).length) return '';
+    if (!Object.keys(loadedBooks).length) { lastActiveEntries = []; return ''; }
 
-    let keywordEntries = {};
+    // Keyword activation is ST's: what it put in the roleplay prompt, plus what the Copilot
+    // conversation activates under the same rules.
+    let stActive = null;
+    let conversationActive = new Set();
     if (settings.lorebookAutoKeyword) {
-        const ctx = SillyTavern.getContext();
-        const msgs = ctx.chat || [];
-        let lastUser = '', lastChar = '';
-
-        try {
-            const session = getCurrentSession();
-            const picked = session.pickedChatIndices;
-            if (picked && picked.length > 0) {
-                const pickedMsgs = picked.filter(i => i >= 0 && i < msgs.length).map(i => msgs[i]);
-                lastUser = pickedMsgs.filter(m => m.is_user).map(m => m.mes).join('\n');
-                lastChar = pickedMsgs.filter(m => !m.is_user).map(m => m.mes).join('\n');
-            } else {
-                const stDepth = Math.max(1, settings.lorebookSTScanDepth ?? 5);
-                const recentMsgs = msgs.slice(-stDepth);
-                lastUser = recentMsgs.filter(m => m.is_user).map(m => m.mes).join('\n');
-                lastChar = recentMsgs.filter(m => !m.is_user).map(m => m.mes).join('\n');
-            }
-        } catch (_) {
-            const stDepth = Math.max(1, settings.lorebookSTScanDepth ?? 5);
-            const recentMsgs = msgs.slice(-stDepth);
-            lastUser = recentMsgs.filter(m => m.is_user).map(m => m.mes).join('\n');
-            lastChar = recentMsgs.filter(m => !m.is_user).map(m => m.mes).join('\n');
-        }
-
-        let copilotScanText = '';
-        try {
-            const session = getCurrentSession();
-            const copilotDepth = settings.lorebookCopilotScanDepth ?? 6;
-            copilotScanText = session.messages
-                .filter(m => !m.isLBHistory)
-                .slice(-copilotDepth)
-                .map(m => m.content)
-                .join('\n');
-        } catch (_) {}
-
-        keywordEntries = getKeywordTriggeredEntries(loadedBooks, lastUser + '\n' + lastChar, copilotScanText);
+        [stActive, conversationActive] = await Promise.all([getSTActiveLore(), getConversationLore(settings)]);
     }
 
     const toInject = {};
     const outletLines = [];
+    const active = [];
     let overridesChanged = false;
 
     for (const [bookName, data] of Object.entries(loadedBooks)) {
@@ -362,65 +441,59 @@ export async function buildLorebookContextBlock(settings) {
                 overridesChanged = true;
             }
 
-            const override = overrides[newKey];
-            if (override === false) continue;
+            const reason = loreInclusionReason(entry, {
+                override: overrides[newKey],
+                inST: !!stActive?.keys.has(loreKey(bookName, entry.uid)),
+                inConversation: conversationActive.has(loreKey(bookName, entry.uid)),
+                bookSelected: selectedBooks.includes(bookName),
+            });
+            if (!reason) continue;
 
-            const isConstant = !!entry.constant && !entry.disable;
-            const manualInclude = selectedBooks.includes(bookName);
-            const keywordInclude = keywordEntries[bookName]?.some(e => e.uid === entry.uid);
-
-            if (override === true || isConstant || manualInclude || keywordInclude) {
-                const finalOutletName = getEntryOutletName(entry);
-
-                if (finalOutletName) {
-                    if (!entry.disable) {
-                        outletLines.push(`### ${entry.comment || `Entry #${entry.uid}`} (uid: ${entry.uid}, book: "${getDisplayName(bookName)}") [outlet name: ${finalOutletName}]\n${entry.content}`);
-                        lastActiveEntries.push({
-                            bookName,
-                            displayName: getDisplayName(bookName),
-                            entryName: entry.comment || `#${entry.uid}`,
-                            uid: entry.uid,
-                        });
-                    }
-                    continue;
+            const finalOutletName = getEntryOutletName(entry);
+            if (finalOutletName) {
+                if (!entry.disable) {
+                    outletLines.push(`### ${entry.comment || `Entry #${entry.uid}`} (uid: ${entry.uid}, book: "${getDisplayName(bookName)}") [outlet name: ${finalOutletName}] [${INCLUSION_LABELS[reason]}]\n${entry.content}`);
+                    active.push({ bookName, displayName: getDisplayName(bookName), entryName: entry.comment || `#${entry.uid}`, uid: entry.uid, reason });
                 }
-
-                if (!toInject[bookName]) toInject[bookName] = [];
-                toInject[bookName].push(entry);
+                continue;
             }
+
+            if (!toInject[bookName]) toInject[bookName] = [];
+            toInject[bookName].push({ entry, reason });
         }
     }
 
     if (overridesChanged) saveSettings();
 
-    if (!Object.keys(toInject).length && !outletLines.length) return '';
-
     let block = '\n\n<lorebook_context>\n';
+    if (stActive) {
+        block += stActive.source === 'generation'
+            ? 'Each entry says why it is here. "active in SillyTavern" entries were in the roleplay prompt of SillyTavern\'s last reply; the others were not.\n\n'
+            : 'Each entry says why it is here. "active in SillyTavern" entries are the ones SillyTavern\'s World Info scan activates for its next reply; the others are not in the roleplay prompt.\n\n';
+    }
+    let hasEntries = false;
     for (const [bookName, entries] of Object.entries(toInject)) {
-        let hasValidEntries = false;
         let bookBlock = `## ${getDisplayName(bookName)}\n`;
 
-        for (const e of entries) {
-            hasValidEntries = true;
+        for (const { entry: e, reason } of entries) {
+            hasEntries = true;
             bookBlock += `### ${e.comment || `Entry #${e.uid}`} (uid: ${e.uid})`;
             if (e.key?.length) bookBlock += ` [keys: ${e.key.slice(0, 5).join(', ')}]`;
+            bookBlock += ` [${INCLUSION_LABELS[reason]}]`;
             bookBlock += `\n${e.content}\n\n`;
 
-            lastActiveEntries.push({
-                bookName,
-                displayName: getDisplayName(bookName),
-                entryName: e.comment || `#${e.uid}`,
-                uid: e.uid,
-            });
+            active.push({ bookName, displayName: getDisplayName(bookName), entryName: e.comment || `#${e.uid}`, uid: e.uid, reason });
         }
-        if (hasValidEntries) block += bookBlock;
+        block += bookBlock;
     }
 
     if (outletLines.length) {
+        hasEntries = true;
         block += `## Outlet Entries (injected only where an outlet::<name> macro is manually placed elsewhere, not directly)\n${outletLines.join('\n\n')}\n\n`;
     }
 
-    if (block === '\n\n<lorebook_context>\n') return '';
+    lastActiveEntries = active;
+    if (!hasEntries) return '';
 
     block += '</lorebook_context>';
     return block;

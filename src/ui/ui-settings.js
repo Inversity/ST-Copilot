@@ -119,7 +119,6 @@ const _SETTINGS_DEF = [
     { key: 'lorebookManagePrompt', stId: 'scp-lb-manage-prompt', spId: 'scp-sp-lb-manage-prompt', type: 'textarea', profileKey: true,
       fromSetting: s => s.lorebookManagePrompt || DEFAULT_LB_MANAGE_PROMPT,
       toVal: v => v.trim() === DEFAULT_LB_MANAGE_PROMPT.trim() ? '' : v },
-    { key: 'lorebookSTScanDepth',     stId: 'scp-lb-st-scan-depth',      spId: 'scp-sp-lb-st-scan-depth',      type: 'input', toVal: Number, profileKey: true },
     { key: 'lorebookCopilotScanDepth', stId: 'scp-lb-copilot-scan-depth', spId: 'scp-sp-lb-copilot-scan-depth', type: 'input', toVal: Number, profileKey: true },
 
     // ── Chat Edit ─────────────────────────────────────────────────────────────

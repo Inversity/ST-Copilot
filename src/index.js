@@ -20,6 +20,7 @@ import * as apiMod from './api.js';
 
 export let ST_WorldInfo = null;
 export let ST_Utils = null;
+export let ST_Script = null;
 export let extVersion = '?';
 export let __extPath = 'third-party/ST-Copilot';
 
@@ -517,6 +518,7 @@ async function init() {
     
     try { ST_WorldInfo = await import('/scripts/world-info.js'); } catch(e) { console.warn('ST-Copilot: Could not import world-info.js'); }
     try { ST_Utils = await import('/scripts/utils.js'); } catch(e) { console.warn('ST-Copilot: Could not import utils.js'); }
+    try { ST_Script = await import('/script.js'); } catch(e) { console.warn('ST-Copilot: Could not import script.js'); }
     
     await loadManifestVersion();
     
