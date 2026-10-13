@@ -11,8 +11,8 @@ const _STAT_META = [
     { key:'sess',  label:'Sessions',    color:'#ffb432', icon:'fa-list' },
     { key:'tokIn', label:'Tokens In',   color:'#5bc0eb', icon:'fa-arrow-right-to-bracket' },
     { key:'tokOut',label:'Tokens Out',  color:'#f06292', icon:'fa-arrow-right-from-bracket' },
-    { key:'qp',    label:'QPrompts',    color:'#ff8a65', icon:'fa-bolt' },
-    { key:'lb',    label:'LB Changes',  color:'#ab47bc', icon:'fa-book-open' },
+    { key:'qp',    label:'Quick Prompts',color:'#ff8a65', icon:'fa-bolt' },
+    { key:'lb',    label:'Lorebook Changes',color:'#ab47bc', icon:'fa-book-open' },
     { key:'edit',  label:'Edits',       color:'#78909c', icon:'fa-pen-to-square' },
 ];
 
@@ -153,7 +153,7 @@ export function renderStatsPane(container) {
         row.className = 'scp-stats-pill-row';
         const lbl = document.createElement('span');
         lbl.className = 'scp-stats-pill-label';
-        lbl.textContent = label;
+        lbl.textContent = translate(label);
         row.appendChild(lbl);
         items.forEach(([val, txt]) => {
             const btn = document.createElement('button');
@@ -177,7 +177,7 @@ export function renderStatsPane(container) {
         () => { refreshStatCards(container); refreshStatsChart(container); }
     ));
     controls.appendChild(mkPillRow('Period',
-        [['day','30 Days'],['week','12 Weeks'],['month','12 Mo'],['year','All Years']],
+        [['day','30 Days'],['week','12 Weeks'],['month','12 Months'],['year','All Years']],
         'period',
         () => refreshStatsChart(container)
     ));
@@ -223,7 +223,7 @@ export function refreshStatCards(container) {
         const card = document.createElement('div');
         card.className = `scp-stats-card${_statsState.metric === idx ? ' active' : ''}`;
         card.style.setProperty('--scp-stat-color', meta.color);
-        card.innerHTML = `<div style="display:flex; justify-content:space-between; width:100%; align-items:center;"><span class="scp-stats-card-val">${_fmtNum(totals[idx])}</span><i class="fa-solid ${meta.icon}" style="color:${meta.color}; opacity:0.4; font-size:16px;"></i></div><span class="scp-stats-card-label">${meta.label}</span>`;
+        card.innerHTML = `<div style="display:flex; justify-content:space-between; width:100%; align-items:center;"><span class="scp-stats-card-val">${_fmtNum(totals[idx])}</span><i class="fa-solid ${meta.icon}" style="color:${meta.color}; opacity:0.4; font-size:16px;"></i></div><span class="scp-stats-card-label">${escHtml(translate(meta.label))}</span>`;
         card.addEventListener('click', () => {
             _statsState.metric = idx;
             container.querySelectorAll('.scp-stats-card').forEach((c, i) => c.classList.toggle('active', i === idx));

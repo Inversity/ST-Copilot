@@ -1,6 +1,6 @@
 {
   "about": "Every screen, panel and card of ST-Copilot, with how to reach it, what it does, its controls, the source that builds it, its screenshot (docs/screens/<screen>.jpg, made by tools/ui-screens.mjs) and open findings. Built for the UI review; keep it in step with the code: a new screen or setting gets a node here.",
-  "version": "3.0.8",
+  "version": "3.0.9",
   "builtFrom": "9b1e8ff",
   "findingTypes": {
     "bug": "Broken behaviour or markup",
@@ -59,7 +59,7 @@
       ],
       "controls": [
         {
-          "label": "ST-Copilot",
+          "label": "ST-Copilot (also the name in Manage Extensions)",
           "kind": "menu item"
         }
       ],
@@ -68,7 +68,8 @@
           "type": "wording",
           "text": "The extension is named \"Copilot (ST)\" in manifest.json (what SillyTavern's Manage Extensions list shows) but \"ST-Copilot\" here, in the window title and in the drawer.",
           "ref": "manifest.json:2",
-          "id": "st-wand-1"
+          "id": "st-wand-1",
+          "fixedIn": "3.0.9"
         }
       ]
     },
@@ -125,7 +126,8 @@
           "type": "bug",
           "text": "The \"Apply Regex Scripts to context\" label closes before its checkbox, so the checkbox sits outside the label and clicking the text does nothing.",
           "ref": "settings.html:203",
-          "id": "st-drawer-1"
+          "id": "st-drawer-1",
+          "fixedIn": "3.0.9"
         },
         {
           "type": "drift",
@@ -149,7 +151,8 @@
           "type": "wording",
           "text": "Max Response Tokens shows placeholder 2048; the real default is 8048 (same in the overlay).",
           "ref": "settings.html:151",
-          "id": "st-drawer-5"
+          "id": "st-drawer-5",
+          "fixedIn": "3.0.9"
         },
         {
           "type": "ux",
@@ -290,7 +293,7 @@
           "kind": "buttons"
         },
         {
-          "label": "Ctx: main chat messages sent with each request (click the number to type it)",
+          "label": "Depth (Chat Depth): SillyTavern chat messages sent with each request (click the number to type it)",
           "kind": "slider",
           "setting": "contextDepth"
         },
@@ -307,7 +310,8 @@
         {
           "type": "wording",
           "text": "The same setting is \"Ctx\" here and \"Main Chat Depth\" in Settings. A tooltip exists, but one name would read better.",
-          "id": "window-toolbar-1"
+          "id": "window-toolbar-1",
+          "fixedIn": "3.0.9"
         }
       ]
     },
@@ -318,7 +322,7 @@
       "title": "Session dropdown",
       "kind": "menu",
       "opens": "Session name in the toolbar",
-      "purpose": "Lists this chat's Copilot sessions (temporary ones marked tmp), and creates, exports and imports sessions.",
+      "purpose": "Lists this chat's Copilot sessions under \"Sessions for this chat\" (temporary ones marked tmp), and creates, exports and imports sessions.",
       "screens": [
         "session-menu"
       ],
@@ -343,7 +347,8 @@
         {
           "type": "ux",
           "text": "Sessions belong to the current SillyTavern chat; switching chats shows a different list. The dropdown does not say so (parked idea: global sessions).",
-          "id": "session-menu-1"
+          "id": "session-menu-1",
+          "fixedIn": "3.0.9"
         }
       ]
     },
@@ -504,7 +509,7 @@
       "title": "Status bar",
       "kind": "section",
       "opens": "Above the actions bar while Copilot is writing",
-      "purpose": "Shows Thinking…, the tool round (Round N/6) and, after 10 s of silence, \"Model still working · no output for Ns\". Stop aborts.",
+      "purpose": "Shows Thinking…, the tool round (Tool round N (max M)…) and, after 10 s of silence, \"Model still working · no output for Ns\". Stop aborts.",
       "screens": [],
       "source": [
         "window.html:80",
@@ -522,12 +527,14 @@
           "type": "i18n",
           "text": "\"Thinking…\" in window.html and \"Round N/6…\" in api.js are not translated (the idle notice is).",
           "ref": "src/api.js:1133",
-          "id": "status-bar-1"
+          "id": "status-bar-1",
+          "fixedIn": "3.0.9"
         },
         {
           "type": "ux",
           "text": "\"Round 2/6\" reads like a fixed plan; it is \"tool round 2, at most 6\". Consider \"Tool round 2 (max 6)\".",
-          "id": "status-bar-2"
+          "id": "status-bar-2",
+          "fixedIn": "3.0.9"
         }
       ]
     },
@@ -731,7 +738,8 @@
           "type": "wording",
           "text": "Two different actions both read APPEND: \"+ Append\" adds a new alternate greeting, \"⬇ Append\" adds text to the end of a field. Suggest \"+ New greeting\" for the first.",
           "ref": "src/features/feature-character-ui.js:508",
-          "id": "card-character-1"
+          "id": "card-character-1",
+          "fixedIn": "3.0.9"
         }
       ]
     },
@@ -904,7 +912,7 @@
           "setting": "charEditFields, altGreetingIndices"
         },
         {
-          "label": "Main Chat Depth, Session History Limit, Reasoning Trim Strings",
+          "label": "Chat Depth, Session History Limit, Remove From Replies",
           "kind": "slider + number + text"
         },
         {
@@ -922,7 +930,7 @@
           "setting": "charEditAIEnabled, charEditPrompt"
         },
         {
-          "label": "Lorebook AI Edits: enable, Auto-Keywords, scan depth, prompt",
+          "label": "Lorebook AI Edits: enable, Auto-Keywords, Copilot messages scanned for lorebook keys, prompt",
           "kind": "mixed",
           "setting": "lorebookAIManageEnabled, lorebookAutoKeyword, lorebookCopilotScanDepth, lorebookManagePrompt"
         },
@@ -942,12 +950,14 @@
           "type": "wording",
           "text": "\"Copilot keytriggers scan depth\" is jargon; it is how many of your own Copilot messages are scanned for lorebook keys. The drawer's note that main chat entries follow SillyTavern's World Info is missing here.",
           "ref": "settings_overlay.html:168",
-          "id": "settings-global-1"
+          "id": "settings-global-1",
+          "fixedIn": "3.0.9"
         },
         {
           "type": "wording",
           "text": "\"Reasoning Trim Strings\" removes strings from replies (empty <think></think> blocks); the name suggests it only touches reasoning.",
-          "id": "settings-global-2"
+          "id": "settings-global-2",
+          "fixedIn": "3.0.9"
         },
         {
           "type": "missing",
@@ -1006,7 +1016,7 @@
           "kind": "theme editor"
         },
         {
-          "label": "Danger Zone: Clear All Sessions, Clean Up Orphan Files, Download Debug Log",
+          "label": "Danger Zone: Clear All Sessions (this chat), Clean Up Orphan Files, Download Debug Log",
           "kind": "buttons"
         }
       ],
@@ -1019,7 +1029,8 @@
         {
           "type": "wording",
           "text": "\"Clear All Sessions\" deletes the sessions of the current chat only (the confirm says so; the button does not).",
-          "id": "settings-interface-2"
+          "id": "settings-interface-2",
+          "fixedIn": "3.0.9"
         },
         {
           "type": "i18n",
@@ -1089,7 +1100,7 @@
           "kind": "overrides"
         },
         {
-          "label": "Main Chat Depth, History Limit, Reasoning Trim",
+          "label": "Chat Depth, History Limit, Remove From Replies",
           "kind": "overrides"
         },
         {
@@ -1164,7 +1175,8 @@
           "type": "dead",
           "text": "memoryScope and memoryTag defaults are never read.",
           "ref": "src/session.js:107",
-          "id": "settings-memory-2"
+          "id": "settings-memory-2",
+          "fixedIn": "3.0.9"
         }
       ]
     },
@@ -1209,13 +1221,15 @@
           "type": "dead",
           "text": "toolsThinking default is never read.",
           "ref": "src/session.js:112",
-          "id": "settings-tools-1"
+          "id": "settings-tools-1",
+          "fixedIn": "3.0.9"
         },
         {
           "type": "drift",
           "text": "toolsEnabled_get_prompts has no default (works because unset counts as on); every other tool has one.",
           "ref": "src/session.js:114",
-          "id": "settings-tools-2"
+          "id": "settings-tools-2",
+          "fixedIn": "3.0.9"
         },
         {
           "type": "i18n",
@@ -1257,7 +1271,8 @@
           "type": "wording",
           "text": "Abbreviated metric names (QPrompts, LB Changes) and the \"12 Mo\" period; the metric names and the Scope / Period row labels are not translated.",
           "ref": "src/features/feature-stats.js:9",
-          "id": "settings-stats-1"
+          "id": "settings-stats-1",
+          "fixedIn": "3.0.9"
         }
       ]
     },
@@ -1307,7 +1322,8 @@
           "type": "dead",
           "text": "lorebookEnabled default is never read.",
           "ref": "src/session.js:52",
-          "id": "lorebook-manager-2"
+          "id": "lorebook-manager-2",
+          "fixedIn": "3.0.9"
         }
       ]
     },
@@ -1396,7 +1412,8 @@
         {
           "type": "ux",
           "text": "The persona shows only its description, with a lock icon and no hint why; \"Adding Persona to context is managed in global settings\" appears only as a tooltip.",
-          "id": "character-manager-2"
+          "id": "character-manager-2",
+          "fixedIn": "3.0.9"
         }
       ]
     },

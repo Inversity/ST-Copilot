@@ -112,6 +112,15 @@ test('CHAT_CHANGED for the same chat keeps unsaved in-memory messages', async ()
     assert.equal(S.getCurrentSession().messages[0].content, 'not yet flushed');
 });
 
+test('settings nothing reads any more are dropped; every tool has a default', () => {
+    openChat('retired');
+    const ext = globalThis.__stContext.extensionSettings;
+    ext.st_copilot = { ...(ext.st_copilot || {}), lorebookEnabled: true, toolsThinking: true, memoryScope: 'global', memoryTag: 'memory-update', attachedFiles: [] };
+    const s = S.getSettings();
+    for (const k of ['lorebookEnabled', 'toolsThinking', 'memoryScope', 'memoryTag', 'attachedFiles']) assert.equal(k in s, false, `${k} kept`);
+    assert.equal(s.toolsEnabled_get_prompts, true);
+});
+
 test('saved prompts equal to an old default are reset to use the current default', async () => {
     const { promptHash } = await import('../src/utils/util-text.js');
     const C = await import('../src/constants.js');

@@ -645,7 +645,7 @@ export async function sendViaLiveConnection(ctx, messages, maxTokens, stream, si
 async function _callGenerate(session, settings, pendingText, onChunk, opts = {}) {
     const ctx = SillyTavern.getContext();
     const messages = await assembleMessages(session, settings, pendingText);
-    const maxTokens = parseInt(settings.maxTokens) || 8200;
+    const maxTokens = parseInt(settings.maxTokens) || 8048;
 
     const abort = new AbortController();
     state.abortController = abort;
@@ -1130,7 +1130,7 @@ export async function runToolRounds({ session, settings, result, msgEl, contentE
         extraHistory.push({ role: 'user', content: `<tool_results>\n${toolResultsText}\n</tool_results>\n\nCONTINUE your response using these results, from exactly where you left off. Do not repeat anything you already wrote.` });
 
         const thinkingText = document.getElementById('scp-thinking-text');
-        if (thinkingText) thinkingText.textContent = `Round ${round + 2}/${maxRounds + 1}…`;
+        if (thinkingText) thinkingText.textContent = t`Tool round ${round + 2} (max ${maxRounds + 1})…`;
         const bar = document.getElementById('scp-thinking-bar');
         if (bar) bar.style.display = 'flex';
 

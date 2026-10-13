@@ -35,7 +35,7 @@
 
         <div class="scp-sp-group scp-sp-profile-header">
           <div class="scp-sp-group-title"><i class="fa-solid fa-bookmark"></i> <span data-i18n="Configuration Profiles">Configuration Profiles</span></div>
-          <div class="scp-sp-hint scp-sp-profile-scope" data-i18n="Everything in this AI tab belongs to the selected profile. Changes apply right away; click save to store them in the profile.">Everything in this AI tab belongs to the selected profile. Changes apply right away; click save to store them in the profile.</div>
+          <div class="scp-sp-hint scp-sp-profile-scope" data-i18n="Everything in this AI tab belongs to the selected profile. Changes apply right away. Click save to store them in the profile.">Everything in this AI tab belongs to the selected profile. Changes apply right away. Click save to store them in the profile.</div>
           <div class="scp-profile-bar">
             <select id="scp-sp-profile-select"></select>
             <button class="scp-profile-icon-btn" id="scp-sp-profile-save" title="Save to profile" data-i18n="[title]Save to profile"><i class="fa-solid fa-floppy-disk"></i></button>
@@ -88,7 +88,7 @@
           </div>
           <div class="scp-sp-field" style="margin-top:4px">
             <label class="scp-sp-label" data-i18n="Max Response Tokens">Max Response Tokens</label>
-            <input type="number" class="scp-sp-input" id="scp-sp-max-tokens" placeholder="2048" min="64" max="32768">
+            <input type="number" class="scp-sp-input" id="scp-sp-max-tokens" placeholder="8048" min="64" max="32768">
           </div>
           <div class="scp-sp-field" style="margin-top:4px">
             <label class="scp-sp-label" data-i18n="Streaming">Streaming</label>
@@ -122,7 +122,7 @@
             <div id="scp-sp-ce-alt-greetings-picker" style="display:none;margin-top:4px"></div>
           </div>
           <div class="scp-sp-field" style="margin-top:8px">
-            <label class="scp-sp-label" data-i18n="Main Chat Depth">Main Chat Depth</label>
+            <label class="scp-sp-label" data-i18n="Chat Depth (messages sent)">Chat Depth (messages sent)</label>
             <div class="scp-sp-row">
               <input type="range" class="scp-slider" id="scp-sp-depth-slider" min="0" max="100" style="flex:1">
               <span class="scp-depth-val" id="scp-sp-depth-val" style="cursor:default">15</span>
@@ -133,7 +133,7 @@
             <input type="number" class="scp-sp-input" id="scp-sp-history-limit" placeholder="50" min="1" max="500">
           </div>
           <div class="scp-sp-field">
-            <label class="scp-sp-label"><span data-i18n="Reasoning Trim Strings">Reasoning Trim Strings</span> <span class="scp-sp-hint" data-i18n="(one per line)">(one per line)</span></label>
+            <label class="scp-sp-label"><span data-i18n="Remove From Replies">Remove From Replies</span> <span class="scp-sp-hint" data-i18n="(one per line)">(one per line)</span></label>
             <textarea class="scp-sp-textarea" id="scp-sp-reasoning-trim" rows="2" placeholder="<think></think>"></textarea>
           </div>
           <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;gap:5px">
@@ -165,7 +165,7 @@
           <label class="scp-sp-check"><input type="checkbox" id="scp-sp-lb-ai-enabled"><span data-i18n="Enable AI Lorebook Editing">Enable AI Lorebook Editing</span></label>
           <label class="scp-sp-check"><input type="checkbox" id="scp-sp-lb-auto-kw"><span><span data-i18n="Auto-Keywords">Auto-Keywords</span> <span class="scp-sp-hint" data-i18n="(entries SillyTavern activates, plus ones this Copilot chat activates)">(entries SillyTavern activates, plus ones this Copilot chat activates)</span></span></label>
           <div class="scp-sp-field">
-            <label class="scp-sp-label" data-i18n="Copilot keytriggers scan depth">Copilot keytriggers scan depth</label>
+            <label class="scp-sp-label"><span data-i18n="Your Copilot messages scanned for lorebook keys">Your Copilot messages scanned for lorebook keys</span> <span class="scp-sp-hint" data-i18n="(SillyTavern chat entries follow its own World Info settings)">(SillyTavern chat entries follow its own World Info settings)</span></label>
             <input type="number" class="scp-sp-input" id="scp-sp-lb-copilot-scan-depth" placeholder="6" min="0" max="200">
           </div>
           <div class="scp-sp-field">
@@ -286,7 +286,7 @@
         <div class="scp-sp-group">
           <div class="scp-sp-group-title" style="color:var(--scp-danger)"><i class="fa-solid fa-triangle-exclamation"></i> <span data-i18n="Danger Zone">Danger Zone</span></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="scp-action-btn scp-sp-danger-btn" id="scp-sp-clear-sessions" style="flex:1">${I.trash}<span data-i18n="Clear All Sessions">Clear All Sessions</span></button>
+            <button class="scp-action-btn scp-sp-danger-btn" id="scp-sp-clear-sessions" style="flex:1">${I.trash}<span data-i18n="Clear All Sessions (this chat)">Clear All Sessions (this chat)</span></button>
             <button class="scp-action-btn" id="scp-sp-cleanup-files" style="flex:1"><i class="fa-solid fa-broom"></i><span data-i18n="Clean Up Orphan Files">Clean Up Orphan Files</span></button>
             <button class="scp-action-btn" id="scp-sp-download-debug" style="flex:1" title="Download full debug log as text file" data-i18n="[title]Download full debug log as text file"><i class="fa-solid fa-bug"></i><span data-i18n="Download Debug Log">Download Debug Log</span></button>
           </div>
@@ -448,7 +448,7 @@
             </div>
         </div>
           <div class="scp-sp-field" style="margin-top:8px">
-            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="contextDepth" data-i18n="Main Chat Depth">Main Chat Depth</label>
+            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="contextDepth" data-i18n="Chat Depth (messages sent)">Chat Depth (messages sent)</label>
             <div class="scp-sp-ov-wrap">
               <input type="range" class="scp-slider" id="scp-sp-ov-depth-slider" min="0" max="100" style="flex:1">
               <span class="scp-depth-val" id="scp-sp-ov-depth-val" style="cursor:default">15</span>
@@ -463,7 +463,7 @@
             </div>
           </div>
           <div class="scp-sp-field">
-            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="reasoningTrimStrings" data-i18n="Reasoning Trim">Reasoning Trim</label>
+            <label class="scp-sp-ov-label scp-sp-label" data-ovkey="reasoningTrimStrings" data-i18n="Remove From Replies">Remove From Replies</label>
             <div class="scp-sp-ov-wrap scp-sp-ov-wrap-col">
               <textarea class="scp-sp-textarea" id="scp-sp-ov-reasoning-trim" rows="2" placeholder="Use global" data-i18n="[placeholder]Use global"></textarea>
               <button class="scp-sp-ov-clear" data-ovkey="reasoningTrimStrings" title="Clear override" data-i18n="[title]Clear override" disabled>↺</button>

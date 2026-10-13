@@ -49,7 +49,6 @@ export function getSettings() {
         savedThemes: {},
         activeThemeProfile: '',
         sessions: {},
-        lorebookEnabled: true,
         lorebookAutoKeyword: true,
         lorebookSelectedBooks: [],
         lorebookEntryOverrides: {},
@@ -101,15 +100,11 @@ export function getSettings() {
         pickerPreviewLines: 1,
         pickerPreviewLastLines: 0,
         imageAnalysisMode: 'direct',
-        attachedFiles: [],
         memoryEnabled: true,
         memoryInject: true,
-        memoryScope: 'global',
-        memoryTag: 'memory-update',
         memoryNotify: true,
         memories: {},
         toolsEnabled: true,
-        toolsThinking: false,
         toolsMaxRounds: 5,
         toolsEnabled_search_chat: true,
         toolsEnabled_search_lorebook: true,
@@ -123,6 +118,7 @@ export function getSettings() {
         toolsEnabled_get_generation_settings: true,
         toolsEnabled_get_regex_scripts: true,
         toolsEnabled_get_quick_replies: true,
+        toolsEnabled_get_prompts: true,
         includeSummaryception: true,
         useAspectEvolutia: true,
         autoExpandMacros: false,
@@ -131,9 +127,13 @@ export function getSettings() {
     for (const [k, v] of Object.entries(defaults)) {
         if (s[k] === undefined) s[k] = v;
     }
+    for (const k of RETIRED_SETTING_KEYS) delete s[k];
     _migrateDefaultPrompts(s);
     return s;
 }
+
+// Settings older versions stored that nothing reads any more; dropped from saved settings.
+const RETIRED_SETTING_KEYS = ['lorebookEnabled', 'attachedFiles', 'memoryScope', 'memoryTag', 'toolsThinking'];
 
 // Prompt settings where '' means "use the built-in default".
 const PROMPT_SETTING_KEYS = ['systemPrompt', 'lorebookManagePrompt', 'memoryManagePrompt', 'toolsSystemPrompt', 'charEditPrompt', 'chatEditPrompt'];

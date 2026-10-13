@@ -38,7 +38,7 @@
                             <i class="fa-solid fa-robot"></i> <span data-i18n="Open Copilot">Open Copilot</span>
                         </button>
                         <button id="scp-clear-sessions" class="menu_button interactable" style="flex:1">
-                            <i class="fa-solid fa-broom"></i> <span data-i18n="Clear Sessions">Clear Sessions</span>
+                            <i class="fa-solid fa-broom"></i> <span data-i18n="Clear All Sessions (this chat)">Clear All Sessions (this chat)</span>
                         </button>
                         <button id="scp-cleanup-files" class="menu_button interactable" style="flex:1">
                             <i class="fa-solid fa-trash-can"></i> <span data-i18n="Clean Up Files">Clean Up Files</span>
@@ -148,7 +148,7 @@
                             <input id="scp-custom-model" type="text" class="text_pole" placeholder="e.g. llama3" />
                         </div>
                         <label style="margin-top:10px; font-size:11px; color:var(--SmartThemeBodyColor); display:block; margin-bottom:4px" data-i18n="Max Response Tokens">Max Response Tokens</label>
-                        <input id="scp-max-tokens" type="number" class="text_pole" placeholder="2048" min="64" max="32768" />
+                        <input id="scp-max-tokens" type="number" class="text_pole" placeholder="8048" min="64" max="32768" />
                         <div style="margin-top:10px">
                             <label style="font-size:11px; color:var(--SmartThemeBodyColor); display:block; margin-bottom:6px" data-i18n="Streaming Mode">Streaming Mode</label>
                             <div style="display:flex;gap:4px">
@@ -192,7 +192,7 @@
                         <label style="margin-top:10px; font-size:11px; color:var(--SmartThemeBodyColor); display:block; margin-bottom:4px" data-i18n="Session History Depth Limit">Session History Depth Limit</label>
                         <input id="scp-history-limit" type="number" class="text_pole" placeholder="50" min="1" max="500" />
                         <div style="margin-top:14px; border-top:1px solid var(--SmartThemeBorderColor); padding-top:12px">
-                            <b style="font-size:12px" data-i18n="Response String Trimming">Response String Trimming</b>
+                            <b style="font-size:12px" data-i18n="Remove From Replies">Remove From Replies</b>
                             <label style="font-size:11px; color:var(--SmartThemeBodyColor); display:block; margin:6px 0 3px">
                                 <span data-i18n="Strings to remove from responses (one per line). Useful for empty reasoning blocks, e.g.">Strings to remove from responses (one per line). Useful for empty reasoning blocks, e.g.</span> <code style="font-size:10px;background:var(--scp-accent-bg);padding:1px 4px;border-radius:3px">&lt;think&gt;&lt;/think&gt;</code>
                             </label>
@@ -200,7 +200,7 @@
                         </div>
                         <div style="margin-top:14px; border-top:1px solid var(--SmartThemeBorderColor); padding-top:12px; display:flex; flex-direction:column; gap:4px">
                             <b style="font-size:12px; margin-bottom:2px" data-i18n="Third-party Extension Support">Third-party Extension Support</b>
-                            <label class="checkbox_label" title="Use ST-Regex Extension to apply regex scripts to context" data-i18n="[title]Use ST-Regex Extension to apply regex scripts to context"></label>
+                            <label class="checkbox_label" title="Use ST-Regex Extension to apply regex scripts to context" data-i18n="[title]Use ST-Regex Extension to apply regex scripts to context">
                                 <input id="scp-apply-regex" type="checkbox" />
                                 <span data-i18n="Apply Regex Scripts to context">Apply Regex Scripts to context</span>
                             </label>
@@ -280,9 +280,9 @@
                             <i class="fa-solid fa-arrow-rotate-left"></i> <span data-i18n="Reset to Default">Reset to Default</span>
                         </button>
                         <div style="margin-top:14px; border-top:1px solid var(--SmartThemeBorderColor); padding-top:12px">
-                            <b style="font-size:12px" data-i18n="Keyword Scan Depth">Keyword Scan Depth</b>
+                            <b style="font-size:12px" data-i18n="Lorebook Keys">Lorebook Keys</b>
                             <div style="font-size:10px; opacity:.65; margin-top:4px" data-i18n="Main chat entries follow SillyTavern's own World Info scan and settings.">Main chat entries follow SillyTavern's own World Info scan and settings.</div>
-                            <label style="font-size:11px; color:var(--SmartThemeBodyColor); display:block; margin:8px 0 3px" data-i18n="Copilot keytriggers scan depth">Copilot keytriggers scan depth</label>
+                            <label style="font-size:11px; color:var(--SmartThemeBodyColor); display:block; margin:8px 0 3px" data-i18n="Your Copilot messages scanned for lorebook keys">Your Copilot messages scanned for lorebook keys</label>
                             <input id="scp-lb-copilot-scan-depth" type="number" class="text_pole" placeholder="6" min="0" max="200" />
                         </div>
                     </div>

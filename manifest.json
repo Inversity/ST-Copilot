@@ -1,12 +1,12 @@
 {
-    "display_name": "Copilot (ST)",
+    "display_name": "ST-Copilot",
     "loading_order": 60,
     "requires": [],
     "optional": [],
     "js": "index.js",
     "css": "style.css",
     "author": "Inversity (fork of ST-Copilot by QQ-Corporation)",
-    "version": "3.0.8",
+    "version": "3.0.9",
     "homePage": "https://github.com/Inversity/ST-Copilot",
     "auto_update": true
 }

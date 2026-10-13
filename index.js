@@ -305,6 +305,17 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       // ─── Changelog Data ──────────────────────────────────────────────────────────
   const CHANGELOG = [
       {
+          version: '3.0.9',
+          date: '10/13/2026',
+          announce: true,
+          notes: [
+              '<strong>Clearer names</strong>: "Depth" / "Chat Depth" for the context slider, "Remove From Replies", "Tool round 2 (max 6)", full names in Stats.',
+              '<strong>Character edit cards</strong>: a new alternate greeting reads "+ New greeting", not "Append".',
+              '<strong>"ST-Copilot" everywhere</strong>, including Manage Extensions.',
+              'Fixed: the "Apply Regex Scripts" text in the Extensions panel now toggles its checkbox; Max Response Tokens shows its real default (8048).',
+          ],
+      },
+      {
           version: '3.0.8',
           date: '10/13/2026',
           announce: true,
@@ -1834,7 +1845,6 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           savedThemes: {},
           activeThemeProfile: '',
           sessions: {},
-          lorebookEnabled: true,
           lorebookAutoKeyword: true,
           lorebookSelectedBooks: [],
           lorebookEntryOverrides: {},
@@ -1886,15 +1896,11 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           pickerPreviewLines: 1,
           pickerPreviewLastLines: 0,
           imageAnalysisMode: 'direct',
-          attachedFiles: [],
           memoryEnabled: true,
           memoryInject: true,
-          memoryScope: 'global',
-          memoryTag: 'memory-update',
           memoryNotify: true,
           memories: {},
           toolsEnabled: true,
-          toolsThinking: false,
           toolsMaxRounds: 5,
           toolsEnabled_search_chat: true,
           toolsEnabled_search_lorebook: true,
@@ -1908,6 +1914,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           toolsEnabled_get_generation_settings: true,
           toolsEnabled_get_regex_scripts: true,
           toolsEnabled_get_quick_replies: true,
+          toolsEnabled_get_prompts: true,
           includeSummaryception: true,
           useAspectEvolutia: true,
           autoExpandMacros: false,
@@ -1916,9 +1923,13 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       for (const [k, v] of Object.entries(defaults)) {
           if (s[k] === undefined) s[k] = v;
       }
+      for (const k of RETIRED_SETTING_KEYS) delete s[k];
       _migrateDefaultPrompts(s);
       return s;
   }
+
+  // Settings older versions stored that nothing reads any more; dropped from saved settings.
+  const RETIRED_SETTING_KEYS = ['lorebookEnabled', 'attachedFiles', 'memoryScope', 'memoryTag', 'toolsThinking'];
 
   // Prompt settings where '' means "use the built-in default".
   const PROMPT_SETTING_KEYS = ['systemPrompt', 'lorebookManagePrompt', 'memoryManagePrompt', 'toolsSystemPrompt', 'charEditPrompt', 'chatEditPrompt'];
@@ -4071,8 +4082,8 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       { key:'sess',  label:'Sessions',    color:'#ffb432', icon:'fa-list' },
       { key:'tokIn', label:'Tokens In',   color:'#5bc0eb', icon:'fa-arrow-right-to-bracket' },
       { key:'tokOut',label:'Tokens Out',  color:'#f06292', icon:'fa-arrow-right-from-bracket' },
-      { key:'qp',    label:'QPrompts',    color:'#ff8a65', icon:'fa-bolt' },
-      { key:'lb',    label:'LB Changes',  color:'#ab47bc', icon:'fa-book-open' },
+      { key:'qp',    label:'Quick Prompts',color:'#ff8a65', icon:'fa-bolt' },
+      { key:'lb',    label:'Lorebook Changes',color:'#ab47bc', icon:'fa-book-open' },
       { key:'edit',  label:'Edits',       color:'#78909c', icon:'fa-pen-to-square' },
   ];
 
@@ -4213,7 +4224,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           row.className = 'scp-stats-pill-row';
           const lbl = document.createElement('span');
           lbl.className = 'scp-stats-pill-label';
-          lbl.textContent = label;
+          lbl.textContent = translate(label);
           row.appendChild(lbl);
           items.forEach(([val, txt]) => {
               const btn = document.createElement('button');
@@ -4237,7 +4248,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           () => { refreshStatCards(container); refreshStatsChart(container); }
       ));
       controls.appendChild(mkPillRow('Period',
-          [['day','30 Days'],['week','12 Weeks'],['month','12 Mo'],['year','All Years']],
+          [['day','30 Days'],['week','12 Weeks'],['month','12 Months'],['year','All Years']],
           'period',
           () => refreshStatsChart(container)
       ));
@@ -4283,7 +4294,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           const card = document.createElement('div');
           card.className = `scp-stats-card${_statsState.metric === idx ? ' active' : ''}`;
           card.style.setProperty('--scp-stat-color', meta.color);
-          card.innerHTML = `<div style="display:flex; justify-content:space-between; width:100%; align-items:center;"><span class="scp-stats-card-val">${_fmtNum(totals[idx])}</span><i class="fa-solid ${meta.icon}" style="color:${meta.color}; opacity:0.4; font-size:16px;"></i></div><span class="scp-stats-card-label">${meta.label}</span>`;
+          card.innerHTML = `<div style="display:flex; justify-content:space-between; width:100%; align-items:center;"><span class="scp-stats-card-val">${_fmtNum(totals[idx])}</span><i class="fa-solid ${meta.icon}" style="color:${meta.color}; opacity:0.4; font-size:16px;"></i></div><span class="scp-stats-card-label">${escHtml(translate(meta.label))}</span>`;
           card.addEventListener('click', () => {
               _statsState.metric = idx;
               container.querySelectorAll('.scp-stats-card').forEach((c, i) => c.classList.toggle('active', i === idx));
@@ -7268,11 +7279,12 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           const meta = document.createElement('div');
           meta.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap;min-width:0';
           const patchCount = c.patches?.length > 1 ? ` (${c.patches.length})` : '';
-          const actionLabel = c.action === 'append' ? '+ Append'
-              : c.action === 'overwrite' ? '↺ Overwrite'
-              : c.action === 'prepend' ? '⬆ Prepend'
-              : c.action === 'append_text' ? '⬇ Append'
-              : `✎ Replace${patchCount}`;
+          // 'append' adds a new alternate greeting; 'append_text' adds text to the end of a field.
+          const actionLabel = c.action === 'append' ? `+ ${translate('New greeting')}`
+              : c.action === 'overwrite' ? `↺ ${translate('Overwrite')}`
+              : c.action === 'prepend' ? `⬆ ${translate('Prepend')}`
+              : c.action === 'append_text' ? `⬇ ${translate('Append')}`
+              : `✎ ${translate('Replace')}${patchCount}`;
           meta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(actionLabel)}</span><span class="scp-lb-proposal-name">${escHtml(translate(getFieldLabel(c.field)))}${c.index?` #${c.index}`:''}</span>`;
 
           const btns = document.createElement('div');
@@ -15660,6 +15672,12 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
   function _buildCurrentInfoTab(entity, saveBtn, revertBtn) {
       const pane = document.createElement('div');
       pane.className = 'scp-char-pane scp-char-pane-info';
+      if (entity.isPersona) {
+          const hint = document.createElement('div');
+          hint.className = 'scp-char-hint';
+          hint.textContent = translate('Whether your persona is sent to Copilot is set in Settings > AI > Context Payload ("Include User Persona").');
+          pane.appendChild(hint);
+      }
 
       const groups = entity.isPersona
           ? [{ title: 'Identity', fields: [{ key: 'user_persona', label: 'Persona Description', multiline: true }] }]
@@ -16593,7 +16611,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
   async function _callGenerate(session, settings, pendingText, onChunk, opts = {}) {
       const ctx = SillyTavern.getContext();
       const messages = await assembleMessages(session, settings, pendingText);
-      const maxTokens = parseInt(settings.maxTokens) || 8200;
+      const maxTokens = parseInt(settings.maxTokens) || 8048;
 
       const abort = new AbortController();
       state.abortController = abort;
@@ -17078,7 +17096,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           extraHistory.push({ role: 'user', content: `<tool_results>\n${toolResultsText}\n</tool_results>\n\nCONTINUE your response using these results, from exactly where you left off. Do not repeat anything you already wrote.` });
 
           const thinkingText = document.getElementById('scp-thinking-text');
-          if (thinkingText) thinkingText.textContent = `Round ${round + 2}/${maxRounds + 1}…`;
+          if (thinkingText) thinkingText.textContent = t`Tool round ${round + 2} (max ${maxRounds + 1})…`;
           const bar = document.getElementById('scp-thinking-bar');
           if (bar) bar.style.display = 'flex';
 

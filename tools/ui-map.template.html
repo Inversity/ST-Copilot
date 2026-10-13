@@ -111,6 +111,7 @@ h3 { font: 600 12px/1 var(--body); text-transform: uppercase; letter-spacing: 0.
 .f-head .ty { font: 600 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.05em; }
 .f-head .where { font-size: 12.5px; color: var(--muted); border: 0; background: none; padding: 0; text-decoration: underline; text-underline-offset: 2px; }
 .f-head .fid { margin-left: auto; font: 11px var(--mono); color: var(--muted); }
+.fixed-pill { font: 600 11px/1 var(--mono); color: var(--ok); border: 1px solid currentColor; border-radius: 999px; padding: 3px 7px; }
 .finding p { margin: 0; max-width: 78ch; }
 .finding .ref { font: 11.5px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
 .answer { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -258,8 +259,10 @@ function renderProgress() {
   const done = FINDINGS.filter(f => answered(f.id)).length;
   const marked = NODES.filter(n => markOf(n.id) !== 'unreviewed').length;
   const mine = Object.keys(items).length;
+  const fixed = FINDINGS.filter(f => f.fixedIn).length;
   document.getElementById('progress').replaceChildren(
     el('span', { class: 'stat' }, el('b', { text: `${done}/${FINDINGS.length}` }), 'findings answered'),
+    el('span', { class: 'stat' }, el('b', { text: `${fixed}/${FINDINGS.length}` }), 'fixed'),
     el('span', { class: 'stat' }, el('b', { text: `${marked}/${NODES.length}` }), 'screens marked'),
     el('span', { class: 'stat' }, el('b', { text: String(mine) }), mine === 1 ? 'issue you added' : 'issues you added'));
 }
@@ -322,6 +325,7 @@ function findingEl(f, { showScreen }) {
   li.append(
     el('div', { class: 'f-head' },
       el('span', { class: `ty t-${f.type}`, text: f.type, title: INV.findingTypes[f.type] }),
+      f.fixedIn ? el('span', { class: 'fixed-pill', text: `Fixed in ${f.fixedIn}` }) : null,
       showScreen ? el('button', { type: 'button', class: 'where', text: byId[f.node].title, onclick: () => openScreen(f.node) }) : null,
       el('span', { class: 'fid', text: f.id })),
     el('p', { text: f.text }),

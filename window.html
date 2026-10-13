@@ -27,6 +27,7 @@
                     ${I.chevron}
                 </button>
                 <div class="scp-sess-panel" id="scp-sess-panel">
+                    <div class="scp-sess-heading" data-i18n="Sessions for this chat">Sessions for this chat</div>
                     <div class="scp-sess-list" id="scp-sess-list"></div>
                     <div class="scp-sess-footer">
                         <button class="scp-sess-new-btn" id="scp-new-sess-btn">
@@ -47,12 +48,12 @@
             <button class="scp-tbtn scp-tbtn-danger" id="scp-del-sess-btn" title="Delete session" data-i18n="[title]Delete session">${I.trash}</button>
         </div>
         <div class="scp-toolbar-sep"></div>
-        <label class="scp-depth-label" title="Main chat messages injected into each request" data-i18n="[title]Main chat messages injected into each request">Ctx</label>
+        <label class="scp-depth-label" title="Chat Depth: how many SillyTavern chat messages are sent with each request" data-i18n="[title]Chat Depth: how many SillyTavern chat messages are sent with each request;Depth">Depth</label>
         <input type="range" id="scp-depth-slider" class="scp-slider scp-depth-slider" min="0" max="100" step="1" value="15">
         <span class="scp-depth-val scp-depth-clickable" id="scp-depth-val" title="Click to enter exact value" data-i18n="[title]Click to enter exact value">15</span>
         <div class="scp-toolbar-sep"></div>
         <div class="scp-pick-wrap">
-            <button class="scp-tbtn" id="scp-pick-btn" title="Pick specific chat messages for context (replaces Ctx slider)" data-i18n="[title]Pick specific chat messages for context (replaces Ctx slider)">${I.pick}</button>
+            <button class="scp-tbtn" id="scp-pick-btn" title="Pick specific chat messages for context (replaces the Depth slider)" data-i18n="[title]Pick specific chat messages for context (replaces the Depth slider)">${I.pick}</button>
             <span class="scp-pick-badge" id="scp-pick-badge" style="display:none"></span>
         </div>
         <div class="scp-menu-dropdown" id="scp-menu-dropdown">
@@ -79,7 +80,7 @@
 
     <div class="scp-thinking-bar" id="scp-thinking-bar" style="display:none">
         <div class="scp-dots"><span></span><span></span><span></span></div>
-        <span id="scp-thinking-text">Thinking…</span>
+        <span id="scp-thinking-text" data-i18n="Thinking…">Thinking…</span>
         <button class="scp-stop-btn" id="scp-stop-btn" title="Abort" data-i18n="[title]Abort">${I.stop}</button>
     </div>
 

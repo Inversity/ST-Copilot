@@ -2,6 +2,17 @@
 
 This fork continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker, whose last release was 2.9.0 (2026-07-02). Versions before 3.0.0 are upstream's and are listed in the extension's "What's New" panel.
 
+## 3.0.9 (2026-10-13)
+
+Fixes from a review of every screen (the UI map in `docs/`).
+
+- **Clearer names.** The context slider is "Depth" in the toolbar and "Chat Depth" in Settings (it was "Ctx" and "Main Chat Depth"). "Reasoning Trim Strings" is "Remove From Replies", which is what it does. The lorebook scan setting says what it counts: your Copilot messages scanned for lorebook keys. "Clear All Sessions" says it clears this chat's sessions. Stats show full names (Quick Prompts, Lorebook Changes, 12 Months). The tool round reads "Tool round 2 (max 6)" instead of "Round 2/6".
+- **Character edit cards** label a new alternate greeting "+ New greeting", so it no longer looks like "⬇ Append" (text added to the end of a field).
+- **The extension is "ST-Copilot" everywhere**, including SillyTavern's Manage Extensions list (it said "Copilot (ST)").
+- The session list is headed "Sessions for this chat"; the persona in the Character Manager says where its context switch lives.
+- Fixed: in the Extensions panel, clicking the "Apply Regex Scripts to context" text did not toggle its checkbox. Max Response Tokens showed 2048 as its default; it is 8048.
+- Five settings nothing used any more are removed from saved settings. More of the interface is translatable, and the Korean translation follows the renamed text.
+
 ## 3.0.8 (2026-10-13)
 
 - **The thinking timer counts every tool round.** In a reply that used tools, the "Thinking for…" label froze at the first round's time, however long later rounds thought, and the saved reply kept only that first time. It now adds each round's thinking to the total, live and in the saved reply.

@@ -34,6 +34,17 @@ const page = await browser.newPage();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const captured = [];
 const failed = [];
+// Script errors while the screens are opened: a capture run doubles as a console check.
+const pageErrors = [];
+page.on('pageerror', e => {
+    const frame = String(e.stack || '').split('\n').find(l => /^\s+at /.test(l))?.trim().replace(ST, '') || '';
+    pageErrors.push(e.message.split('\n')[0] + (frame ? ` (${frame})` : ''));
+});
+page.on('console', m => {
+    if (m.type() !== 'error' || /Failed to load resource/.test(m.text())) return;
+    const at = m.location()?.url ? ` (${m.location().url.replace(ST, '')}:${m.location().lineNumber ?? '?'})` : '';
+    pageErrors.push(m.text().split('\n')[0] + at);
+});
 
 async function login() {
     await page.goto(`${ST}/login`, { waitUntil: 'networkidle2' });
@@ -143,7 +154,10 @@ await step('st-wand', async () => {
     await sleep(600);
 });
 await step('st-drawer', async () => {
-    await click('#extensions-settings-button .drawer-toggle');
+    // The Extensions panel remembers whether it was open: open it only if it is closed.
+    const isOpen = () => page.evaluate(() => !!document.querySelector('.st-copilot-settings')?.offsetParent);
+    if (!await isOpen()) await domClick('#extensions-settings-button .drawer-toggle');
+    await sleep(600);
     await page.evaluate(() => {
         const root = document.querySelector('.st-copilot-settings');
         root.querySelectorAll('.inline-drawer-content').forEach(c => { c.style.display = 'block'; });
@@ -152,7 +166,7 @@ await step('st-drawer', async () => {
     await sleep(500);
     await shot('st-drawer', '.st-copilot-settings', { tall: '.inline-drawer-content' });
     await page.evaluate(() => document.querySelectorAll('.st-copilot-settings .inline-drawer-content').forEach(c => { c.style.display = ''; }));
-    await click('#extensions-settings-button .drawer-toggle');
+    await domClick('#extensions-settings-button .drawer-toggle');
 });
 
 // ── Copilot window ──
@@ -352,3 +366,4 @@ fs.rmSync(profileDir, { recursive: true, force: true });
 fs.writeFileSync(path.join(OUT, 'index.json'), JSON.stringify({ captured: new Date().toISOString(), st: ST, user: USER, screens: captured }, null, 2));
 console.log(`captured ${captured.length} screens into ${OUT}`);
 if (failed.length) { console.log('failed:'); for (const f of failed) console.log(`  ${f.id}: ${f.error}`); }
+if (pageErrors.length) { console.log('page errors:'); for (const e of [...new Set(pageErrors)]) console.log(`  ${e}`); }

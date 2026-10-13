@@ -1,6 +1,6 @@
 {
   "name": "st-copilot",
-  "version": "3.0.8",
+  "version": "3.0.9",
   "description": "SillyTavern-MetaAssistant",
   "main": "index.js",
   "scripts": {

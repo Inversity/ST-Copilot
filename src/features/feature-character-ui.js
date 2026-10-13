@@ -505,11 +505,12 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
         const meta = document.createElement('div');
         meta.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap;min-width:0';
         const patchCount = c.patches?.length > 1 ? ` (${c.patches.length})` : '';
-        const actionLabel = c.action === 'append' ? '+ Append'
-            : c.action === 'overwrite' ? '↺ Overwrite'
-            : c.action === 'prepend' ? '⬆ Prepend'
-            : c.action === 'append_text' ? '⬇ Append'
-            : `✎ Replace${patchCount}`;
+        // 'append' adds a new alternate greeting; 'append_text' adds text to the end of a field.
+        const actionLabel = c.action === 'append' ? `+ ${translate('New greeting')}`
+            : c.action === 'overwrite' ? `↺ ${translate('Overwrite')}`
+            : c.action === 'prepend' ? `⬆ ${translate('Prepend')}`
+            : c.action === 'append_text' ? `⬇ ${translate('Append')}`
+            : `✎ ${translate('Replace')}${patchCount}`;
         meta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(actionLabel)}</span><span class="scp-lb-proposal-name">${escHtml(translate(getFieldLabel(c.field)))}${c.index?` #${c.index}`:''}</span>`;
 
         const btns = document.createElement('div');

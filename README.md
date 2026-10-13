@@ -5,7 +5,7 @@
 >
 > **Install:** SillyTavern > Extensions > Install extension > `https://github.com/Inversity/ST-Copilot`. If you already have upstream ST-Copilot installed, uninstall it first; your settings are kept.
 >
-> **Compatibility:** 3.0.8 is tested against SillyTavern 1.19.0, `staging` branch at `ad29cbda6` (2026-10-03). It uses only extension APIs that are also in the `release` branch.
+> **Compatibility:** 3.0.9 is tested against SillyTavern 1.19.0, `staging` branch at `ad29cbda6` (2026-10-03). It uses only extension APIs that are also in the `release` branch.
 >
 > **Develop:** edit `src/`, then `npm run build` (Rollup bundles `index.js`, which is what SillyTavern loads and must be committed) and `npm test`. Before a release, check SillyTavern's extension-facing files (`public/scripts/st-context.js`, `extensions/shared.js`, `custom-request.js`, `openai.js`) for changes since the commit above. `tools/` has a performance bench, synthetic test data and a mock streaming API; see [tools/README.md](tools/README.md).
 

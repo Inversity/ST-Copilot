@@ -330,6 +330,12 @@ function _buildAltGreetingsSection(charRef, onChange) {
 function _buildCurrentInfoTab(entity, saveBtn, revertBtn) {
     const pane = document.createElement('div');
     pane.className = 'scp-char-pane scp-char-pane-info';
+    if (entity.isPersona) {
+        const hint = document.createElement('div');
+        hint.className = 'scp-char-hint';
+        hint.textContent = translate('Whether your persona is sent to Copilot is set in Settings > AI > Context Payload ("Include User Persona").');
+        pane.appendChild(hint);
+    }
 
     const groups = entity.isPersona
         ? [{ title: 'Identity', fields: [{ key: 'user_persona', label: 'Persona Description', multiline: true }] }]

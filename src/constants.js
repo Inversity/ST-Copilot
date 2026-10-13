@@ -302,6 +302,17 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     // ─── Changelog Data ──────────────────────────────────────────────────────────
 export const CHANGELOG = [
     {
+        version: '3.0.9',
+        date: '10/13/2026',
+        announce: true,
+        notes: [
+            '<strong>Clearer names</strong>: "Depth" / "Chat Depth" for the context slider, "Remove From Replies", "Tool round 2 (max 6)", full names in Stats.',
+            '<strong>Character edit cards</strong>: a new alternate greeting reads "+ New greeting", not "Append".',
+            '<strong>"ST-Copilot" everywhere</strong>, including Manage Extensions.',
+            'Fixed: the "Apply Regex Scripts" text in the Extensions panel now toggles its checkbox; Max Response Tokens shows its real default (8048).',
+        ],
+    },
+    {
         version: '3.0.8',
         date: '10/13/2026',
         announce: true,
