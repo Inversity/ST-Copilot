@@ -57,3 +57,7 @@ node tools/mock-openai.mjs [--port 5005] [--tps 40] [--tokens 600] [--reasoning 
 In SillyTavern: Chat Completion, source Custom (OpenAI-compatible), URL
 `http://127.0.0.1:5005/v1`, model `mock-model`. Save it as a Connection Manager profile
 so Copilot uses the same path real setups do.
+
+Text completion: API type Generic (OpenAI-compatible), server `http://127.0.0.1:5005`.
+The mock answers `/v1/completions` and logs each prompt's start and end, temperature and
+stop strings, which shows whether instruct formatting and the live samplers arrived.

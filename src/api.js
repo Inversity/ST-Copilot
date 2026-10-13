@@ -584,10 +584,17 @@ export async function callGenerate(session, settings, pendingText, onChunk) {
 }
 
 // Sends through the connection SillyTavern is using right now, unsaved changes included.
-// Chat completion builds its payload with ST's own presetToGeneratePayload (an empty preset
-// means the live settings, run through the same createGenerationParameters as ST's chat).
-// Applying the preset by name instead would pull the preset's own source and endpoint.
-async function sendViaLiveConnection(ctx, messages, maxTokens, stream, signal) {
+// Both services build the payload with ST's own presetToGeneratePayload: an empty preset means
+// the live settings (chat completion: createGenerationParameters; text completion:
+// createTextGenGenerationData, as ST's chat). Applying the preset by name instead would use the
+// saved preset (and for chat completion its own source and endpoint). Text completion formats
+// the messages with the live instruct template when it is on, as connection profiles do.
+// Text completion takes text only: the image parts of a message are left out.
+function messageText(content) {
+    return Array.isArray(content) ? content.filter(p => p.type === 'text').map(p => p.text).join('\n') : String(content ?? '');
+}
+
+export async function sendViaLiveConnection(ctx, messages, maxTokens, stream, signal) {
     if (ctx.mainApi === 'openai' && ctx.ChatCompletionService) {
         const live = ctx.chatCompletionSettings || {};
         const data = await ctx.ChatCompletionService.presetToGeneratePayload({}, {}, {
@@ -600,12 +607,14 @@ async function sendViaLiveConnection(ctx, messages, maxTokens, stream, signal) {
         return ctx.ChatCompletionService.sendRequest(data, false, signal);
     }
     if (ctx.mainApi === 'textgenerationwebui' && ctx.TextCompletionService) {
-        const textGenSettings = ctx.textCompletionSettings || {};
-        return ctx.TextCompletionService.processRequest({
-            prompt: messages,
-            max_tokens: maxTokens,
-            stream,
-        }, { presetName: textGenSettings.preset_settings_textgenerationwebui }, false, signal);
+        const service = ctx.TextCompletionService;
+        const instruct = ctx.powerUserSettings?.instruct;
+        const textMessages = messages.map(m => ({ ...m, content: messageText(m.content) }));
+        const prompt = instruct?.enabled
+            ? service.constructPrompt(textMessages, instruct)
+            : textMessages.map(m => m.content).join('\n\n');
+        const data = service.presetToGeneratePayload({}, {}, { prompt, max_tokens: maxTokens, stream });
+        return service.sendRequest(data, false, signal);
     }
     throw new Error('No active API connection found. Please select a profile in Connection Manager or configure the main API.');
 }

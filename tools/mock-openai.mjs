@@ -6,6 +6,8 @@
 // In SillyTavern: Chat Completion > Custom (OpenAI-compatible), URL http://127.0.0.1:5005/v1,
 // model "mock-model". --tps is chunks per second (one ~4-char token per chunk);
 // --reasoning N streams N reasoning tokens first as delta.reasoning_content.
+// Text Completion > Generic (OpenAI-compatible) at http://127.0.0.1:5005 uses /v1/completions;
+// each request logs the start of its prompt, temperature and stop strings.
 
 import http from 'node:http';
 
@@ -56,13 +58,36 @@ const send = (res, code, obj) => {
     res.end(JSON.stringify(obj));
 };
 
+// Legacy text completion: a prompt string in, choices[0].text out, streamed as SSE.
+function completeText(res, body, toks, started) {
+    const prompt = String(body.prompt ?? '');
+    console.log(`${new Date().toISOString()} text ${body.stream ? 'stream' : 'block'} model=${body.model} promptChars=${prompt.length} temperature=${body.temperature} max_tokens=${body.max_tokens} stop=${JSON.stringify(body.stop || [])}`);
+    console.log(`  prompt start: ${JSON.stringify(prompt.slice(0, 240))}`);
+    console.log(`  prompt end:   ${JSON.stringify(prompt.slice(-160))}`);
+    const chunk = (t, finish = null) => ({ id: `cmpl-bench-${started}`, object: 'text_completion', created: Math.floor(started / 1000), model: 'mock-model', choices: [{ index: 0, text: t, finish_reason: finish }] });
+    if (!body.stream) return send(res, 200, { ...chunk(toks.join(''), 'stop'), usage: { prompt_tokens: 0, completion_tokens: toks.length, total_tokens: toks.length } });
+    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'Access-Control-Allow-Origin': '*' });
+    let i = 0;
+    const timer = setInterval(() => {
+        if (res.destroyed) return clearInterval(timer);
+        const due = Math.min(toks.length, Math.floor((Date.now() - started) / 1000 * TPS) + 1);
+        if (i < toks.length) { for (; i < due; i++) res.write(`data: ${JSON.stringify(chunk(toks[i]))}\n\n`); return; }
+        clearInterval(timer);
+        res.write(`data: ${JSON.stringify(chunk('', 'stop'))}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+    }, Math.max(10, 1000 / TPS));
+    res.on('close', () => clearInterval(timer));
+}
+
 http.createServer((req, res) => {
     const url = req.url.replace(/^\/v1/, '');
     if (req.method === 'OPTIONS') { res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' }); return res.end(); }
     if (req.method === 'GET' && url.startsWith('/models')) {
         return send(res, 200, { object: 'list', data: [{ id: 'mock-model', object: 'model', owned_by: 'bench' }] });
     }
-    if (req.method !== 'POST' || !url.startsWith('/chat/completions')) return send(res, 404, { error: 'not found' });
+    const isText = url.startsWith('/completions');
+    if (req.method !== 'POST' || !(isText || url.startsWith('/chat/completions'))) return send(res, 404, { error: 'not found' });
 
     let raw = '';
     req.on('data', c => { raw += c; });
@@ -73,6 +98,7 @@ http.createServer((req, res) => {
         const reasoningToks = text(REASONING);
         const contentToks = (MD ? markdown : text)(Math.min(TOKENS, body.max_tokens || TOKENS));
         const started = Date.now();
+        if (isText) return completeText(res, body, contentToks, started);
         console.log(`${new Date().toISOString()} ${body.stream ? 'stream' : 'block'} model=${body.model} msgs=${body.messages?.length ?? 0} promptChars=${JSON.stringify(body.messages || []).length} max_tokens=${body.max_tokens}`);
 
         if (!body.stream) {
