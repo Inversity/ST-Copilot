@@ -1,5 +1,5 @@
 import { ST_GLOBAL_PROMPT_ORDER_ID } from '../utils/util-st.js';
-import { applySearchReplaceToField } from '../utils/util-text.js';
+import { applyPatches } from '../utils/util-patch.js';
 import { parseAnchorPatches } from './feature-character-engine.js';
 
 export const PROMPT_CHANGES_BLOCK = 'prompt-changes';
@@ -170,15 +170,9 @@ export function previewPromptChange(change) {
     else if (change.action === 'append') after = before ? `${before}\n\n${change.value}` : change.value;
     else if (change.action === 'prepend') after = before ? `${change.value}\n\n${before}` : change.value;
     else if (change.action === 'replace') {
-        for (const p of change.patches) {
-            const r = applySearchReplaceToField(after, p.search, p.replace);
-            if (!r.matched) {
-                return { ok: false, entry, reason: r.reason === 'ambiguous'
-                    ? `Anchor matches more than one place: "${p.search.slice(0, 50)}"`
-                    : `Anchor not found: "${p.search.slice(0, 50)}"` };
-            }
-            after = r.result;
-        }
+        const r = applyPatches(after, change.patches);
+        if (!r.ok) return { ok: false, entry, reason: r.reason, ambiguous: r.ambiguous };
+        after = r.text;
     }
     return { ok: true, entry, before, after };
 }

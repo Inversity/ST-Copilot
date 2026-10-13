@@ -4,7 +4,7 @@ import { getSettings, saveSettings, getCurrentSession, addMessage, deleteMsg, sa
 import { _dbgAdd } from '../utils/util-debug.js';
 import { escHtml, showCustomDialog, copyText } from '../utils/util-dom.js';
 import { fetchWorldInfoBook, saveWorldInfoBook, wiEntriesToArray, getDisplayName, getActiveLorebookNames, getEntryOverrideKey, buildLorebookContextBlock, stripLBChangesBlock, resolveLBChangeTarget, bindNewLorebookToCharacter, wiCache, lastActiveEntries } from './feature-lorebook-engine.js';
-import { applySearchReplaceToField } from '../utils/util-text.js';
+import { applyPatch, applyPatches, offerChangeAll } from '../utils/util-patch.js';
 import { openTextDiffModal } from '../utils/util-diff.js';
 import { t, translate } from '../utils/util-i18n.js';
 
@@ -23,10 +23,7 @@ export function openDiffModal(change, originalEntry) {
     
     if (change.action === 'patch' && originalEntry) {
         let current = originalContent;
-        for (const patch of (change.patches || [])) {
-            const { result } = applySearchReplaceToField(current, patch.search || patch.anchor || '', patch.replace || '');
-            current = result;
-        }
+        for (const patch of (change.patches || [])) current = applyPatch(current, patch).result;
         newContent = current;
     } else if (change.action === 'prepend' && originalEntry) {
         newContent = (change.content || '') + originalContent;
@@ -283,19 +280,9 @@ export async function applyLBChanges(changes, afterMsgId = null) {
                 toastr.error(t`[LB] Entry not found for patch: "${change.name || change.uid || '?'}" in "${bookName}"`, EXT_DISPLAY, { timeOut: 10000 });
                 continue;
             }
-            let current = origEntry.content || '';
-            let allMatched = true;
-            for (const patch of (change.patches || [])) {
-                const { result, matched } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
-                if (!matched) {
-                    toastr.warning(t`[LB] SEARCH not found in "${origEntry.comment}": "${(patch.search || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 });
-                    allMatched = false;
-                    break;
-                }
-                current = result;
-            }
-            if (!allMatched) continue;
-            origEntry.content = current;
+            const r = applyPatches(origEntry.content || '', change.patches, `"${origEntry.comment}"`);
+            if (!r.ok) { toastr.warning(`[LB] ${r.reason}`, EXT_DISPLAY, { timeOut: 8000 }); continue; }
+            origEntry.content = r.text;
             if (change.name !== undefined) origEntry.comment = change.name;
             if (change.triggers !== null && change.triggers !== undefined) {
                 origEntry.key = change.triggers;
@@ -540,20 +527,17 @@ export function renderProposalCard(changes, msgEl) {
 
             let isValid = found;
             let reason = found ? '' : 'Entry not found in selected lorebook';
+            let ambiguous = null;
             if (found && editableChanges[ci].action === 'patch') {
-                const orig = resolved.origEntry;
-                let current = orig?.content || '';
-                for (const patch of (editableChanges[ci].patches || [])) {
-                    const { result, matched } = applySearchReplaceToField(current, patch.search || patch.anchor || '', patch.replace || '');
-                    if (!matched) { isValid = false; reason = `ANCHOR not found: "${(patch.search || patch.anchor || '').slice(0, 40)}..."`; break; }
-                    current = result;
-                }
+                const r = applyPatches(resolved.origEntry?.content || '', editableChanges[ci].patches);
+                if (!r.ok) { isValid = false; reason = r.reason; ambiguous = r.ambiguous; }
             }
 
             if (!isValid) {
                 applyItemBtn.disabled = true; applyItemBtn.title = reason;
                 item.style.borderLeftColor = 'var(--scp-danger)';
                 warnEl.textContent = `⚠ ${reason}`; warnEl.style.display = 'block';
+                offerChangeAll(warnEl, ambiguous, () => _validateBookEntry(bookName));
             } else {
                 applyItemBtn.disabled = false; applyItemBtn.title = 'Apply this change';
                 item.style.borderLeftColor = ''; warnEl.style.display = 'none';

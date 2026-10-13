@@ -2,7 +2,7 @@ import { EXT_DISPLAY, I } from '../constants.js';
 import { getSettings, saveSettings, getCurrentSession, addMessage, saveSessionsToMetadata } from '../session.js';
 import { escHtml } from '../utils/util-dom.js';
 import { bringWindowToFront } from '../ui/ui-window.js';
-import { applySearchReplaceToField } from '../utils/util-text.js';
+import { applyPatch, applyPatches, offerChangeAll } from '../utils/util-patch.js';
 import { getCharFieldValue, saveCharacterField, stripCharCreationBlock, stripCharChangesBlock, createCharacterAPI, groupChangesByCharacter } from './feature-character-engine.js';
 import { openTextDiffModal } from '../utils/util-diff.js';
 import { t, translate } from '../utils/util-i18n.js';
@@ -151,15 +151,9 @@ export async function applyCharChanges(changes, char, afterMsgId = null) {
                     } else if (action === 'append_text') {
                         greetings[idx] = (greetings[idx] ? greetings[idx] + '\n\n' : '') + (change.value || '');
                     } else if (action === 'replace') {
-                        let current = greetings[idx];
-                        let allMatched = true;
-                        for (const patch of (change.patches || [])) {
-                            const { result, matched } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
-                            if (!matched) { toastr.warning(t`[CharEdit] SEARCH not found in greeting #${change.index}.`, EXT_DISPLAY); allMatched = false; break; }
-                            current = result;
-                        }
-                        if (!allMatched) continue;
-                        greetings[idx] = current;
+                        const r = applyPatches(greetings[idx], change.patches, t`greeting #${change.index}`);
+                        if (!r.ok) { toastr.warning(`[CharEdit] ${r.reason}`, EXT_DISPLAY, { timeOut: 8000 }); continue; }
+                        greetings[idx] = r.text;
                     }
 
                     await saveCharacterField(char, 'alternate_greetings', greetings);
@@ -177,15 +171,9 @@ export async function applyCharChanges(changes, char, afterMsgId = null) {
                 await saveCharacterField(char, field, (current ? current + '\n\n' : '') + change.value);
                 successLog.push(change);
             } else if (action === 'replace') {
-                let current = String(getCharFieldValue(char, field));
-                let allMatched = true;
-                for (const patch of (change.patches || [])) {
-                    const { result, matched } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
-                    if (!matched) { toastr.warning(t`[CharEdit] SEARCH not found in field "${field}": "${(patch.search || '').slice(0, 60)}…"`, EXT_DISPLAY, { timeOut: 8000 }); allMatched = false; break; }
-                    current = result;
-                }
-                if (!allMatched) continue;
-                await saveCharacterField(char, field, current);
+                const r = applyPatches(String(getCharFieldValue(char, field)), change.patches, `"${field}"`);
+                if (!r.ok) { toastr.warning(`[CharEdit] ${r.reason}`, EXT_DISPLAY, { timeOut: 8000 }); continue; }
+                await saveCharacterField(char, field, r.text);
                 successLog.push(change);
             }
         } catch (e) {
@@ -463,12 +451,8 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
         } else {
             current = String(getCharFieldValue(char, change.field));
         }
-        for (const patch of (change.patches || [])) {
-            const { matched, result } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
-            if (!matched) return { valid: false, reason: `SEARCH not found: "${(patch.search || '').slice(0, 50)}"` };
-            current = result;
-        }
-        return { valid: true };
+        const r = applyPatches(current, change.patches);
+        return r.ok ? { valid: true } : { valid: false, reason: r.reason, ambiguous: r.ambiguous };
     };
 
     const getAppliedResult = (change) => {
@@ -484,10 +468,7 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
         // Must mirror applyCharChanges.
         if (change.action === 'prepend') return (change.value || '') + (current ? '\n\n' + current : '');
         if (change.action === 'append_text') return (current ? current + '\n\n' : '') + (change.value || '');
-        for (const patch of (change.patches || [])) {
-            const { result } = applySearchReplaceToField(current, patch.search || patch.anchor || '', patch.replace || '');
-            current = result;
-        }
+        for (const patch of (change.patches || [])) current = applyPatch(current, patch).result;
         return current;
     };
 
@@ -561,18 +542,21 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
         const applyBtn = document.createElement('button');
         applyBtn.className = 'scp-lb-proposal-item-apply'; applyBtn.title = 'Apply'; applyBtn.textContent = '✓';
 
-        if (c.action === 'replace') {
-            const { valid, reason } = validateReplaceChange(editableChanges[ci]);
-            if (!valid) {
-                applyBtn.disabled = true;
-                applyBtn.title = reason || 'Cannot apply';
-                item.style.borderLeftColor = 'var(--scp-danger)';
-                const warn = document.createElement('div');
-                warn.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px';
-                warn.textContent = `\u26A0 ${reason || 'SEARCH text not found — this edit may be outdated.'}`;
-                meta.appendChild(warn);
-            }
-        }
+        const warn = document.createElement('div');
+        warn.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;display:none';
+        meta.appendChild(warn);
+        const refreshValidation = () => {
+            if (editableChanges[ci].action !== 'replace') return;
+            const { valid, reason, ambiguous } = validateReplaceChange(editableChanges[ci]);
+            applyBtn.disabled = !valid;
+            applyBtn.title = valid ? 'Apply' : (reason || 'Cannot apply');
+            item.style.borderLeftColor = valid ? '' : 'var(--scp-danger)';
+            warn.style.display = valid ? 'none' : 'block';
+            if (valid) return;
+            warn.textContent = `\u26A0 ${reason || 'SEARCH text not found — this edit may be outdated.'}`;
+            offerChangeAll(warn, ambiguous, refreshValidation);
+        };
+        refreshValidation();
 
         applyBtn.addEventListener('click', async e => {
             e.stopPropagation();
@@ -673,7 +657,7 @@ function _buildCharProposalCardForCharacter(changes, msgEl, char) {
                         delP.addEventListener('click', () => {
                             change.patches.splice(pi, 1);
                             rebuildEditPanel();
-                            const { valid } = validateReplaceChange(change); applyBtn.disabled = !valid;
+                            refreshValidation();
                             refreshPreview();
                         });
                         pHdr.appendChild(delP);

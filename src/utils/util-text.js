@@ -124,7 +124,10 @@ function _findLiteral(src, query) {
 // Anchors must identify exactly one place. A failed or ambiguous anchor changes nothing,
 // so the edit fails safe instead of patching the wrong region. Returns
 // { result, matched, reason } where reason is 'not_found' | 'ambiguous' when unmatched.
-export function applySearchReplaceToField(fieldContent, searchText, replaceText) {
+// A plain anchor found word for word in several places also reports `occurrences`; with
+// { all: true } (the Human chose "Change all" in the card) every one of them is replaced.
+// Boundary and fuzzy anchors never use `all`: there the places can differ.
+export function applySearchReplaceToField(fieldContent, searchText, replaceText, { all = false } = {}) {
     if (!fieldContent) return { result: replaceText || '', matched: true };
     const src = fieldContent;
     const srch = searchText || '';
@@ -252,9 +255,9 @@ export function applySearchReplaceToField(fieldContent, searchText, replaceText)
         return fz.ambiguous ? [hit, hit] : [hit];
     }
 
-    const fail = (reason) => {
-        _dbgAdd('PATCH_ANCHOR_FAILED', { search: srch, reason, srcLength: src.length });
-        return { result: src, matched: false, reason };
+    const fail = (reason, extra = {}) => {
+        _dbgAdd('PATCH_ANCHOR_FAILED', { search: srch, reason, srcLength: src.length, ...extra });
+        return { result: src, matched: false, reason, ...extra };
     };
     const replaceRange = (start, end) => ({ result: src.slice(0, start) + repl + src.slice(end), matched: true });
 
@@ -280,7 +283,14 @@ export function applySearchReplaceToField(fieldContent, searchText, replaceText)
 
     const hits = locate(src, srch);
     if (!hits.length) return fail('not_found');
-    if (hits.length > 1) return fail('ambiguous');
+    if (hits.length > 1) {
+        const literal = _findLiteral(src, srch);
+        if (literal.length < 2) return fail('ambiguous');
+        if (!all) return fail('ambiguous', { occurrences: literal.length });
+        let out = src;
+        for (const h of [...literal].reverse()) out = out.slice(0, h.start) + repl + out.slice(h.end);
+        return { result: out, matched: true, occurrences: literal.length };
+    }
     return replaceRange(hits[0].start, hits[0].end);
 }
 

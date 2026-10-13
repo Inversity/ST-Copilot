@@ -1,7 +1,8 @@
 import { EXT_DISPLAY, I } from '../constants.js';
 import { getSettings, saveSettings, getCurrentSession, addMessage, saveSessionsToMetadata } from '../session.js';
 import { escHtml } from '../utils/util-dom.js';
-import { applySearchReplaceToField, applyBulkReplacement } from '../utils/util-text.js';
+import { applyBulkReplacement } from '../utils/util-text.js';
+import { applyPatch, applyPatches, offerChangeAll } from '../utils/util-patch.js';
 import { openTextDiffModal } from '../utils/util-diff.js';
 import { stripChatChangesBlock, reconstructChatChangesBlock, _resolveStMsgByIndexOrId } from './feature-chatedit-engine.js';
 import { bringWindowToFront } from '../ui/ui-window.js';
@@ -161,11 +162,8 @@ export function renderChatProposalCard(changes, msgEl) {
                 if (invalid.length) return { valid: false, reason: `Indices out of bounds: ${invalid.join(', ')}` };
                 if (change.action === 'replace') {
                     for (const idx of change.msg_indices) {
-                        let content = stMsgs[idx].mes || '';
-                        for (const patch of (change.patches || [])) {
-                            const { matched } = applySearchReplaceToField(content, patch.search || patch.anchor || '', patch.replace || '');
-                            if (!matched) return { valid: false, reason: `ANCHOR not found in #${idx}: "${(patch.search || patch.anchor || '').slice(0, 40)}..."` };
-                        }
+                        const r = applyPatches(stMsgs[idx].mes || '', change.patches, `#${idx}`);
+                        if (!r.ok) return { valid: false, reason: r.reason, ambiguous: r.ambiguous };
                     }
                 }
                 return { valid: true };
@@ -174,11 +172,8 @@ export function renderChatProposalCard(changes, msgEl) {
             if (!resolved) return { valid: false, reason: `Message not found (Index: ${change.msg_index ?? change.msg_id})` };
 
             if (change.action === 'replace') {
-                let content = resolved.msg.mes || '';
-                for (const patch of (change.patches || [])) {
-                    const { matched } = applySearchReplaceToField(content, patch.search || patch.anchor || '', patch.replace || '');
-                    if (!matched) return { valid: false, reason: `ANCHOR not found: "${(patch.search || patch.anchor || '').slice(0, 40)}..."` };
-                }
+                const r = applyPatches(resolved.msg.mes || '', change.patches);
+                if (!r.ok) return { valid: false, reason: r.reason, ambiguous: r.ambiguous };
             }
             return { valid: true };
         }
@@ -188,10 +183,7 @@ export function renderChatProposalCard(changes, msgEl) {
         if (change.action === 'overwrite') return change.content || '';
         if (change.action === 'replace') {
             let c = content;
-            for (const p of (change.patches || [])) {
-                const { result } = applySearchReplaceToField(c, p.search || p.anchor || '', p.replace || '');
-                c = result;
-            }
+            for (const p of (change.patches || [])) c = applyPatch(c, p).result;
             return c;
         }
         if (change.action === 'bulk_replace') {
@@ -349,11 +341,12 @@ export function renderChatProposalCard(changes, msgEl) {
         applyBtn.className = 'scp-lb-proposal-item-apply'; applyBtn.title = 'Apply'; applyBtn.textContent = '✓';
         
         const refreshValidation = () => {
-            const { valid, reason } = validateChatChange(editableChanges[ci]);
+            const { valid, reason, ambiguous } = validateChatChange(editableChanges[ci]);
             if (!valid) {
                 applyBtn.disabled = true; applyBtn.title = reason;
                 item.style.borderLeftColor = 'var(--scp-danger)';
                 warnEl.textContent = `⚠ ${reason}`; warnEl.style.display = 'block';
+                offerChangeAll(warnEl, ambiguous, refreshValidation);
             } else {
                 applyBtn.disabled = false; applyBtn.title = 'Apply';
                 item.style.borderLeftColor = ''; 

@@ -1,6 +1,7 @@
 import { EXT_DISPLAY, CHAT_EDIT_FORMAT_BLOCK, DEFAULT_CHAT_EDIT_DIRECTIVE } from '../constants.js';
 import { getSettings, getCurrentSession, addMessage } from '../session.js';
-import { applySearchReplaceToField, applyBulkReplacement, _repairJSON } from '../utils/util-text.js';
+import { applyBulkReplacement, _repairJSON } from '../utils/util-text.js';
+import { applyPatches } from '../utils/util-patch.js';
 import { escHtml } from '../utils/util-dom.js';
 import { t, translate } from '../utils/util-i18n.js';
 
@@ -338,13 +339,9 @@ export async function applyChatChanges(changes, afterMsgId = null) {
                     } else if (change.action === 'append') {
                         content = content + (change.content || '');
                     } else if (change.action === 'replace') {
-                        let matched = true;
-                        for (const patch of (change.patches || [])) {
-                            const { result, matched: m } = applySearchReplaceToField(content, patch.search || patch.anchor || '', patch.replace || '');
-                            if (!m) { toastr.warning(t`[ChatEdit] ANCHOR not found in #${idx}: "${(patch.search || patch.anchor || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 }); matched = false; break; }
-                            content = result;
-                        }
-                        if (!matched) { allSuccess = false; continue; }
+                        const r = applyPatches(content, change.patches, `#${idx}`);
+                        if (!r.ok) { toastr.warning(`[ChatEdit] ${r.reason}`, EXT_DISPLAY, { timeOut: 8000 }); allSuccess = false; continue; }
+                        content = r.text;
                     }
                     msg.mes = content;
                     await _saveChatMessage(ctx, idx, msg);
@@ -376,16 +373,9 @@ export async function applyChatChanges(changes, afterMsgId = null) {
             } else if (change.action === 'append') {
                 content = content + (change.content || '');
             } else if (change.action === 'replace') {
-                let allMatched = true;
-                for (const patch of (change.patches || [])) {
-                    const { result, matched } = applySearchReplaceToField(content, patch.search || patch.anchor || '', patch.replace || '');
-                    if (!matched) {
-                        toastr.warning(t`[ChatEdit] ANCHOR not found in message ${change.msg_index ?? change.msg_id}: "${(patch.search || patch.anchor || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 });
-                        allMatched = false; break;
-                    }
-                    content = result;
-                }
-                if (!allMatched) continue;
+                const r = applyPatches(content, change.patches, t`message ${change.msg_index ?? change.msg_id}`);
+                if (!r.ok) { toastr.warning(`[ChatEdit] ${r.reason}`, EXT_DISPLAY, { timeOut: 8000 }); continue; }
+                content = r.text;
             }
             msg.mes = content;
             await _saveChatMessage(ctx, idx, msg);

@@ -3,6 +3,7 @@ import { getSettings, getCurrentSession, saveSessionsToMetadata } from '../sessi
 import { applyCustomTheme, bringWindowToFront } from '../ui/ui-window.js';
 import { showCustomDialog, escHtml } from '../utils/util-dom.js';
 import { openTextDiffModal } from '../utils/util-diff.js';
+import { offerChangeAll } from '../utils/util-patch.js';
 import { t, translate } from '../utils/util-i18n.js';
 import {
     getPromptManagerState, applyPromptChanges, updateCurrentPreset,
@@ -252,12 +253,23 @@ export function renderPromptProposalCard(changes, msgEl) {
             warn.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;flex-basis:100%';
             warn.textContent = `⚠ ${pv.reason}`;
             meta.appendChild(warn);
+            // "Change all": the patch now covers every identical occurrence; check it again.
+            offerChangeAll(warn, pv.ambiguous, () => {
+                if (!previewPromptChange(change).ok) return;
+                warn.remove();
+                item.style.borderLeftColor = '';
+                applyBtn.disabled = false;
+                applyBtn.title = translate('Apply');
+                if (diffBtn) diffBtn.style.display = '';
+            });
         }
 
         const btns = document.createElement('div');
         btns.className = 'scp-lb-proposal-item-btns';
-        if (pv.ok && change.action !== 'toggle') {
-            const diffBtn = document.createElement('button');
+        let diffBtn = null;
+        if (change.action !== 'toggle') {
+            diffBtn = document.createElement('button');
+            if (!pv.ok) diffBtn.style.display = 'none';
             diffBtn.className = 'scp-lb-proposal-diff-btn';
             diffBtn.title = translate('View diff');
             diffBtn.innerHTML = I.diff;

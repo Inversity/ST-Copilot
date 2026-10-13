@@ -396,6 +396,14 @@
 }
 .scp-show-older:hover { color: var(--scp-accent); background: var(--scp-accent-bg); }
 
+/* "Change all N" on a proposal whose anchor occurs word for word in several places */
+.scp-anchor-all-btn {
+    margin-left: 6px; padding: 1px 7px; border-radius: 4px; font-size: 10px; cursor: pointer;
+    background: none; border: 1px solid var(--scp-accent-dim); color: var(--scp-accent);
+    font-family: var(--scp-font);
+}
+.scp-anchor-all-btn:hover { background: var(--scp-accent-bg); }
+
 /* ── Empty State ─────────────────────────────────────────────── */
 
 .scp-empty-state {

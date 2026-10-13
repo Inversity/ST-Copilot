@@ -1339,7 +1339,10 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
   // Anchors must identify exactly one place. A failed or ambiguous anchor changes nothing,
   // so the edit fails safe instead of patching the wrong region. Returns
   // { result, matched, reason } where reason is 'not_found' | 'ambiguous' when unmatched.
-  function applySearchReplaceToField(fieldContent, searchText, replaceText) {
+  // A plain anchor found word for word in several places also reports `occurrences`; with
+  // { all: true } (the Human chose "Change all" in the card) every one of them is replaced.
+  // Boundary and fuzzy anchors never use `all`: there the places can differ.
+  function applySearchReplaceToField(fieldContent, searchText, replaceText, { all = false } = {}) {
       if (!fieldContent) return { result: replaceText || '', matched: true };
       const src = fieldContent;
       const srch = searchText || '';
@@ -1467,9 +1470,9 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           return fz.ambiguous ? [hit, hit] : [hit];
       }
 
-      const fail = (reason) => {
-          _dbgAdd('PATCH_ANCHOR_FAILED', { search: srch, reason, srcLength: src.length });
-          return { result: src, matched: false, reason };
+      const fail = (reason, extra = {}) => {
+          _dbgAdd('PATCH_ANCHOR_FAILED', { search: srch, reason, srcLength: src.length, ...extra });
+          return { result: src, matched: false, reason, ...extra };
       };
       const replaceRange = (start, end) => ({ result: src.slice(0, start) + repl + src.slice(end), matched: true });
 
@@ -1495,7 +1498,14 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
       const hits = locate(src, srch);
       if (!hits.length) return fail('not_found');
-      if (hits.length > 1) return fail('ambiguous');
+      if (hits.length > 1) {
+          const literal = _findLiteral(src, srch);
+          if (literal.length < 2) return fail('ambiguous');
+          if (!all) return fail('ambiguous', { occurrences: literal.length });
+          let out = src;
+          for (const h of [...literal].reverse()) out = out.slice(0, h.start) + repl + out.slice(h.end);
+          return { result: out, matched: true, occurrences: literal.length };
+      }
       return replaceRange(hits[0].start, hits[0].end);
   }
 
@@ -3663,6 +3673,46 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       }
   }
 
+  // One anchor patch ({ search | anchor, replace }), honoring the Human's "Change all" choice
+  // (patch.all). Previews, validation and apply all go through here so they agree.
+  function applyPatch(text, patch) {
+      return applySearchReplaceToField(text, patch.search || patch.anchor || '', patch.replace || '', { all: !!patch.all });
+  }
+
+  // Applies patches in order. On the first failure returns { ok: false, reason, ambiguous }, where
+  // `ambiguous` ({ patch, count }) is set when a plain anchor occurs word for word in several places,
+  // so the card can offer "Change all".
+  function applyPatches(text, patches, where = '') {
+      let current = text;
+      for (const patch of patches || []) {
+          const r = applyPatch(current, patch);
+          if (!r.matched) {
+              const anchor = (patch.search || patch.anchor || '').slice(0, 50);
+              const loc = where ? ` in ${where}` : '';
+              if (r.occurrences > 1) return { ok: false, text, ambiguous: { patch, count: r.occurrences }, reason: t`"${anchor}" appears ${r.occurrences} times${loc}` };
+              return { ok: false, text, reason: r.reason === 'ambiguous' ? t`"${anchor}" fits more than one place${loc}` : t`"${anchor}" not found${loc}` };
+          }
+          current = r.result;
+      }
+      return { ok: true, text: current };
+  }
+
+  // Adds a "Change all N" button to a card's warning line; choosing it marks the patch and lets
+  // the card validate again.
+  function offerChangeAll(warnEl, ambiguous, onChosen) {
+      if (!warnEl || !ambiguous) return;
+      const btn = document.createElement('button');
+      btn.className = 'scp-anchor-all-btn';
+      btn.textContent = t`Change all ${ambiguous.count}`;
+      btn.title = translate('Apply this change to every identical occurrence (check the diff first)');
+      btn.addEventListener('click', e => {
+          e.stopPropagation();
+          ambiguous.patch.all = true;
+          onChosen();
+      });
+      warnEl.appendChild(btn);
+  }
+
   function computeLCS(a, b) {
       const m = a.length, n = b.length;
       if (m === 0 || n === 0) return [];
@@ -4327,10 +4377,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       
       if (change.action === 'patch' && originalEntry) {
           let current = originalContent;
-          for (const patch of (change.patches || [])) {
-              const { result } = applySearchReplaceToField(current, patch.search || patch.anchor || '', patch.replace || '');
-              current = result;
-          }
+          for (const patch of (change.patches || [])) current = applyPatch(current, patch).result;
           newContent = current;
       } else if (change.action === 'prepend' && originalEntry) {
           newContent = (change.content || '') + originalContent;
@@ -4587,19 +4634,9 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   toastr.error(t`[LB] Entry not found for patch: "${change.name || change.uid || '?'}" in "${bookName}"`, EXT_DISPLAY, { timeOut: 10000 });
                   continue;
               }
-              let current = origEntry.content || '';
-              let allMatched = true;
-              for (const patch of (change.patches || [])) {
-                  const { result, matched } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
-                  if (!matched) {
-                      toastr.warning(t`[LB] SEARCH not found in "${origEntry.comment}": "${(patch.search || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 });
-                      allMatched = false;
-                      break;
-                  }
-                  current = result;
-              }
-              if (!allMatched) continue;
-              origEntry.content = current;
+              const r = applyPatches(origEntry.content || '', change.patches, `"${origEntry.comment}"`);
+              if (!r.ok) { toastr.warning(`[LB] ${r.reason}`, EXT_DISPLAY, { timeOut: 8000 }); continue; }
+              origEntry.content = r.text;
               if (change.name !== undefined) origEntry.comment = change.name;
               if (change.triggers !== null && change.triggers !== undefined) {
                   origEntry.key = change.triggers;
@@ -4844,20 +4881,17 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
 
               let isValid = found;
               let reason = found ? '' : 'Entry not found in selected lorebook';
+              let ambiguous = null;
               if (found && editableChanges[ci].action === 'patch') {
-                  const orig = resolved.origEntry;
-                  let current = orig?.content || '';
-                  for (const patch of (editableChanges[ci].patches || [])) {
-                      const { result, matched } = applySearchReplaceToField(current, patch.search || patch.anchor || '', patch.replace || '');
-                      if (!matched) { isValid = false; reason = `ANCHOR not found: "${(patch.search || patch.anchor || '').slice(0, 40)}..."`; break; }
-                      current = result;
-                  }
+                  const r = applyPatches(resolved.origEntry?.content || '', editableChanges[ci].patches);
+                  if (!r.ok) { isValid = false; reason = r.reason; ambiguous = r.ambiguous; }
               }
 
               if (!isValid) {
                   applyItemBtn.disabled = true; applyItemBtn.title = reason;
                   item.style.borderLeftColor = 'var(--scp-danger)';
                   warnEl.textContent = `⚠ ${reason}`; warnEl.style.display = 'block';
+                  offerChangeAll(warnEl, ambiguous, () => _validateBookEntry(bookName));
               } else {
                   applyItemBtn.disabled = false; applyItemBtn.title = 'Apply this change';
                   item.style.borderLeftColor = ''; warnEl.style.display = 'none';
@@ -6739,15 +6773,9 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                       } else if (action === 'append_text') {
                           greetings[idx] = (greetings[idx] ? greetings[idx] + '\n\n' : '') + (change.value || '');
                       } else if (action === 'replace') {
-                          let current = greetings[idx];
-                          let allMatched = true;
-                          for (const patch of (change.patches || [])) {
-                              const { result, matched } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
-                              if (!matched) { toastr.warning(t`[CharEdit] SEARCH not found in greeting #${change.index}.`, EXT_DISPLAY); allMatched = false; break; }
-                              current = result;
-                          }
-                          if (!allMatched) continue;
-                          greetings[idx] = current;
+                          const r = applyPatches(greetings[idx], change.patches, t`greeting #${change.index}`);
+                          if (!r.ok) { toastr.warning(`[CharEdit] ${r.reason}`, EXT_DISPLAY, { timeOut: 8000 }); continue; }
+                          greetings[idx] = r.text;
                       }
 
                       await saveCharacterField(char, 'alternate_greetings', greetings);
@@ -6765,15 +6793,9 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   await saveCharacterField(char, field, (current ? current + '\n\n' : '') + change.value);
                   successLog.push(change);
               } else if (action === 'replace') {
-                  let current = String(getCharFieldValue(char, field));
-                  let allMatched = true;
-                  for (const patch of (change.patches || [])) {
-                      const { result, matched } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
-                      if (!matched) { toastr.warning(t`[CharEdit] SEARCH not found in field "${field}": "${(patch.search || '').slice(0, 60)}…"`, EXT_DISPLAY, { timeOut: 8000 }); allMatched = false; break; }
-                      current = result;
-                  }
-                  if (!allMatched) continue;
-                  await saveCharacterField(char, field, current);
+                  const r = applyPatches(String(getCharFieldValue(char, field)), change.patches, `"${field}"`);
+                  if (!r.ok) { toastr.warning(`[CharEdit] ${r.reason}`, EXT_DISPLAY, { timeOut: 8000 }); continue; }
+                  await saveCharacterField(char, field, r.text);
                   successLog.push(change);
               }
           } catch (e) {
@@ -7051,12 +7073,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           } else {
               current = String(getCharFieldValue(char, change.field));
           }
-          for (const patch of (change.patches || [])) {
-              const { matched, result } = applySearchReplaceToField(current, patch.search || '', patch.replace || '');
-              if (!matched) return { valid: false, reason: `SEARCH not found: "${(patch.search || '').slice(0, 50)}"` };
-              current = result;
-          }
-          return { valid: true };
+          const r = applyPatches(current, change.patches);
+          return r.ok ? { valid: true } : { valid: false, reason: r.reason, ambiguous: r.ambiguous };
       };
 
       const getAppliedResult = (change) => {
@@ -7072,10 +7090,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           // Must mirror applyCharChanges.
           if (change.action === 'prepend') return (change.value || '') + (current ? '\n\n' + current : '');
           if (change.action === 'append_text') return (current ? current + '\n\n' : '') + (change.value || '');
-          for (const patch of (change.patches || [])) {
-              const { result } = applySearchReplaceToField(current, patch.search || patch.anchor || '', patch.replace || '');
-              current = result;
-          }
+          for (const patch of (change.patches || [])) current = applyPatch(current, patch).result;
           return current;
       };
 
@@ -7149,18 +7164,21 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           const applyBtn = document.createElement('button');
           applyBtn.className = 'scp-lb-proposal-item-apply'; applyBtn.title = 'Apply'; applyBtn.textContent = '✓';
 
-          if (c.action === 'replace') {
-              const { valid, reason } = validateReplaceChange(editableChanges[ci]);
-              if (!valid) {
-                  applyBtn.disabled = true;
-                  applyBtn.title = reason || 'Cannot apply';
-                  item.style.borderLeftColor = 'var(--scp-danger)';
-                  const warn = document.createElement('div');
-                  warn.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px';
-                  warn.textContent = `\u26A0 ${reason || 'SEARCH text not found — this edit may be outdated.'}`;
-                  meta.appendChild(warn);
-              }
-          }
+          const warn = document.createElement('div');
+          warn.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;display:none';
+          meta.appendChild(warn);
+          const refreshValidation = () => {
+              if (editableChanges[ci].action !== 'replace') return;
+              const { valid, reason, ambiguous } = validateReplaceChange(editableChanges[ci]);
+              applyBtn.disabled = !valid;
+              applyBtn.title = valid ? 'Apply' : (reason || 'Cannot apply');
+              item.style.borderLeftColor = valid ? '' : 'var(--scp-danger)';
+              warn.style.display = valid ? 'none' : 'block';
+              if (valid) return;
+              warn.textContent = `\u26A0 ${reason || 'SEARCH text not found — this edit may be outdated.'}`;
+              offerChangeAll(warn, ambiguous, refreshValidation);
+          };
+          refreshValidation();
 
           applyBtn.addEventListener('click', async e => {
               e.stopPropagation();
@@ -7261,7 +7279,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                           delP.addEventListener('click', () => {
                               change.patches.splice(pi, 1);
                               rebuildEditPanel();
-                              const { valid } = validateReplaceChange(change); applyBtn.disabled = !valid;
+                              refreshValidation();
                               refreshPreview();
                           });
                           pHdr.appendChild(delP);
@@ -7731,13 +7749,9 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                       } else if (change.action === 'append') {
                           content = content + (change.content || '');
                       } else if (change.action === 'replace') {
-                          let matched = true;
-                          for (const patch of (change.patches || [])) {
-                              const { result, matched: m } = applySearchReplaceToField(content, patch.search || patch.anchor || '', patch.replace || '');
-                              if (!m) { toastr.warning(t`[ChatEdit] ANCHOR not found in #${idx}: "${(patch.search || patch.anchor || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 }); matched = false; break; }
-                              content = result;
-                          }
-                          if (!matched) { allSuccess = false; continue; }
+                          const r = applyPatches(content, change.patches, `#${idx}`);
+                          if (!r.ok) { toastr.warning(`[ChatEdit] ${r.reason}`, EXT_DISPLAY, { timeOut: 8000 }); allSuccess = false; continue; }
+                          content = r.text;
                       }
                       msg.mes = content;
                       await _saveChatMessage(ctx, idx, msg);
@@ -7769,16 +7783,9 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               } else if (change.action === 'append') {
                   content = content + (change.content || '');
               } else if (change.action === 'replace') {
-                  let allMatched = true;
-                  for (const patch of (change.patches || [])) {
-                      const { result, matched } = applySearchReplaceToField(content, patch.search || patch.anchor || '', patch.replace || '');
-                      if (!matched) {
-                          toastr.warning(t`[ChatEdit] ANCHOR not found in message ${change.msg_index ?? change.msg_id}: "${(patch.search || patch.anchor || '').slice(0, 60)}"`, EXT_DISPLAY, { timeOut: 8000 });
-                          allMatched = false; break;
-                      }
-                      content = result;
-                  }
-                  if (!allMatched) continue;
+                  const r = applyPatches(content, change.patches, t`message ${change.msg_index ?? change.msg_id}`);
+                  if (!r.ok) { toastr.warning(`[ChatEdit] ${r.reason}`, EXT_DISPLAY, { timeOut: 8000 }); continue; }
+                  content = r.text;
               }
               msg.mes = content;
               await _saveChatMessage(ctx, idx, msg);
@@ -7960,11 +7967,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
                   if (invalid.length) return { valid: false, reason: `Indices out of bounds: ${invalid.join(', ')}` };
                   if (change.action === 'replace') {
                       for (const idx of change.msg_indices) {
-                          let content = stMsgs[idx].mes || '';
-                          for (const patch of (change.patches || [])) {
-                              const { matched } = applySearchReplaceToField(content, patch.search || patch.anchor || '', patch.replace || '');
-                              if (!matched) return { valid: false, reason: `ANCHOR not found in #${idx}: "${(patch.search || patch.anchor || '').slice(0, 40)}..."` };
-                          }
+                          const r = applyPatches(stMsgs[idx].mes || '', change.patches, `#${idx}`);
+                          if (!r.ok) return { valid: false, reason: r.reason, ambiguous: r.ambiguous };
                       }
                   }
                   return { valid: true };
@@ -7973,11 +7977,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               if (!resolved) return { valid: false, reason: `Message not found (Index: ${change.msg_index ?? change.msg_id})` };
 
               if (change.action === 'replace') {
-                  let content = resolved.msg.mes || '';
-                  for (const patch of (change.patches || [])) {
-                      const { matched } = applySearchReplaceToField(content, patch.search || patch.anchor || '', patch.replace || '');
-                      if (!matched) return { valid: false, reason: `ANCHOR not found: "${(patch.search || patch.anchor || '').slice(0, 40)}..."` };
-                  }
+                  const r = applyPatches(resolved.msg.mes || '', change.patches);
+                  if (!r.ok) return { valid: false, reason: r.reason, ambiguous: r.ambiguous };
               }
               return { valid: true };
           }
@@ -7987,10 +7988,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           if (change.action === 'overwrite') return change.content || '';
           if (change.action === 'replace') {
               let c = content;
-              for (const p of (change.patches || [])) {
-                  const { result } = applySearchReplaceToField(c, p.search || p.anchor || '', p.replace || '');
-                  c = result;
-              }
+              for (const p of (change.patches || [])) c = applyPatch(c, p).result;
               return c;
           }
           if (change.action === 'bulk_replace') {
@@ -8148,11 +8146,12 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           applyBtn.className = 'scp-lb-proposal-item-apply'; applyBtn.title = 'Apply'; applyBtn.textContent = '✓';
           
           const refreshValidation = () => {
-              const { valid, reason } = validateChatChange(editableChanges[ci]);
+              const { valid, reason, ambiguous } = validateChatChange(editableChanges[ci]);
               if (!valid) {
                   applyBtn.disabled = true; applyBtn.title = reason;
                   item.style.borderLeftColor = 'var(--scp-danger)';
                   warnEl.textContent = `⚠ ${reason}`; warnEl.style.display = 'block';
+                  offerChangeAll(warnEl, ambiguous, refreshValidation);
               } else {
                   applyBtn.disabled = false; applyBtn.title = 'Apply';
                   item.style.borderLeftColor = ''; 
@@ -8652,15 +8651,9 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       else if (change.action === 'append') after = before ? `${before}\n\n${change.value}` : change.value;
       else if (change.action === 'prepend') after = before ? `${change.value}\n\n${before}` : change.value;
       else if (change.action === 'replace') {
-          for (const p of change.patches) {
-              const r = applySearchReplaceToField(after, p.search, p.replace);
-              if (!r.matched) {
-                  return { ok: false, entry, reason: r.reason === 'ambiguous'
-                      ? `Anchor matches more than one place: "${p.search.slice(0, 50)}"`
-                      : `Anchor not found: "${p.search.slice(0, 50)}"` };
-              }
-              after = r.result;
-          }
+          const r = applyPatches(after, change.patches);
+          if (!r.ok) return { ok: false, entry, reason: r.reason, ambiguous: r.ambiguous };
+          after = r.text;
       }
       return { ok: true, entry, before, after };
   }
@@ -8954,12 +8947,23 @@ Rules:
               warn.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;flex-basis:100%';
               warn.textContent = `⚠ ${pv.reason}`;
               meta.appendChild(warn);
+              // "Change all": the patch now covers every identical occurrence; check it again.
+              offerChangeAll(warn, pv.ambiguous, () => {
+                  if (!previewPromptChange(change).ok) return;
+                  warn.remove();
+                  item.style.borderLeftColor = '';
+                  applyBtn.disabled = false;
+                  applyBtn.title = translate('Apply');
+                  if (diffBtn) diffBtn.style.display = '';
+              });
           }
 
           const btns = document.createElement('div');
           btns.className = 'scp-lb-proposal-item-btns';
-          if (pv.ok && change.action !== 'toggle') {
-              const diffBtn = document.createElement('button');
+          let diffBtn = null;
+          if (change.action !== 'toggle') {
+              diffBtn = document.createElement('button');
+              if (!pv.ok) diffBtn.style.display = 'none';
               diffBtn.className = 'scp-lb-proposal-diff-btn';
               diffBtn.title = translate('View diff');
               diffBtn.innerHTML = I.diff;
