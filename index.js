@@ -66,7 +66,7 @@ Existing outlet entries are listed under "Outlet Entries" in the lorebook contex
 <actions>
 - add / delete: create or remove an entry.
 - prepend / append: add text to the start or end of an entry's content.
-- patch: change part of an entry. Each anchor is "first few words || last few words" of the exact passage to replace, copied from the entry. Everything from the first words through the last words is replaced.
+- patch: change part of an entry. Each anchor is "first few words || last few words" of the exact passage to replace, copied from the entry. Everything from the first words through the last words is replaced. Each part must occur only once in the entry; if the passage repeats, include neighboring words until it is unique, and use one patch per occurrence you mean to change.
   Example: to replace "The ancient castle was built in 1240 by a grumpy dwarf.", use the anchor "The ancient castle || a grumpy dwarf."
 - edit: rewrite the whole entry. For small changes to long entries, prefer patch.
 Use worldName exactly as listed below, and the uid shown in the context for existing entries.
@@ -108,7 +108,7 @@ Active characters appear as \`<character name="ExactName">\` blocks inside \`<ch
 <edit_actions>
 - overwrite: replace the whole field.
 - prepend / append_text: add text to the start or end of the field.
-- replace: change part of a field. On the line after \`<<<<<<< ANCHOR\`, write "first few words || last few words" of the exact passage to replace, copied from the field. Everything from the first words through the last words is replaced by the text after \`=======\`.
+- replace: change part of a field. On the line after \`<<<<<<< ANCHOR\`, write "first few words || last few words" of the exact passage to replace, copied from the field. Everything from the first words through the last words is replaced by the text after \`=======\`. Each part must occur only once in the field; if the passage repeats, include neighboring words until it is unique, and use one replace per occurrence you mean to change.
   Example: to replace "The quick brown fox jumps over the lazy dog.", use the anchor "The quick brown || the lazy dog."
 - append: alternate_greetings only; adds a new greeting. To change an existing greeting, use overwrite, replace, prepend, or append_text with index="N".
 </edit_actions>
@@ -141,7 +141,7 @@ Target messages with \`msg_index\`, \`msg_range\` ([first, last]), or \`msg_indi
 - delete: remove a message.
 - prepend / append: add text to the start or end of a message.
 - overwrite: replace a message's entire text.
-- replace: change part of a message. Each anchor is "first few words || last few words" of the exact passage, copied from the message. Everything from the first words through the last words is replaced.
+- replace: change part of a message. Each anchor is "first few words || last few words" of the exact passage, copied from the message. Everything from the first words through the last words is replaced. Each part must occur only once in the message; if the passage repeats, include neighboring words until it is unique, and use one patch per occurrence you mean to change.
 - bulk_replace: replace every exact occurrence of a word or phrase (case-sensitive, whole words) across the targeted messages.
 - regex: pattern-based replacement using JavaScript regex syntax ("/pattern/flags").
 - hide / unhide: hide messages from the roleplay AI without deleting them, or show them again.
@@ -296,6 +296,9 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       'q508r5jjrd',
       '157yh96v6jn',
       '1so8oq3hkq9',
+      'tg8w5qx8dy',
+      'mzgi1oyshb',
+      '25gvtyi9zne',
   ];
 
       // ─── Changelog Data ──────────────────────────────────────────────────────────
