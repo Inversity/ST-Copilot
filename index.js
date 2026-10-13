@@ -305,6 +305,14 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       // ─── Changelog Data ──────────────────────────────────────────────────────────
   const CHANGELOG = [
       {
+          version: '3.0.8',
+          date: '10/13/2026',
+          announce: true,
+          notes: [
+              '<strong>Thinking timer</strong>: in replies that use tools, it now counts every round instead of stopping at the first.',
+          ],
+      },
+      {
           version: '3.0.7',
           date: '10/13/2026',
           announce: true,
@@ -13222,7 +13230,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const toolCalls = state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined;
 
           msgData.gen = apiMod.getGenStamp();
-          msgData.reasoningMs = fullReasoning ? regenReasoningMs : null;
+          msgData.reasoningMs = fullReasoning ? (finalResult.reasoningMs ?? regenReasoningMs) : null;
           msgData.toolCalls = toolCalls;
           msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null, reasoningMs: msgData.reasoningMs, gen: msgData.gen, toolCalls };
           msgData.content = fullText;
@@ -16456,6 +16464,29 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       };
   }
 
+  // Thinking time of a reply that runs tool rounds: each round has its own clock (one per
+  // stream), so the label shows the finished rounds' total plus the live round's time.
+  function createRoundsReasoningTime(firstRoundMs) {
+      let total = firstRoundMs ?? null;
+      let current = null, currentDone = true;
+      return {
+          update(ms, done) {
+              if (ms === null || ms === undefined) return;
+              current = ms;
+              currentDone = !!done;
+          },
+          shown() {
+              return { ms: total === null && current === null ? null : (total || 0) + (current || 0), done: currentDone };
+          },
+          endRound() {
+              if (current !== null) total = (total || 0) + current;
+              current = null;
+              currentDone = true;
+          },
+          total: () => total,
+      };
+  }
+
   // Shows silence in the status bar. Some models (Opus at high effort through the Claude
   // subscription proxy) think for minutes between streamed chunks, and with nothing on screen
   // that looked frozen. After 10s without data the bar says so; every 30s it is logged.
@@ -16973,10 +17004,11 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
   // The text-based tool loop, shared by new replies and swipes: runs the tool calls in the
   // reply, feeds the results back, and continues generating, up to toolsMaxRounds. Rounds
   // render live into msgEl/contentEl. excludeMsgId is the message being written (left out of
-  // the context while it is rewritten). Returns the combined { text, reasoning }; a cancelled
-  // later round keeps what was generated before it.
+  // the context while it is rewritten). Returns the combined { text, reasoning, reasoningMs }; a
+  // cancelled later round keeps what was generated before it.
   async function runToolRounds({ session, settings, result, msgEl, contentEl, excludeMsgId, getReasoningMs = () => null }) {
       const maxRounds = settings.toolsMaxRounds ?? 5;
+      const thinkTime = createRoundsReasoningTime(getReasoningMs());
       // A round ends at its tool calls (findToolCallCut). Streaming already stops there; this
       // also covers non-streamed replies.
       let roundText = cutAfterToolCalls(result.text || '');
@@ -16995,7 +17027,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               if (combinedReasoning) tcIndex = extractToolCallPlaceholders(combinedReasoning, tcIndex).nextIndex;
               const procText = extractToolCallPlaceholders(stripMemoryBlock(combinedText), tcIndex).text;
 
-              if (combinedReasoning) renderStreamingReasoning(msgEl, combinedReasoning, getReasoningMs(), true);
+              if (combinedReasoning) { const shown = thinkTime.shown(); renderStreamingReasoning(msgEl, combinedReasoning, shown.ms, shown.done); }
               renderStreamingMarkdown(contentEl, procText);
               if (appendEl) contentEl.appendChild(appendEl);
               postProcessHTMLBlocks(contentEl, true);
@@ -17060,13 +17092,17 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
           let nextResult;
           try {
-              nextResult = await callGenerate(tempSession, settings, null, (t, r) => updateLiveUI(t, r, cursor2), { stopAtToolCall: round + 1 < maxRounds });
+              nextResult = await callGenerate(tempSession, settings, null, (t, r, ms, done) => {
+                  thinkTime.update(ms, done);
+                  updateLiveUI(t, r, cursor2);
+              }, { stopAtToolCall: round + 1 < maxRounds });
           } finally {
               cancelStreamRender();
               session.messages = session.messages.filter(m => !m._tcTemp);
               cursor2.remove();
           }
           if (nextResult === null) break;
+          thinkTime.endRound();
 
           roundText = round + 1 < maxRounds ? cutAfterToolCalls(nextResult.text || '') : (nextResult.text || '');
           accumulatedText += '\n\n' + roundText;
@@ -17075,7 +17111,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           }
       }
 
-      return ranRounds ? { text: accumulatedText, reasoning: accumulatedReasoning } : result;
+      return ranRounds ? { text: accumulatedText, reasoning: accumulatedReasoning, reasoningMs: thinkTime.total() } : result;
   }
 
   async function runGenerate(session, userText, addUserMsg = true, processedAtts = null) {
@@ -17236,7 +17272,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                   msg.reasoning = fullReasoning || null; 
                   msg.toolCalls = state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined;
                   msg.gen = getGenStamp();
-                  msg.reasoningMs = fullReasoning ? streamReasoningMs : null;
+                  msg.reasoningMs = fullReasoning ? (result.reasoningMs ?? streamReasoningMs) : null;
               }
               saveSessionsToMetadata();
 
@@ -17252,7 +17288,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           } else {
               const newMsg = addMessage(session, 'assistant', fullText, { reasoning: fullReasoning || null, toolCalls: state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined });
               newMsg.gen = getGenStamp();
-              newMsg.reasoningMs = fullReasoning ? streamReasoningMs : null;
+              newMsg.reasoningMs = fullReasoning ? (result.reasoningMs ?? streamReasoningMs) : null;
               newMsg.swipes = [{ content: fullText, reasoning: fullReasoning || null, reasoningMs: newMsg.reasoningMs, gen: newMsg.gen, toolCalls: newMsg.toolCalls }];
               newMsg.swipeIndex = 0;
               saveSessionsToMetadata();
@@ -17450,6 +17486,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
     buildSystemContent: buildSystemContent,
     callGenerate: callGenerate,
     createReasoningClock: createReasoningClock,
+    createRoundsReasoningTime: createRoundsReasoningTime,
     createSmoothReveal: createSmoothReveal,
     estimateTokens: estimateTokens,
     formatPayloadAsText: formatPayloadAsText,

@@ -941,7 +941,7 @@ export async function _runSwipeRegen(session, msgId, wrapEl) {
         const toolCalls = state.activeToolCalls.length ? JSON.parse(JSON.stringify(state.activeToolCalls)) : undefined;
 
         msgData.gen = apiMod.getGenStamp();
-        msgData.reasoningMs = fullReasoning ? regenReasoningMs : null;
+        msgData.reasoningMs = fullReasoning ? (finalResult.reasoningMs ?? regenReasoningMs) : null;
         msgData.toolCalls = toolCalls;
         msgData.swipes[msgData.swipeIndex] = { content: fullText, reasoning: fullReasoning || null, reasoningMs: msgData.reasoningMs, gen: msgData.gen, toolCalls };
         msgData.content = fullText;

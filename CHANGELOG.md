@@ -2,6 +2,10 @@
 
 This fork continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker, whose last release was 2.9.0 (2026-07-02). Versions before 3.0.0 are upstream's and are listed in the extension's "What's New" panel.
 
+## 3.0.8 (2026-10-13)
+
+- **The thinking timer counts every tool round.** In a reply that used tools, the "Thinking for…" label froze at the first round's time, however long later rounds thought, and the saved reply kept only that first time. It now adds each round's thinking to the total, live and in the saved reply.
+
 ## 3.0.7 (2026-10-13)
 
 - **Accepted character edits stick.** SillyTavern replaces its copy of a character every time it saves one, so a proposal card could end up holding an outdated copy. Accepting an edit then wrote the file but not SillyTavern's copy: the Alternate Greetings popup, the Character Manager and Copilot itself kept showing the old text, and SillyTavern's next save of that character (an edit in its character panel, closing the greetings popup) wrote the old text back. Copilot now looks the character up again each time it reads or writes a field.

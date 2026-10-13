@@ -302,6 +302,14 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     // ─── Changelog Data ──────────────────────────────────────────────────────────
 export const CHANGELOG = [
     {
+        version: '3.0.8',
+        date: '10/13/2026',
+        announce: true,
+        notes: [
+            '<strong>Thinking timer</strong>: in replies that use tools, it now counts every round instead of stopping at the first.',
+        ],
+    },
+    {
         version: '3.0.7',
         date: '10/13/2026',
         announce: true,

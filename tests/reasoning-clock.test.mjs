@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createReasoningClock } from '../src/api.js';
+import { createReasoningClock, createRoundsReasoningTime } from '../src/api.js';
 
 function fakeClock() {
     let t = 0;
@@ -38,4 +38,28 @@ test('reasoning that resumes after text starts the timer again', () => {
 test('no reasoning at all reports no time', () => {
     const tick = createReasoningClock(() => 0);
     assert.deepEqual(tick(null, 'Just an answer'), { ms: null, done: false });
+});
+
+test('tool rounds: the label adds up every round of thinking instead of freezing on round 1', () => {
+    const t = createRoundsReasoningTime(3300);
+    assert.deepEqual(t.shown(), { ms: 3300, done: true }, 'between rounds: round 1 total, done');
+    t.update(null, false);
+    assert.deepEqual(t.shown(), { ms: 3300, done: true }, 'no reasoning yet this round');
+    t.update(1500, false);
+    assert.deepEqual(t.shown(), { ms: 4800, done: false }, 'round 2 thinking counts up live');
+    t.update(200000, true);
+    t.endRound();
+    assert.equal(t.total(), 203300);
+    t.endRound();
+    assert.equal(t.total(), 203300, 'a round without reasoning adds nothing');
+});
+
+test('tool rounds: no reasoning in any round stays null', () => {
+    const t = createRoundsReasoningTime(null);
+    t.endRound();
+    assert.equal(t.shown().ms, null);
+    assert.equal(t.total(), null);
+    t.update(900, true);
+    t.endRound();
+    assert.equal(t.total(), 900, 'thinking only in a later round');
 });
