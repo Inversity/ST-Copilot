@@ -208,8 +208,8 @@ await step('session-menu', async () => {
     await click('#scp-sess-trigger');
     await shot('session-menu', '#scp-window', { pad: 0 });
     await click('#scp-new-sess-btn');
-    await shot('session-new-dialog', '.scp-dialog-overlay .scp-dialog-box');
-    await click('.scp-dialog-overlay .scp-dialog-cancel');
+    await shot('session-new-dialog', 'dialog.scp-popup[open]');
+    await click('dialog.scp-popup[open] .popup-button-cancel');
 });
 await step('main-menu', async () => {
     await click('#scp-menu-trigger');

@@ -302,6 +302,15 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     // ─── Changelog Data ──────────────────────────────────────────────────────────
 export const CHANGELOG = [
     {
+        version: '3.1.1',
+        date: '10/13/2026',
+        announce: true,
+        notes: [
+            '<strong>Prompt edit cards</strong> now preview each change, let you edit it before applying, and have Apply All / Reject All.',
+            '<strong>New Session</strong> opens in SillyTavern\'s popup; "Temporary" is a checkbox there.',
+        ],
+    },
+    {
         version: '3.1.0',
         date: '10/13/2026',
         announce: true,

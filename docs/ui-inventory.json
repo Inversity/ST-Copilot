@@ -1,6 +1,6 @@
 {
   "about": "Every screen, panel and card of ST-Copilot, with how to reach it, what it does, its controls, the source that builds it, its screenshot (docs/screens/<screen>.jpg, made by tools/ui-screens.mjs) and open findings. Built for the UI review; keep it in step with the code: a new screen or setting gets a node here.",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "builtFrom": "9b1e8ff",
   "findingTypes": {
     "bug": "Broken behaviour or markup",
@@ -794,12 +794,16 @@
       ],
       "controls": [
         {
-          "label": "Per change: View diff, Apply, Reject",
+          "label": "Per change: text preview (click to expand), View diff, Edit before applying, Apply, Reject",
           "kind": "buttons"
         },
         {
-          "label": "Reject all remaining (header ×)",
+          "label": "Change all N (when an anchor repeats)",
           "kind": "button"
+        },
+        {
+          "label": "Apply All, Reject All, Dismiss",
+          "kind": "buttons"
         }
       ],
       "findings": [
@@ -807,7 +811,8 @@
           "type": "drift",
           "text": "Unlike the other cards: no Apply All / Reject All buttons, no Edit before applying, and no text preview under the change (only the diff button).",
           "ref": "src/features/feature-prompt-manager-ui.js:194",
-          "id": "card-prompt-1"
+          "id": "card-prompt-1",
+          "fixedIn": "3.1.1"
         }
       ]
     },
@@ -820,7 +825,7 @@
       "purpose": "Before and after of one change, split or unified.",
       "screens": [],
       "source": [
-        "lorebook_manager.html:110",
+        "diff_modal.html",
         "src/utils/util-diff.js:170"
       ],
       "controls": [
@@ -834,12 +839,14 @@
           "type": "i18n",
           "text": "The title \"Diff View\" is not translated.",
           "ref": "lorebook_manager.html:113",
-          "id": "diff-modal-1"
+          "id": "diff-modal-1",
+          "fixedIn": "3.1.1"
         },
         {
           "type": "ux",
           "text": "The diff modal's markup lives in lorebook_manager.html though every card uses it.",
-          "id": "diff-modal-2"
+          "id": "diff-modal-2",
+          "fixedIn": "3.1.1"
         }
       ]
     },
@@ -1568,7 +1575,7 @@
       "title": "New session",
       "kind": "dialog",
       "opens": "Session dropdown > New Session",
-      "purpose": "Name a new session, optionally temporary (deleted when you switch away).",
+      "purpose": "Name a new session, optionally temporary (deleted when you switch away). On SillyTavern's Popup since 3.1.1, like Copilot's other dialogs.",
       "screens": [
         "session-new-dialog"
       ],
@@ -1594,7 +1601,8 @@
           "type": "drift",
           "text": "Still a Copilot-styled overlay, while alert/confirm/prompt moved to SillyTavern's Popup in 3.0.6 (known, parked).",
           "ref": "src/session.js:776",
-          "id": "session-new-dialog-1"
+          "id": "session-new-dialog-1",
+          "fixedIn": "3.1.1"
         }
       ]
     },

@@ -2,6 +2,12 @@
 
 This fork continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker, whose last release was 2.9.0 (2026-07-02). Versions before 3.0.0 are upstream's and are listed in the extension's "What's New" panel.
 
+## 3.1.1 (2026-10-13)
+
+- **Prompt edit cards work like the other proposal cards.** Each change shows its text (click to expand), can be edited before applying, and the card has Apply All and Reject All. Apply All applies the changes one by one and leaves any whose text no longer fits the prompt pending, with the reason.
+- **New Session** opens in SillyTavern's own popup, like Copilot's other dialogs; "Temporary" is a checkbox in it.
+- The diff view has its own template and a translatable title.
+
 ## 3.1.0 (2026-10-13)
 
 Settings now live in one place, and it is clear which setting wins.

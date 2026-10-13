@@ -191,10 +191,13 @@ function _refreshManagerIfOpen() {
     if (overlay && overlay.style.display !== 'none' && !_dirty) { _renderList(); _renderDetail(); }
 }
 
-export function renderPromptProposalCard(changes, msgEl) {
+export function renderPromptProposalCard(proposed, msgEl) {
     const msgId = msgEl.dataset.id;
     msgEl.querySelectorAll('.scp-pm-proposal-card').forEach(c => c.remove());
+    // Edited in the card before applying, so work on copies; the message keeps the edits.
+    const changes = proposed.map(c => JSON.parse(JSON.stringify(c)));
     const states = changes.map(() => 'pending');
+    const pendingCount = () => states.filter(s => s === 'pending').length;
 
     const card = document.createElement('div');
     card.className = 'scp-lb-proposal-card scp-pm-proposal-card';
@@ -205,7 +208,6 @@ export function renderPromptProposalCard(changes, msgEl) {
     header.className = 'scp-lb-proposal-header';
     const count = document.createElement('span');
     count.className = 'scp-lb-proposal-count';
-    const updateCount = () => { count.textContent = t`${states.filter(s => s === 'pending').length} pending`; };
     const headerLeft = document.createElement('div');
     headerLeft.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0';
     headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-accent);display:flex"><i class="fa-solid fa-scroll"></i></span><span class="scp-lb-proposal-title">${escHtml(translate('Proposed Prompt Edits'))}</span>`;
@@ -222,6 +224,22 @@ export function renderPromptProposalCard(changes, msgEl) {
     list.className = 'scp-lb-proposal-list';
     card.appendChild(list);
 
+    const footer = document.createElement('div');
+    footer.className = 'scp-lb-proposal-footer';
+    const applyAllBtn = document.createElement('button');
+    applyAllBtn.className = 'scp-lb-proposal-apply';
+    applyAllBtn.textContent = translate('Apply All');
+    const rejectAllBtn = document.createElement('button');
+    rejectAllBtn.className = 'scp-lb-proposal-reject';
+    rejectAllBtn.textContent = translate('Reject All');
+    footer.appendChild(applyAllBtn);
+    footer.appendChild(rejectAllBtn);
+
+    const updateCount = () => {
+        count.textContent = t`${pendingCount()} pending`;
+        footer.style.display = pendingCount() ? '' : 'none';
+    };
+
     const tally = () => {
         const msg = getCurrentSession()?.messages.find(m => m.id === msgId);
         if (msg && !msg._promptEditTally) msg._promptEditTally = { applied: 0, rejected: 0 };
@@ -231,45 +249,40 @@ export function renderPromptProposalCard(changes, msgEl) {
         states[i] = state;
         tally()[state] += 1;
         itemEl.classList.add(state === 'applied' ? 'scp-lb-item-applied' : 'scp-lb-item-rejected');
-        itemEl.querySelectorAll('button').forEach(b => { b.disabled = true; });
+        itemEl.querySelectorAll('button, textarea').forEach(b => { b.disabled = true; });
         _syncProposalMessage(msgId, changes, states);
         updateCount();
         if (!states.includes('pending')) setTimeout(() => card.remove(), 600);
     };
 
+    // Applies one pending change; false (with a warning) when its text no longer fits.
+    const applyOne = i => {
+        const r = applyPromptChange(changes[i]);
+        if (!r.ok) { toastr.warning(r.reason, EXT_DISPLAY); return false; }
+        finish(i, 'applied', items[i].el);
+        return true;
+    };
+
     const items = changes.map((change, i) => {
-        const pv = previewPromptChange(change);
         const item = document.createElement('div');
         item.className = 'scp-lb-proposal-item scp-lb-proposal-edit';
         const hdr = document.createElement('div');
         hdr.className = 'scp-lb-proposal-item-header';
         const meta = document.createElement('div');
         meta.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap;min-width:0';
-        const what = change.action === 'toggle' ? ` → ${change.enabled ? 'on' : 'off'}` : '';
-        meta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(ACTION_LABELS[change.action] || change.action)}</span><span class="scp-lb-proposal-name">${escHtml((pv.entry?.name || change.id) + what)}</span>`;
-        if (!pv.ok) {
-            item.style.borderLeftColor = 'var(--scp-danger)';
-            const warn = document.createElement('div');
-            warn.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;flex-basis:100%';
-            warn.textContent = `⚠ ${pv.reason}`;
-            meta.appendChild(warn);
-            // "Change all": the patch now covers every identical occurrence; check it again.
-            offerChangeAll(warn, pv.ambiguous, () => {
-                if (!previewPromptChange(change).ok) return;
-                warn.remove();
-                item.style.borderLeftColor = '';
-                applyBtn.disabled = false;
-                applyBtn.title = translate('Apply');
-                if (diffBtn) diffBtn.style.display = '';
-            });
-        }
+        const what = change.action === 'toggle' ? ` → ${translate(change.enabled ? 'on' : 'off')}` : '';
+        const name = previewPromptChange(change).entry?.name || change.id;
+        meta.innerHTML = `<span class="scp-lb-proposal-action">${escHtml(ACTION_LABELS[change.action] || change.action)}</span><span class="scp-lb-proposal-name">${escHtml(name + what)}</span>`;
+        const warn = document.createElement('div');
+        warn.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;flex-basis:100%;display:none';
+        meta.appendChild(warn);
 
         const btns = document.createElement('div');
         btns.className = 'scp-lb-proposal-item-btns';
         let diffBtn = null;
+        let editBtn = null;
         if (change.action !== 'toggle') {
             diffBtn = document.createElement('button');
-            if (!pv.ok) diffBtn.style.display = 'none';
             diffBtn.className = 'scp-lb-proposal-diff-btn';
             diffBtn.title = translate('View diff');
             diffBtn.innerHTML = I.diff;
@@ -279,20 +292,19 @@ export function renderPromptProposalCard(changes, msgEl) {
                 if (now.ok) openTextDiffModal(t`Diff: ${now.entry.name}`, now.before, now.after);
             });
             btns.appendChild(diffBtn);
+            editBtn = document.createElement('button');
+            editBtn.className = 'scp-lb-proposal-edit-toggle';
+            editBtn.title = translate('Edit before applying');
+            editBtn.textContent = '✎';
+            btns.appendChild(editBtn);
         }
         const applyBtn = document.createElement('button');
         applyBtn.className = 'scp-lb-proposal-item-apply';
         applyBtn.textContent = '✓';
-        applyBtn.title = pv.ok ? translate('Apply') : pv.reason;
-        applyBtn.disabled = !pv.ok;
         applyBtn.addEventListener('click', e => {
             e.stopPropagation();
-            if (states[i] !== 'pending') return;
             // Re-checked at click time: an earlier accepted edit may have changed the text.
-            const r = applyPromptChange(change);
-            if (!r.ok) { toastr.warning(r.reason, EXT_DISPLAY); return; }
-            finish(i, 'applied', item);
-            _refreshManagerIfOpen();
+            if (states[i] === 'pending' && applyOne(i)) _refreshManagerIfOpen();
         });
         const rejectBtn = document.createElement('button');
         rejectBtn.className = 'scp-lb-proposal-item-reject';
@@ -307,14 +319,103 @@ export function renderPromptProposalCard(changes, msgEl) {
         hdr.appendChild(meta);
         hdr.appendChild(btns);
         item.appendChild(hdr);
+
+        // Whether the change still fits the prompt as it is now; re-run after every edit.
+        const refreshValidation = () => {
+            const pv = previewPromptChange(change);
+            applyBtn.disabled = !pv.ok;
+            applyBtn.title = pv.ok ? translate('Apply') : pv.reason;
+            item.style.borderLeftColor = pv.ok ? '' : 'var(--scp-danger)';
+            if (diffBtn) diffBtn.style.display = pv.ok ? '' : 'none';
+            warn.style.display = pv.ok ? 'none' : '';
+            warn.textContent = pv.ok ? '' : `⚠ ${pv.reason}`;
+            // "Change all": the patch now covers every identical occurrence; check it again.
+            if (!pv.ok) offerChangeAll(warn, pv.ambiguous, refreshValidation);
+        };
+
+        if (change.action !== 'toggle') {
+            const previewText = () => change.action === 'replace'
+                ? (change.patches || []).map((p, pi) => `${t`Patch ${pi + 1}`}: "${(p.search || '').replace(/\n/g, '↵').slice(0, 80)}" → "${(p.replace || '').replace(/\n/g, '↵').slice(0, 80)}"`).join('\n')
+                : (change.value || '');
+            const preview = document.createElement('div');
+            preview.className = 'scp-lb-proposal-preview';
+            preview.style.whiteSpace = 'pre-wrap';
+            preview.style.cursor = 'pointer';
+            preview.title = translate('Click to expand/collapse');
+            let expanded = false;
+            const refreshPreview = () => {
+                const raw = previewText();
+                preview.textContent = !expanded && raw.length > 140 ? raw.slice(0, 140) + '…' : raw;
+            };
+            preview.addEventListener('click', e => {
+                if (window.getSelection()?.toString().length) return;
+                e.stopPropagation();
+                expanded = !expanded;
+                refreshPreview();
+            });
+            refreshPreview();
+            item.appendChild(preview);
+
+            const panel = document.createElement('div');
+            panel.className = 'scp-lb-proposal-edit-panel';
+            panel.style.display = 'none';
+            const row = (label, ta) => {
+                const r = document.createElement('div');
+                r.className = 'scp-lb-pe-row';
+                const l = document.createElement('label');
+                l.className = 'scp-lb-pe-label';
+                l.textContent = label;
+                r.appendChild(l);
+                r.appendChild(ta);
+                return r;
+            };
+            const area = (value, rows, onInput) => {
+                const ta = document.createElement('textarea');
+                ta.className = 'scp-lb-pe-textarea';
+                ta.rows = rows;
+                ta.value = value || '';
+                ta.addEventListener('input', () => { onInput(ta.value); refreshPreview(); refreshValidation(); });
+                return ta;
+            };
+            const build = () => {
+                panel.innerHTML = '';
+                if (change.action === 'replace') {
+                    (change.patches || []).forEach((p, pi) => {
+                        panel.appendChild(row(t`Patch ${pi + 1}: anchor`, area(p.search, 2, v => { p.search = v; })));
+                        panel.appendChild(row(translate('Replace'), area(p.replace, 3, v => { p.replace = v; })));
+                    });
+                } else {
+                    panel.appendChild(row(translate('Value'), area(change.value, 5, v => { change.value = v; })));
+                }
+            };
+            item.appendChild(panel);
+            editBtn.addEventListener('click', e => {
+                e.stopPropagation();
+                const open = panel.style.display !== 'none';
+                if (!open) build();
+                else _syncProposalMessage(msgId, changes, states); // keep the edits in the message
+                panel.style.display = open ? 'none' : 'flex';
+                preview.style.display = open ? '' : 'none';
+                editBtn.classList.toggle('active', !open);
+            });
+        }
+
+        refreshValidation();
         list.appendChild(item);
-        return item;
+        return { el: item };
     });
 
-    dismissBtn.addEventListener('click', () => {
-        states.forEach((s, i) => { if (s === 'pending') finish(i, 'rejected', items[i]); });
+    applyAllBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        let applied = 0;
+        states.forEach((s, i) => { if (s === 'pending' && applyOne(i)) applied++; });
+        if (applied) _refreshManagerIfOpen();
     });
+    const rejectRemaining = () => states.forEach((s, i) => { if (s === 'pending') finish(i, 'rejected', items[i].el); });
+    rejectAllBtn.addEventListener('click', e => { e.stopPropagation(); rejectRemaining(); });
+    dismissBtn.addEventListener('click', rejectRemaining);
 
+    card.appendChild(footer);
     updateCount();
     const bodyEl = msgEl.querySelector('.scp-msg-body');
     if (bodyEl) bodyEl.insertBefore(card, bodyEl.querySelector('.scp-swipe-bar'));

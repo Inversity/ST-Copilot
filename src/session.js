@@ -773,7 +773,26 @@ export function importSession(onSuccessCallback) {
     inp.click();
 }
 
-export function showSessionDialog({ defaultName = '' } = {}) {
+// New session: name and "temporary", on SillyTavern's Popup like Copilot's other dialogs
+// (the temporary switch is one of its custom inputs). Resolves { name, isTemporary } or null.
+export async function showSessionDialog({ defaultName = '' } = {}) {
+    const ctx = SillyTavern.getContext();
+    if (typeof ctx.Popup !== 'function') return _showOwnSessionDialog({ defaultName });
+    const tmpId = 'scp-sess-temporary';
+    const popup = new ctx.Popup(`<h3>${escHtml(translate('New Session'))}</h3><div>${escHtml(translate('Session name:'))}</div>`, ctx.POPUP_TYPE.INPUT, defaultName, {
+        okButton: translate('Create'),
+        cancelButton: translate('Cancel'),
+        placeholder: defaultName || null,
+        customInputs: [{ id: tmpId, label: translate('Temporary — auto-delete when switching'), type: 'checkbox', defaultState: false }],
+    });
+    popup.dlg.classList.add('scp-popup');
+    const value = await popup.show();
+    if (typeof value !== 'string') return null;
+    return { name: value, isTemporary: !!popup.inputResults?.get(tmpId) };
+}
+
+// Copilot's own dialog, for a SillyTavern without Popup on its context.
+function _showOwnSessionDialog({ defaultName = '' } = {}) {
     return new Promise(resolve => {
         const overlay = document.createElement('div');
         overlay.className = 'scp-dialog-overlay';

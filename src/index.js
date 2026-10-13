@@ -67,7 +67,7 @@ async function injectUI() {
             console.error(`[${EXT_DISPLAY}] Couldn't load HTML: ${templateName}.html`);
         }
     };
-    const templates = ['window', 'lorebook_manager', 'character_manager', 'prompt_manager', 'settings_overlay', 'chat_picker'];
+    const templates = ['window', 'lorebook_manager', 'character_manager', 'prompt_manager', 'settings_overlay', 'chat_picker', 'diff_modal'];
     await Promise.all(templates.map(loadAndInject));
 
     const iconEl = document.getElementById(ICON_ID);
