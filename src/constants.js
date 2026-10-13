@@ -301,6 +301,17 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     // ─── Changelog Data ──────────────────────────────────────────────────────────
 export const CHANGELOG = [
     {
+        version: '3.0.6',
+        date: '10/13/2026',
+        announce: true,
+        notes: [
+            '<strong>Lorebook entries follow SillyTavern\'s World Info</strong>: Copilot sees what SillyTavern activated for the roleplay, plus entries your Copilot messages activate, each labelled with why it is there ("active in ST" in the Lorebook Manager).',
+            '<strong>Text completion</strong>: "Default" now uses your live settings and instruct template.',
+            '<strong>No Blur and Reduced Motion</strong> in SillyTavern now apply to Copilot too.',
+            '<strong>Dialogs</strong> use SillyTavern\'s popups.',
+        ],
+    },
+    {
         version: '3.0.5',
         date: '10/12/2026',
         announce: true,

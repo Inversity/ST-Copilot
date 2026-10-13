@@ -2,6 +2,14 @@
 
 This fork continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker, whose last release was 2.9.0 (2026-07-02). Versions before 3.0.0 are upstream's and are listed in the extension's "What's New" panel.
 
+## 3.0.6 (2026-10-13)
+
+- **Lorebook entries now follow SillyTavern's World Info.** Copilot used its own keyword scan, which disagreed with SillyTavern on most activation rules (secondary keys, case and whole-word settings, scan depth, recursion, probability, groups, budget) and could put almost a whole lorebook into Copilot's prompt. Copilot now sees the entries SillyTavern itself activated for the roleplay, plus entries your own Copilot messages activate under the same rules. Each entry says why it is there, so Copilot can tell you which ones the roleplay really uses, and the Lorebook Manager marks them "active in ST". The "Main chat keytriggers scan depth" setting is gone: SillyTavern's own depth applies.
+- **Text completion works with "Default".** On a text-completion API, Copilot applied the preset by name and sent the conversation as plain text. When the name did not resolve, the request failed with no reply. It now uses your live settings and your instruct template, as connection profiles already did.
+- **Copilot follows SillyTavern's No Blur and Reduced Motion.** With Reduced Motion on, Copilot's animations, window wobble and smooth scrolling stop; with No Blur on, its background goes nearly opaque. Performance Mode is still there.
+- **Dialogs use SillyTavern's popups**: its look, translations, keyboard and mobile layout. Destructive confirmations keep their countdown.
+- Fixed: adding a new lorebook to a character as an extra book did nothing; the character list did not refresh after Copilot created or renamed a character. Both came from SillyTavern globals that no longer exist; Copilot now reads SillyTavern through its API.
+
 ## 3.0.5 (2026-10-12)
 
 - **"Change all N" for repeated text.** When a proposed change targets text that appears word for word in several places (asking to change a sentence that occurs twice), the proposal card says how many times it appears and offers **Change all N**. The diff shows every occurrence before you apply. Without that choice nothing changes, as before. This was the last failing scenario in the 3.0.4 eval.
