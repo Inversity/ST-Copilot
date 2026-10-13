@@ -1594,6 +1594,12 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       }).observe(el);
   }
 
+  // SillyTavern's display settings, which Copilot follows. ST marks them on <body>: "no-blur" for
+  // No Blur, "reduced-motion" for Reduced Motion (also on when the OS asks for reduced motion).
+  const stNoBlur = () => document.body.classList.contains('no-blur');
+  const stReducedMotion = () => document.body.classList.contains('reduced-motion');
+  const scrollBehavior = () => (stReducedMotion() ? 'auto' : 'smooth');
+
   function escHtml(str) {
       return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
@@ -1711,7 +1717,10 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
     escHtml: escHtml,
     fallbackCopy: fallbackCopy,
     rememberElementSize: rememberElementSize,
-    showCustomDialog: showCustomDialog
+    scrollBehavior: scrollBehavior,
+    showCustomDialog: showCustomDialog,
+    stNoBlur: stNoBlur,
+    stReducedMotion: stReducedMotion
   });
 
   // ─── Settings ───────────────────────────────────────────────────────────────
@@ -13923,7 +13932,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       if (state.searchMatches.length) {
           state.searchIdx = 0;
           state.searchMatches[0].classList.add('scp-search-current');
-          state.searchMatches[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+          state.searchMatches[0].scrollIntoView({ block: 'center', behavior: scrollBehavior() });
       }
       updateSearchCount();
   }
@@ -13934,7 +13943,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       state.searchIdx = (state.searchIdx + dir + state.searchMatches.length) % state.searchMatches.length;
       const cur = state.searchMatches[state.searchIdx];
       cur.classList.add('scp-search-current');
-      cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      cur.scrollIntoView({ block: 'center', behavior: scrollBehavior() });
       updateSearchCount();
   }
 
@@ -14534,7 +14543,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       handle.addEventListener('pointerdown', e => {
           if (e.target.closest('.scp-hbtn,.scp-tbtn,select,input,button,.scp-opacity-wrap,.scp-rh,.scp-sess-dropdown,.scp-sess-wrap')) return;
           
-          isWobbly = getSettings().wobbleWindow !== false && !getSettings().performanceMode;
+          isWobbly = getSettings().wobbleWindow !== false && !getSettings().performanceMode && !stReducedMotion();
 
           if (_rafId && isWobbly) {
               sl = cx; 
@@ -14653,7 +14662,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       let angle = 0;
 
       const tick = () => {
-          const isWobbly = getSettings().wobbleWindow !== false && !getSettings().performanceMode;
+          const isWobbly = getSettings().wobbleWindow !== false && !getSettings().performanceMode && !stReducedMotion();
 
           if (!active && !dragging &&
               Math.abs(vx) < 0.05 && Math.abs(vy) < 0.05 &&
@@ -14792,6 +14801,20 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       } catch(_) {}
   }
 
+  // Re-applies the theme when No Blur is switched in ST. Reduced Motion needs no re-apply: the
+  // stylesheet and the motion checks read ST's body class when they run.
+  let _stDisplayObserver = null;
+  function watchSTDisplaySettings() {
+      if (_stDisplayObserver || typeof MutationObserver === 'undefined') return;
+      let noBlur = stNoBlur();
+      _stDisplayObserver = new MutationObserver(() => {
+          if (stNoBlur() === noBlur) return;
+          noBlur = stNoBlur();
+          applyCustomTheme(getSettings().customTheme || THEME_PRESETS.default);
+      });
+      _stDisplayObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  }
+
   function applyCustomTheme(theme) {
       if (!theme) return;
       
@@ -14809,18 +14832,23 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           document.getElementById('scp-picker-overlay')
       ].filter(Boolean);
       const s = getSettings();
-      
+      // ST's No Blur already strips backdrop blur from the whole page; a see-through background
+      // without its blur is hard to read, so both make the background nearly opaque.
+      const noBlur = s.performanceMode || stNoBlur();
+
       for (const [key, cssVar] of Object.entries(THEME_CSS_MAP)) {
           if (key === 'font' || key === 'fontSize') continue;
           if (theme[key] !== undefined && theme[key] !== '') {
               let val = theme[key];
-              
-              if (s.performanceMode) {
+
+              if (noBlur) {
                   if (key === 'blur') val = 'none';
-                  if (key === 'shadow') val = '0 8px 24px rgba(0,0,0,0.85)';
                   if (key === 'bg' && val.includes('rgba')) {
                       val = val.replace(/,\s*0\.[0-8]\d*\)/, ', 0.96)');
                   }
+              }
+              if (s.performanceMode) {
+                  if (key === 'shadow') val = '0 8px 24px rgba(0,0,0,0.85)';
               }
 
               targets.forEach(t => t.style.setProperty(cssVar, val));
@@ -15193,7 +15221,8 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
     showWindow: showWindow,
     toggleGhostMode: toggleGhostMode,
     toggleVisibility: toggleVisibility,
-    updateIconVisibility: updateIconVisibility
+    updateIconVisibility: updateIconVisibility,
+    watchSTDisplaySettings: watchSTDisplaySettings
   });
 
   const FIELD_GROUPS = [
@@ -17951,7 +17980,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               // Older messages are not rendered until asked for.
               if (!msgEl && (await Promise.resolve().then(function () { return uiChat; })).revealOlderMessages(true)) msgEl = document.querySelector(`.scp-msg[data-id="${msg.id}"]`);
               if (!msgEl) return;
-              msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              msgEl.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
               requestAnimationFrame(() => {
                   msgEl.classList.remove('scp-msg-flash');
                   void msgEl.offsetWidth;
@@ -18378,7 +18407,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
                   const bodyContainer = document.getElementById('scp-ctx-body');
                   if (t && bodyContainer) {
                       const topPos = t.offsetTop;
-                      bodyContainer.scrollTo({ top: topPos, behavior: 'smooth' });
+                      bodyContainer.scrollTo({ top: topPos, behavior: scrollBehavior() });
                   }
               });
           });
@@ -19151,6 +19180,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       setupCharacterManagerListeners();
       setupPromptManagerListeners();
       setupExternalWIChangeListener();
+      watchSTDisplaySettings();
       setupChatPickerListeners(); 
       setupChangelogListeners();
       setupSearchHotkey();

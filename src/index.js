@@ -5,7 +5,7 @@ import { _dbgSetupGlobalErrorHandlers, _dbgAdd, dbgDownload, _dbgSnapshotSetting
 import { showCustomDialog, escHtml, autoResize, copyText } from './utils/util-dom.js';
 import { setupExternalWIChangeListener } from './features/feature-lorebook-engine.js';
 
-import { restoreWindowState, applyCustomTheme, applyWindowBackground, hideWindow, showWindow, minimize, toggleVisibility, makeDraggable, makeResizable, makeIconDraggable, updateIconVisibility, toggleGhostMode, setupGhostHotkey, setupHotkey, bringWindowToFront } from './ui/ui-window.js';
+import { restoreWindowState, applyCustomTheme, applyWindowBackground, hideWindow, showWindow, minimize, toggleVisibility, makeDraggable, makeResizable, makeIconDraggable, updateIconVisibility, toggleGhostMode, setupGhostHotkey, setupHotkey, bringWindowToFront, watchSTDisplaySettings } from './ui/ui-window.js';
 import { setupSettingsPanelListeners, setupSettingsHandlers, updateSettingsUI, updateProfilesList, updateSPConnProfileList, _takeProfileSnapshot, openSettingsPanel, syncOverlayUI } from './ui/ui-settings.js';
 import { setupLorebookManagerListeners, openLorebookManager } from './features/feature-lorebook-ui.js';
 import { setupCharacterManagerListeners, openCharacterManager } from './features/feature-character-manager-ui.js';
@@ -547,6 +547,7 @@ async function init() {
     setupCharacterManagerListeners();
     setupPromptManagerListeners();
     setupExternalWIChangeListener();
+    watchSTDisplaySettings();
     setupChatPickerListeners(); 
     setupChangelogListeners();
     setupSearchHotkey();

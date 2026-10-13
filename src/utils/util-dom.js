@@ -21,6 +21,12 @@ export function rememberElementSize(el, key) {
     }).observe(el);
 }
 
+// SillyTavern's display settings, which Copilot follows. ST marks them on <body>: "no-blur" for
+// No Blur, "reduced-motion" for Reduced Motion (also on when the OS asks for reduced motion).
+export const stNoBlur = () => document.body.classList.contains('no-blur');
+export const stReducedMotion = () => document.body.classList.contains('reduced-motion');
+export const scrollBehavior = () => (stReducedMotion() ? 'auto' : 'smooth');
+
 export function escHtml(str) {
     return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }

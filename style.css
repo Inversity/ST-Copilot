@@ -5339,3 +5339,18 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
 .sttt--tooltip {
     z-index: 2147483647 !important;
 }
+
+/* SillyTavern's Reduced Motion (set there, or by the OS setting ST follows) stills Copilot too.
+   Durations go to near zero rather than none, so code waiting for animationend or
+   transitionend still runs. Copilot's windows and overlays are direct children of <body>. */
+body.reduced-motion > [id^="scp-"],
+body.reduced-motion > [id^="scp-"] *,
+body.reduced-motion > .scp-dialog-overlay,
+body.reduced-motion > .scp-dialog-overlay * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+}

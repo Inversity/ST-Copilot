@@ -3,6 +3,7 @@ import { state } from '../state.js';
 import { THEME_CSS_MAP, THEME_PRESETS, ICON_STORAGE_KEY, WIN_ID, EXT_DISPLAY } from '../constants.js';
 import { scrollToBottom, saveScrollPosition, restoreScrollPosition } from './ui-chat.js';
 import { translate } from '../utils/util-i18n.js';
+import { stNoBlur, stReducedMotion } from '../utils/util-dom.js';
 
 const SCP_TOP_Z_INDEX = 2147483000;
 const WIN_POS_STORAGE_KEY = 'scp-win-pos';
@@ -124,7 +125,7 @@ export function makeDraggable(handle, target) {
     handle.addEventListener('pointerdown', e => {
         if (e.target.closest('.scp-hbtn,.scp-tbtn,select,input,button,.scp-opacity-wrap,.scp-rh,.scp-sess-dropdown,.scp-sess-wrap')) return;
         
-        isWobbly = getSettings().wobbleWindow !== false && !getSettings().performanceMode;
+        isWobbly = getSettings().wobbleWindow !== false && !getSettings().performanceMode && !stReducedMotion();
 
         if (_rafId && isWobbly) {
             sl = cx; 
@@ -243,7 +244,7 @@ export function makeIconDraggable(iconTarget) {
     let angle = 0;
 
     const tick = () => {
-        const isWobbly = getSettings().wobbleWindow !== false && !getSettings().performanceMode;
+        const isWobbly = getSettings().wobbleWindow !== false && !getSettings().performanceMode && !stReducedMotion();
 
         if (!active && !dragging &&
             Math.abs(vx) < 0.05 && Math.abs(vy) < 0.05 &&
@@ -382,6 +383,20 @@ export function saveWindowState(windowEl) {
     } catch(_) {}
 }
 
+// Re-applies the theme when No Blur is switched in ST. Reduced Motion needs no re-apply: the
+// stylesheet and the motion checks read ST's body class when they run.
+let _stDisplayObserver = null;
+export function watchSTDisplaySettings() {
+    if (_stDisplayObserver || typeof MutationObserver === 'undefined') return;
+    let noBlur = stNoBlur();
+    _stDisplayObserver = new MutationObserver(() => {
+        if (stNoBlur() === noBlur) return;
+        noBlur = stNoBlur();
+        applyCustomTheme(getSettings().customTheme || THEME_PRESETS.default);
+    });
+    _stDisplayObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+}
+
 export function applyCustomTheme(theme) {
     if (!theme) return;
     
@@ -399,18 +414,23 @@ export function applyCustomTheme(theme) {
         document.getElementById('scp-picker-overlay')
     ].filter(Boolean);
     const s = getSettings();
-    
+    // ST's No Blur already strips backdrop blur from the whole page; a see-through background
+    // without its blur is hard to read, so both make the background nearly opaque.
+    const noBlur = s.performanceMode || stNoBlur();
+
     for (const [key, cssVar] of Object.entries(THEME_CSS_MAP)) {
         if (key === 'font' || key === 'fontSize') continue;
         if (theme[key] !== undefined && theme[key] !== '') {
             let val = theme[key];
-            
-            if (s.performanceMode) {
+
+            if (noBlur) {
                 if (key === 'blur') val = 'none';
-                if (key === 'shadow') val = '0 8px 24px rgba(0,0,0,0.85)';
                 if (key === 'bg' && val.includes('rgba')) {
                     val = val.replace(/,\s*0\.[0-8]\d*\)/, ', 0.96)');
                 }
+            }
+            if (s.performanceMode) {
+                if (key === 'shadow') val = '0 8px 24px rgba(0,0,0,0.85)';
             }
 
             targets.forEach(t => t.style.setProperty(cssVar, val));

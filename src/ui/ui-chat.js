@@ -2,7 +2,7 @@ import { I, EXT_DISPLAY, THEME_PRESETS, WIN_ID, MSG_RENDER_WINDOW } from '../con
 import { state } from '../state.js';
 import { getSettings, saveSettings, getCurrentSession, saveSessionsToMetadata, addMessage, deleteMsg, truncateAfter, truncateFrom, expandMacros, getEffectiveSettings, getBindingKey, initChatBucket, isBucketForCurrentChat, isMessageStarred, toggleStarMessage } from '../session.js';
 import { _dbgAdd } from '../utils/util-debug.js';
-import { escHtml, autoResize, showCustomDialog, copyText } from '../utils/util-dom.js';
+import { escHtml, autoResize, showCustomDialog, copyText, scrollBehavior } from '../utils/util-dom.js';
 import { renderMarkdown, splitStreamingMarkdown } from '../utils/util-markdown.js';
 import { getCharInfo } from '../utils/util-st.js';
 import { applyRegexIfEnabled } from '../integrations/integ-regex.js';
@@ -1757,7 +1757,7 @@ export function performSearch() {
     if (state.searchMatches.length) {
         state.searchIdx = 0;
         state.searchMatches[0].classList.add('scp-search-current');
-        state.searchMatches[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+        state.searchMatches[0].scrollIntoView({ block: 'center', behavior: scrollBehavior() });
     }
     updateSearchCount();
 }
@@ -1768,7 +1768,7 @@ export function navigateSearch(dir) {
     state.searchIdx = (state.searchIdx + dir + state.searchMatches.length) % state.searchMatches.length;
     const cur = state.searchMatches[state.searchIdx];
     cur.classList.add('scp-search-current');
-    cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    cur.scrollIntoView({ block: 'center', behavior: scrollBehavior() });
     updateSearchCount();
 }
 

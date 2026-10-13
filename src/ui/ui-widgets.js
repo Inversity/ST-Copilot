@@ -1,6 +1,6 @@
 import { CHANGELOG, EXT_DISPLAY, I, DEFAULT_CHAR_EDIT_DIRECTIVE, DEFAULT_LB_MANAGE_PROMPT, DEFAULT_CHAT_EDIT_DIRECTIVE, QP_ICON_POOL } from '../constants.js';
 import { getSettings, saveSettings, getCurrentSession, getBindingKey, isMessageStarred, toggleStarMessage, getStarredMessages } from '../session.js';
-import { escHtml, showCustomDialog, copyText, autoResize, rememberElementSize } from '../utils/util-dom.js';
+import { escHtml, showCustomDialog, copyText, autoResize, rememberElementSize, scrollBehavior } from '../utils/util-dom.js';
 import { _dbgAdd } from '../utils/util-debug.js';
 import { recordStat, SM } from '../features/feature-stats.js';
 import { _processAttachmentsBeforeSend } from '../features/feature-attachments.js';
@@ -660,7 +660,7 @@ export function renderFavoritesPanel() {
             // Older messages are not rendered until asked for.
             if (!msgEl && (await import('./ui-chat.js')).revealOlderMessages(true)) msgEl = document.querySelector(`.scp-msg[data-id="${msg.id}"]`);
             if (!msgEl) return;
-            msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            msgEl.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
             requestAnimationFrame(() => {
                 msgEl.classList.remove('scp-msg-flash');
                 void msgEl.offsetWidth;
@@ -1087,7 +1087,7 @@ export async function openInspector() {
                 const bodyContainer = document.getElementById('scp-ctx-body');
                 if (t && bodyContainer) {
                     const topPos = t.offsetTop;
-                    bodyContainer.scrollTo({ top: topPos, behavior: 'smooth' });
+                    bodyContainer.scrollTo({ top: topPos, behavior: scrollBehavior() });
                 }
             });
         });
