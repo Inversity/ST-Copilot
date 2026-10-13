@@ -301,6 +301,16 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     // ─── Changelog Data ──────────────────────────────────────────────────────────
 export const CHANGELOG = [
     {
+        version: '3.0.4',
+        date: '10/12/2026',
+        announce: true,
+        notes: [
+            '<strong>Copilot can read what it edits</strong>: new tools read chat messages and lorebook entries in full (searches only showed previews, so edits deep in long text failed).',
+            '<strong>Alternate greetings</strong>: greetings not sent in full are listed by number, and numbers match "Alternate Greeting #N" (swipe N+1 is greeting N).',
+            '<strong>Outlet entries</strong> are recognized correctly by the tools.',
+        ],
+    },
+    {
         version: '3.0.3',
         date: '10/12/2026',
         announce: true,

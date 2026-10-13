@@ -2,6 +2,14 @@
 
 This fork continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker, whose last release was 2.9.0 (2026-07-02). Versions before 3.0.0 are upstream's and are listed in the extension's "What's New" panel.
 
+## 3.0.4 (2026-10-12)
+
+- **Copilot can read what it edits.** Its read tools only returned previews (messages cut at 500-600 characters, lorebook entries at 200, no way to read a whole entry), so edits deep in a long message or entry were guessed and failed. New tools: **Read Messages** (main-chat messages in full) and **Get Lorebook Entry** (full content plus keys and settings). Previews now say they are cut short and name the tool for the full text, and the instructions say never to overwrite from a preview.
+- **Alternate greetings:** the context gives the total count and lists greetings not sent in full by number with their opening words, so numbers are never guessed and any one can be read in full (`get_char_info` takes `greeting_ids`). The instructions say greeting numbers match SillyTavern's "Alternate Greeting #N", and that swipe N+1 of the first message is greeting N.
+- **Outlet entries** are detected correctly in the tools (position 7). They tested position 5, "top of example messages", which once led Copilot to name the wrong entry and then answer that there were no outlets.
+- Edit instructions ask for anchors that match one place only.
+- Measured with a live eval (Opus 4.6, synthetic data, new `tools/eval-*`): editing a phrase deep in a long message and patching a lorebook entry outside the context both failed on 3.0.3 and pass now; 12 of 13 scenarios pass. Still failing: changing a sentence that appears twice, which the matcher refuses as ambiguous.
+
 ## 3.0.3 (2026-10-12)
 
 - **Long replies stream smoothly.** Each frame used to re-parse and rebuild the whole reply, so streaming slowed down as a reply grew. Finished paragraphs are now rendered once and kept; only the paragraph being written is redrawn, with output identical to a full render (checked by a test over every intermediate state of many generated replies). On a ~28 KB reply, slow frames went from 30% to under 2%.
