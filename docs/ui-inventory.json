@@ -1,6 +1,6 @@
 {
   "about": "Every screen, panel and card of ST-Copilot, with how to reach it, what it does, its controls, the source that builds it, its screenshot (docs/screens/<screen>.jpg, made by tools/ui-screens.mjs) and open findings. Built for the UI review; keep it in step with the code: a new screen or setting gets a node here.",
-  "version": "3.0.9",
+  "version": "3.1.0",
   "builtFrom": "9b1e8ff",
   "findingTypes": {
     "bug": "Broken behaviour or markup",
@@ -76,10 +76,10 @@
     {
       "id": "st-drawer",
       "area": "entry",
-      "title": "Extensions panel drawer",
+      "title": "Extensions panel launcher",
       "kind": "panel",
       "opens": "SillyTavern > Extensions (puzzle icon) > ST-Copilot",
-      "purpose": "A second, older settings surface. It repeats most of the Settings overlay's AI and Interface tabs, plus a few buttons that open the overlay.",
+      "purpose": "A short launcher in SillyTavern's Extensions panel: turn Copilot on or off, keep the floating icon, open the window or Copilot's Settings. Every other setting lives only in the Settings overlay (3.1.0; it used to be a second, drifting copy of most of them).",
       "screens": [
         "st-drawer"
       ],
@@ -89,36 +89,18 @@
       ],
       "controls": [
         {
-          "label": "General: Enable, Always show floating icon, Wobbly drag, Low Performance Mode, Window Opacity",
-          "kind": "checkboxes + slider"
+          "label": "Enable ST-Copilot",
+          "kind": "checkbox",
+          "setting": "enabled"
         },
         {
-          "label": "Open Copilot, Clear Sessions, Clean Up Files, Debug Log",
+          "label": "Always show floating icon",
+          "kind": "checkbox",
+          "setting": "floatingIconPersistent"
+        },
+        {
+          "label": "Open Copilot, Open Copilot Settings",
           "kind": "buttons"
-        },
-        {
-          "label": "Shortcuts: Toggle Window, Chat Search, Toggle Ghost Mode",
-          "kind": "checkbox + hotkey field each"
-        },
-        {
-          "label": "Completion Sound, Ghost Mode opacity",
-          "kind": "sound picker + slider"
-        },
-        {
-          "label": "Configuration Profiles: select, save, new, duplicate, rename, delete, auto-load for character/chat",
-          "kind": "profile bar"
-        },
-        {
-          "label": "Connection, Context Payload, System Prompt, Character Card AI Edits, Lorebook AI Edits, Chat Message AI Edits, Other, Interface Theme",
-          "kind": "collapsible drawers"
-        },
-        {
-          "label": "Persistent Memory: Enable, Inject memory into AI context, Manage Memory",
-          "kind": "checkboxes + button"
-        },
-        {
-          "label": "Tool Calls: Enable, Configure Tools",
-          "kind": "checkbox + button"
         }
       ],
       "findings": [
@@ -133,19 +115,22 @@
           "type": "drift",
           "text": "Two settings surfaces for the same settings. The drawer is missing: model override, Prompt Manager AI edits, show changelog on update / What's New, memory toast + memory prompt + memory list, max tool rounds, tools prompt and the tool list.",
           "ref": "settings.html",
-          "id": "st-drawer-2"
+          "id": "st-drawer-2",
+          "fixedIn": "3.1.0"
         },
         {
           "type": "drift",
           "text": "Only the drawer has \"Inject memory into AI context\" (memoryInject); the overlay's Memory tab has no such switch.",
           "ref": "settings.html:367",
-          "id": "st-drawer-3"
+          "id": "st-drawer-3",
+          "fixedIn": "3.1.0"
         },
         {
           "type": "drift",
           "text": "Wording differs from the overlay: \"Use Currently Selected API\" vs \"Use Current API\"; \"Response String Trimming\" vs \"Reasoning Trim Strings\"; \"Session History Depth Limit\" vs \"Session History Limit\"; \"Apply Regex Scripts to context\" vs \"Apply Regex to context\"; \"Clear Sessions / Clean Up Files / Debug Log\" vs \"Clear All Sessions / Clean Up Orphan Files / Download Debug Log\"; shortcut \"Toggle Ghost Mode\" vs \"Ghost Mode\".",
           "ref": "settings.html",
-          "id": "st-drawer-4"
+          "id": "st-drawer-4",
+          "fixedIn": "3.1.0"
         },
         {
           "type": "wording",
@@ -157,7 +142,8 @@
         {
           "type": "ux",
           "text": "Expanded, the drawer is about 5,500px tall: every prompt is an auto-growing textarea. Decide whether the drawer should keep full prompt editors or point to the overlay.",
-          "id": "st-drawer-6"
+          "id": "st-drawer-6",
+          "fixedIn": "3.1.0"
         }
       ]
     },
@@ -920,27 +906,27 @@
           "kind": "checkboxes"
         },
         {
-          "label": "System Prompt + Reset to Default",
+          "label": "System Prompt with presets + Reset to Default",
           "kind": "text area",
           "setting": "systemPrompt"
         },
         {
-          "label": "Character Card AI Edits: enable + prompt",
+          "label": "Character Card AI Edits: enable + prompt (with presets)",
           "kind": "checkbox + text area",
           "setting": "charEditAIEnabled, charEditPrompt"
         },
         {
-          "label": "Lorebook AI Edits: enable, Auto-Keywords, Copilot messages scanned for lorebook keys, prompt",
+          "label": "Lorebook AI Edits: enable, Auto-Keywords, Copilot messages scanned for lorebook keys, prompt (with presets)",
           "kind": "mixed",
           "setting": "lorebookAIManageEnabled, lorebookAutoKeyword, lorebookCopilotScanDepth, lorebookManagePrompt"
         },
         {
-          "label": "Chat Message AI Edits: enable + prompt",
+          "label": "Chat Message AI Edits: enable + prompt (with presets)",
           "kind": "checkbox + text area",
           "setting": "chatEditAIEnabled, chatEditPrompt"
         },
         {
-          "label": "Prompt Manager AI Edits: enable",
+          "label": "Prompt Manager AI Edits: enable (with presets)",
           "kind": "checkbox",
           "setting": "promptEditAIEnabled"
         }
@@ -962,7 +948,8 @@
         {
           "type": "missing",
           "text": "System prompt presets exist only in the Session tab; the AI tab has just Reset.",
-          "id": "settings-global-3"
+          "id": "settings-global-3",
+          "fixedIn": "3.1.0"
         }
       ]
     },
@@ -972,7 +959,7 @@
       "title": "Interface tab",
       "kind": "tab",
       "opens": "Gear button > Interface",
-      "purpose": "Look and behaviour of the window: general switches, shortcuts, completion sound, Ghost Mode, background, message picker previews, attachments, theme, and the danger zone.",
+      "purpose": "Look and behaviour of the window: general switches, shortcuts, completion sound, Ghost Mode, background, message picker previews, attachments and theme.",
       "screens": [
         "settings-interface"
       ],
@@ -1014,17 +1001,14 @@
         {
           "label": "Interface Theme: 12 presets, custom themes (save, new, duplicate, rename, delete, export, import), 20 color and style fields",
           "kind": "theme editor"
-        },
-        {
-          "label": "Danger Zone: Clear All Sessions (this chat), Clean Up Orphan Files, Download Debug Log",
-          "kind": "buttons"
         }
       ],
       "findings": [
         {
           "type": "ux",
           "text": "The Danger Zone (sessions, files, debug log) is not about the interface. A Data or Maintenance group, or its own place, would be easier to find.",
-          "id": "settings-interface-1"
+          "id": "settings-interface-1",
+          "fixedIn": "3.1.0"
         },
         {
           "type": "wording",
@@ -1079,7 +1063,7 @@
       "title": "Session tab",
       "kind": "tab",
       "opens": "Gear button > Session",
-      "purpose": "Overrides for the current Copilot session only; each has a reset (↺). Includes prompt presets for the system prompt and each edit prompt.",
+      "purpose": "Overrides for the current Copilot session only; each has a reset (↺). Includes prompt presets, and at the bottom the session and file maintenance buttons.",
       "screens": [
         "settings-session"
       ],
@@ -1092,11 +1076,15 @@
           "kind": "overrides"
         },
         {
-          "label": "Include roleplay prompt, User Persona, alternate swipes",
+          "label": "Include roleplay prompt, User Persona, alternate swipes, auto-expand macros, hidden messages",
           "kind": "overrides"
         },
         {
-          "label": "Character fields (10) + greetings picker, Apply Regex",
+          "label": "Character fields (10) + greetings picker, with a \"set by <character>\" tag where a character override wins",
+          "kind": "overrides"
+        },
+        {
+          "label": "Apply Regex, Summaryception, Aspect: Evolutia",
           "kind": "overrides"
         },
         {
@@ -1112,6 +1100,14 @@
           "kind": "overrides"
         },
         {
+          "label": "Prompt Manager AI Edits, Persistent memory, Tool calls",
+          "kind": "overrides"
+        },
+        {
+          "label": "Sessions and files: Clear All Sessions (this chat), Clean Up Orphan Files, Download Debug Log",
+          "kind": "buttons"
+        },
+        {
           "label": "Reset All",
           "kind": "button"
         }
@@ -1120,12 +1116,14 @@
         {
           "type": "missing",
           "text": "No session override for: auto-expand macros, include hidden messages, Summaryception, Aspect: Evolutia, Prompt Manager AI edits, memory, tools.",
-          "id": "settings-session-1"
+          "id": "settings-session-1",
+          "fixedIn": "3.1.0"
         },
         {
           "type": "ux",
           "text": "Three layers decide which character fields are sent: global (AI tab), this session (here) and per character (Character Manager > Overrides). Nothing shows which layer wins.",
-          "id": "settings-session-2"
+          "id": "settings-session-2",
+          "fixedIn": "3.1.0"
         }
       ]
     },
@@ -1146,9 +1144,9 @@
       ],
       "controls": [
         {
-          "label": "Enable persistent memory, toast when memory is saved",
+          "label": "Enable persistent memory, inject memory into AI context, toast when memory is saved",
           "kind": "checkboxes",
-          "setting": "memoryEnabled, memoryNotify"
+          "setting": "memoryEnabled, memoryInject, memoryNotify"
         },
         {
           "label": "Memory AI Prompt + Reset",
@@ -1169,7 +1167,8 @@
         {
           "type": "drift",
           "text": "No \"Inject memory into AI context\" switch here (memoryInject); it is only in the drawer.",
-          "id": "settings-memory-1"
+          "id": "settings-memory-1",
+          "fixedIn": "3.1.0"
         },
         {
           "type": "dead",
@@ -1424,7 +1423,7 @@
       "title": "Character overrides",
       "kind": "panel",
       "opens": "Character Manager > Overrides tab",
-      "purpose": "Per character: which card fields are sent to Copilot. Unchecked falls back to the global setting.",
+      "purpose": "Per character: which card fields are sent to Copilot. Each field says which layer decides it: \"set here\", \"from this session\" or \"from global settings\".",
       "screens": [
         "character-manager-overrides"
       ],
@@ -1437,7 +1436,15 @@
           "kind": "overrides"
         }
       ],
-      "findings": []
+      "findings": [
+        {
+          "type": "bug",
+          "id": "character-manager-overrides-1",
+          "fixedIn": "3.1.0",
+          "text": "Found while adding the layer tags: without an override here, a field showed the global setting even when a session override decided it, and the hint said \"falls back to global settings\".",
+          "ref": "src/features/feature-character-manager-ui.js"
+        }
+      ]
     },
     {
       "id": "prompt-manager",
@@ -1624,7 +1631,7 @@
       "area": "modals",
       "title": "Clean up session files",
       "kind": "dialog",
-      "opens": "Settings > Interface > Clean Up Orphan Files (or the drawer's Clean Up Files)",
+      "opens": "Settings > Session > Sessions and files > Clean Up Orphan Files",
       "purpose": "Finds Copilot session files no chat points to (deleted chats, old branches) and offers to delete empty ones, then ones that still hold messages.",
       "screens": [],
       "source": [

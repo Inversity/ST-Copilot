@@ -2942,6 +2942,12 @@ details.scp-reasoning-block[open] .scp-reasoning-summary::before { transform: ro
 
 .scp-sp-ov-check-row .scp-sp-check { flex: 1; }
 
+/* Which settings layer decides a character field (global, this session, or a character). */
+.scp-layer-tag {
+    margin-left: auto; padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+    font-size: 10px; color: var(--scp-text-muted); border: 1px solid var(--scp-accent-dim);
+}
+
 .scp-sp-ov-label-row {
     display: flex; align-items: center; gap: 6px;
     margin-bottom: 2px;

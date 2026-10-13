@@ -302,6 +302,17 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     // ─── Changelog Data ──────────────────────────────────────────────────────────
 export const CHANGELOG = [
     {
+        version: '3.1.0',
+        date: '10/13/2026',
+        announce: true,
+        notes: [
+            '<strong>One place for settings</strong>: the Extensions panel entry is now a launcher (Enable, floating icon, Open Copilot, Open Copilot Settings). Everything else is in Copilot\'s Settings window.',
+            '<strong>"Set by" tags</strong> show which layer decides each character field: a character\'s override, this session, or the global setting.',
+            '<strong>Seven more session overrides</strong>, including tool calls and memory; prompt presets in the AI tab; the memory context switch in the Memory tab.',
+            '<strong>Sessions and files</strong> (clear sessions, clean up files, debug log) moved to the Session tab.',
+        ],
+    },
+    {
         version: '3.0.9',
         date: '10/13/2026',
         announce: true,

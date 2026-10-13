@@ -87,7 +87,7 @@ function buildSingleCharacterBlock(settings, entity) {
     };
 
     const isMainChar = char.avatar === ctx.characters?.[ctx.characterId]?.avatar;
-    if (isMainChar && getSettings().useAspectEvolutia) {
+    if (isMainChar && settings.useAspectEvolutia) {
         const aeFields = _getAspectEvolutiaCharFields();
         if (aeFields && aeFields.length) {
             delete simple.description;

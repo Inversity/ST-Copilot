@@ -2,6 +2,18 @@
 
 This fork continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker, whose last release was 2.9.0 (2026-07-02). Versions before 3.0.0 are upstream's and are listed in the extension's "What's New" panel.
 
+## 3.1.0 (2026-10-13)
+
+Settings now live in one place, and it is clear which setting wins.
+
+- **The Extensions panel entry is a launcher.** It keeps Enable ST-Copilot, Always show floating icon, Open Copilot and a new Open Copilot Settings button. Everything else is only in Copilot's own Settings window (the gear button), which had all of it already; the second copy in the Extensions panel had drifted from it (missing options, different wording).
+- **"Set by" tags for character fields.** Which card fields Copilot sees is decided in three layers: a character's own override (Character Manager > Overrides) beats this session's override, which beats the global setting. Settings now shows a tag such as "set by this session: off" or "set by Bench Ranger: off" where a stronger layer decides, and each field in the Character Manager says "set here", "from this session" or "from global settings".
+- **Seven more session overrides**: auto-expand macros, hidden messages, Summaryception, Aspect: Evolutia, Prompt Manager AI edits, persistent memory and tool calls. Turning tools or memory on or off for one session now works everywhere those settings are read.
+- **Prompt presets in the AI tab** for the system prompt and the three edit prompts (they were only in the Session tab).
+- **"Inject memory into AI context"** is in the Memory tab (it was only in the Extensions panel).
+- **Sessions and files**: Clear All Sessions, Clean Up Orphan Files and Download Debug Log moved from Interface to the bottom of the Session tab.
+- Fixed: in the Character Manager's Overrides tab, a field without its own override showed the global setting even when this session's override decided it.
+
 ## 3.0.9 (2026-10-13)
 
 Fixes from a review of every screen (the UI map in `docs/`).

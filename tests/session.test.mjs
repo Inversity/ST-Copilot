@@ -112,6 +112,23 @@ test('CHAT_CHANGED for the same chat keeps unsaved in-memory messages', async ()
     assert.equal(S.getCurrentSession().messages[0].content, 'not yet flushed');
 });
 
+test('session overrides reach the tools switch and the other settings that read them', async () => {
+    openChat('overrides.jsonl');
+    await S.initChatBucket();
+    S.createSession('override session');
+    const { getEnabledTools } = await import('../src/features/feature-tools-engine.js');
+    const s = S.getSettings();
+    s.toolsEnabled = false;
+    assert.equal(getEnabledTools().length, 0, 'global off');
+    S.setSessionOverride('toolsEnabled', true);
+    assert.ok(getEnabledTools().length > 0, 'session override turns tools on');
+    S.setSessionOverride('memoryEnabled', false);
+    assert.equal(S.getEffectiveSettings().memoryEnabled, false);
+    S.clearAllSessionOverrides();
+    assert.equal(getEnabledTools().length, 0);
+    s.toolsEnabled = true;
+});
+
 test('settings nothing reads any more are dropped; every tool has a default', () => {
     openChat('retired');
     const ext = globalThis.__stContext.extensionSettings;

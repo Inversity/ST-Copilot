@@ -515,5 +515,21 @@
     "30 Days": "30일",
     "12 Weeks": "12주",
     "12 Months": "12개월",
-    "All Years": "전체 연도"
+    "All Years": "전체 연도",
+    "Open Copilot Settings": "Copilot 설정 열기",
+    "Everything else (connection, prompts, context, memory, tools, appearance) is in Copilot's Settings: the gear button in the Copilot window.": "나머지 설정(연결, 프롬프트, 컨텍스트, 메모리, 도구, 외형)은 Copilot 설정에 있습니다: Copilot 창의 톱니바퀴 버튼.",
+    "Prompt edits, memory and tools": "프롬프트 편집, 메모리, 도구",
+    "Persistent memory": "영구 메모리",
+    "Tool calls": "도구 호출",
+    "Sessions and files": "세션과 파일",
+    "Not an override: these act on this chat's saved sessions and on Copilot's files.": "세션 재정의가 아닙니다: 이 채팅에 저장된 세션과 Copilot 파일에 적용됩니다.",
+    "set here": "여기서 설정",
+    "from this session": "이 세션 설정",
+    "from global settings": "전역 설정",
+    "Which of ${0}'s fields Copilot sees. A change here overrides this session's setting and the global one; ↺ goes back to them.": "${0}의 어떤 필드를 Copilot이 볼지 정합니다. 여기서 바꾸면 이 세션 설정과 전역 설정보다 우선하며, ↺로 되돌립니다.",
+    "A character's override (Character Manager > Overrides) beats this session's override, which beats the global setting.": "캐릭터 재정의(캐릭터 관리자 > 재정의)가 세션 재정의보다, 세션 재정의가 전역 설정보다 우선합니다.",
+    "set by ${0}: ${1}": "${0} 설정: ${1}",
+    "set by this session: ${0}": "이 세션 설정: ${0}",
+    "on": "켬",
+    "off": "끔"
 }

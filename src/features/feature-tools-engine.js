@@ -1,5 +1,5 @@
 import { DEFAULT_TOOLS_PROMPT, TOOL_CALL_FORMAT_BLOCK, TOOL_DEFINITIONS } from '../constants.js';
-import { getSettings } from '../session.js';
+import { getSettings, getEffectiveSettings } from '../session.js';
 import { _ensureWrapped } from '../utils/util-text.js';
 import { getCharInfo, getTagsForCharacter } from '../utils/util-st.js';
 import { fetchWorldInfoBook, getDisplayName, getActiveLorebookNames, wiEntriesToArray, getEntryOutletName } from './feature-lorebook-engine.js';
@@ -22,7 +22,7 @@ import { getPromptsForTool } from './feature-prompt-engine.js';
 import { loadRegexModule } from '../integrations/integ-regex.js';
 
 export function getEnabledTools() {
-    const s = getSettings();
+    const s = getEffectiveSettings();
     if (!s.toolsEnabled) return [];
     return TOOL_DEFINITIONS.filter(t => s[t.settingKey] !== false);
 }

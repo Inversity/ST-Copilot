@@ -179,6 +179,9 @@ const _OV_EL_MAP = {
     charField_post_history_instructions: ['scp-sp-ov-ce-post-history'],
     charField_alternate_greetings: ['scp-sp-ov-ce-alt-greetings'],
     forceStreaming: [],
+    autoExpandMacros: ['scp-sp-ov-auto-expand-macros'], includeHiddenMessages: ['scp-sp-ov-include-hidden-msgs'],
+    includeSummaryception: ['scp-sp-ov-include-summaryception'], useAspectEvolutia: ['scp-sp-ov-use-aspect-evolutia'],
+    promptEditAIEnabled: ['scp-sp-ov-prompt-edit-enabled'], memoryEnabled: ['scp-sp-ov-memory-enabled'], toolsEnabled: ['scp-sp-ov-tools-enabled'],
 };
 
 // Profile keys
@@ -259,7 +262,7 @@ export function refreshProfilesDropdown() {
     const sel = document.getElementById('scp-profile-select'); if (!sel) return;
     const s = getSettings();
     if (!Object.keys(s.profiles).length) {
-        s.profiles['Default'] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8200, applyRegexToContext: true };
+        s.profiles['Default'] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8048, applyRegexToContext: true };
         s.activeProfile = 'Default'; saveSettings();
     }
     sel.innerHTML = ''; let hasActive = false;
@@ -327,7 +330,7 @@ export function refreshSPProfilesDropdown() {
     const sel = document.getElementById('scp-sp-profile-select'); if (!sel) return;
     const s = getSettings();
     if (!Object.keys(s.profiles).length) {
-        s.profiles['Default'] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8200, applyRegexToContext: true };
+        s.profiles['Default'] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8048, applyRegexToContext: true };
         s.activeProfile = 'Default'; saveSettings();
     }
     sel.innerHTML = '';
@@ -903,6 +906,9 @@ export function syncSPFromSettings() {
     gC('scp-sp-ov-lb-ai-enabled',      'lorebookAIManageEnabled'  in ov ? ov.lorebookAIManageEnabled  : s.lorebookAIManageEnabled);
     gC('scp-sp-ov-chat-edit-enabled',  'chatEditAIEnabled'        in ov ? ov.chatEditAIEnabled        : s.chatEditAIEnabled);
     gC('scp-sp-ov-lb-auto-kw',         'lorebookAutoKeyword'      in ov ? ov.lorebookAutoKeyword      : s.lorebookAutoKeyword);
+    gC('scp-sp-ov-auto-expand-macros', eff.autoExpandMacros); gC('scp-sp-ov-include-hidden-msgs', eff.includeHiddenMessages);
+    gC('scp-sp-ov-include-summaryception', eff.includeSummaryception !== false); gC('scp-sp-ov-use-aspect-evolutia', eff.useAspectEvolutia !== false);
+    gC('scp-sp-ov-prompt-edit-enabled', eff.promptEditAIEnabled); gC('scp-sp-ov-memory-enabled', eff.memoryEnabled); gC('scp-sp-ov-tools-enabled', eff.toolsEnabled);
 
     const ovStreamVal = eff.forceStreaming === true ? 'on' : (eff.forceStreaming === false ? 'auto' : (eff.forceStreaming || 'auto'));
     document.querySelectorAll('.scp-ov-stream-btn').forEach(b => {
@@ -933,6 +939,41 @@ export function updateSPOverrideIndicators() {
     document.querySelectorAll('.scp-sp-ov-clear[data-ovkey]').forEach(btn => {
         const active = btn.dataset.ovkey in ov; btn.classList.toggle('active', active); btn.disabled = !active;
     });
+    // Which layer decides each character field, where a stronger one overrides this checkbox.
+    const onOff = v => translate(v ? 'on' : 'off');
+    for (const d of _CE_FIELDS_DEF) {
+        const chars = _charFieldOverriders(d.fk).map(c => t`set by ${c.name}: ${onOff(c.value)}`);
+        const ovKey = 'charField_' + d.fk;
+        const sess = ovKey in ov ? [t`set by this session: ${onOff(ov[ovKey])}`] : [];
+        _setLayerTag(d.spId, [...sess, ...chars]);
+        _setLayerTag(d.ovId, chars);
+    }
+}
+
+// Character fields are decided in three layers: a character's own override (Character
+// Manager > Overrides) beats this session's override, which beats the global setting.
+// The characters of the current chat (or group) that override `field`, with their value.
+function _charFieldOverriders(field) {
+    const ctx = SillyTavern.getContext();
+    const byChar = getSettings().charMgrFieldOverrides || {};
+    const group = ctx.groupId ? (ctx.groups || []).find(g => g.id === ctx.groupId) : null;
+    const avatars = group ? (group.members || []) : [ctx.characters?.[ctx.characterId]?.avatar].filter(Boolean);
+    return avatars.filter(a => byChar[a]?.[field] !== undefined)
+        .map(a => ({ name: (ctx.characters || []).find(c => c.avatar === a)?.name || a, value: byChar[a][field] }));
+}
+
+function _setLayerTag(inputId, parts) {
+    const label = document.getElementById(inputId)?.closest('label');
+    if (!label) return;
+    let tag = label.querySelector('.scp-layer-tag');
+    if (!parts.length) { tag?.remove(); return; }
+    if (!tag) {
+        tag = document.createElement('span');
+        tag.className = 'scp-layer-tag';
+        tag.title = translate("A character's override (Character Manager > Overrides) beats this session's override, which beats the global setting.");
+        label.appendChild(tag);
+    }
+    tag.textContent = parts.join(' · ');
 }
 
 export function updateSessionOverrideIndicator() {
@@ -970,6 +1011,11 @@ export function openSettingsPanel() {
         mkPresetMgr('scp-sp-ov-char-preset-manager',     'scp-sp-ov-char-edit-prompt', 'charEditPromptPresets');
         mkPresetMgr('scp-sp-ov-lb-preset-manager',       'scp-sp-ov-lb-manage-prompt', 'lbEditPromptPresets');
         mkPresetMgr('scp-sp-ov-chat-preset-manager',     'scp-sp-ov-chat-edit-prompt', 'chatEditPromptPresets');
+        // The same preset lists for the AI tab's own (global) prompts.
+        mkPresetMgr('scp-sp-global-prompt-preset-manager', 'scp-sp-sysprompt',          undefined);
+        mkPresetMgr('scp-sp-global-char-preset-manager',   'scp-sp-char-edit-prompt',   'charEditPromptPresets');
+        mkPresetMgr('scp-sp-global-lb-preset-manager',     'scp-sp-lb-manage-prompt',   'lbEditPromptPresets');
+        mkPresetMgr('scp-sp-global-chat-preset-manager',   'scp-sp-chat-edit-prompt',   'chatEditPromptPresets');
     }).catch(() => {});
     import('../features/feature-character-ui.js').then(m => m.refreshAltGreetingsPickers());
     overlay.style.display = 'flex'; updateSessionOverrideIndicator();
@@ -998,133 +1044,10 @@ export function _syncBgToOverlay() {
 export function setupSettingsHandlers() {
     _bindAllSettings();
 
-    // ── forceStreaming button group ──
-    document.querySelectorAll('#scp-st-stream-auto, #scp-st-stream-on, #scp-st-stream-off').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const val = btn.dataset.stream; getSettings().forceStreaming = val; saveSettings();
-            syncOverlayUI('forceStreaming', val); _markDirty('config');
-        });
-    });
-
-    // ── Reset buttons ──
-    const _resetPrompt = async (key, defaultVal, stId, spId, label) => {
-        const ok = await showCustomDialog({ type: 'confirm', title: `Reset ${label}`, message: `Reset to default?` }); if (!ok) return;
-        getSettings()[key] = '';
-        saveSettings(); _markDirty('config');
-        const displayVal = defaultVal || (key === 'charEditPrompt' ? DEFAULT_CHAR_EDIT_DIRECTIVE.trim() : key === 'chatEditPrompt' ? DEFAULT_CHAT_EDIT_DIRECTIVE.trim() : key === 'lorebookManagePrompt' ? DEFAULT_LB_MANAGE_PROMPT : key === 'memoryManagePrompt' ? DEFAULT_MEMORY_PROMPT : DEFAULT_SYSTEM_PROMPT);
-        [stId, spId].forEach(id => { const el = document.getElementById(id); if (el) el.value = displayVal; });
-        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession()));
-        toastr.success(t`${translate(label)} reset.`, EXT_DISPLAY);
-    };
-    document.getElementById('scp-reset-prompt')?.addEventListener('click', () => _resetPrompt('systemPrompt', DEFAULT_SYSTEM_PROMPT, 'scp-sysprompt', 'scp-sp-sysprompt', 'System Prompt'));
-    document.getElementById('scp-reset-char-edit-prompt')?.addEventListener('click', async () => {
-        const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Char Edit Prompt', message: 'Reset to built-in default?' }); if (!ok) return;
-        getSettings().charEditPrompt = ''; saveSettings(); _markDirty('config');
-        ['scp-char-edit-prompt', 'scp-sp-char-edit-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_CHAR_EDIT_DIRECTIVE.trim(); });
-        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('Char edit prompt reset.'), EXT_DISPLAY);
-    });
-    document.getElementById('scp-reset-lb-prompt')?.addEventListener('click', async () => {
-        const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Lorebook Prompt', message: 'Reset to default?' }); if (!ok) return;
-        getSettings().lorebookManagePrompt = ''; saveSettings();
-        ['scp-lb-manage-prompt', 'scp-sp-lb-manage-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_LB_MANAGE_PROMPT; });
-        toastr.success(translate('Lorebook prompt reset.'), EXT_DISPLAY);
-    });
-    document.getElementById('scp-reset-memory-prompt')?.addEventListener('click', async () => {
-        const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Prompt', message: 'Reset memory prompt to default?' }); if (!ok) return;
-        getSettings().memoryManagePrompt = ''; saveSettings();
-        ['scp-memory-prompt', 'scp-sp-memory-prompt'].forEach(id => { const el = document.getElementById(id); if (el) el.value = DEFAULT_MEMORY_PROMPT; });
-        import('./ui-chat.js').then(m => m.updateMsgCount(getCurrentSession())); toastr.success(translate('Prompt reset.'), EXT_DISPLAY);
-    });
-
-    // ── Profile management (ST drawer) ──
-    document.getElementById('scp-profile-select')?.addEventListener('change', async () => {
-        const sel = document.getElementById('scp-profile-select'); const name = sel.value;
-        if (isConfigProfileDirty()) {
-            const ok = await showCustomDialog({ type: 'confirm', title: 'Unsaved Configuration', message: 'You have unsaved changes. Switch anyway?' });
-            if (!ok) { sel.value = getSettings().activeProfile || ''; return; }
-        }
-        if (name) loadProfile(name); updateBindingSection();
-    });
-    document.getElementById('scp-profile-save')?.addEventListener('click', async () => {
-        const sel = document.getElementById('scp-profile-select'); let name = sel?.value;
-        if (!name) { name = await showCustomDialog({ type: 'prompt', title: 'Save Configuration', message: 'Enter a name for this configuration:', placeholder: 'My Config' }); if (!name?.trim()) return; name = name.trim(); }
-        saveProfile(name); refreshProfilesDropdown(); if (sel) sel.value = name;
-        updateBindingSection(); toastr.success(t`Saved "${name}"`, EXT_DISPLAY); _clearDirty('config');
-    });
-    document.getElementById('scp-profile-create-new')?.addEventListener('click', async () => {
-        const name = await showCustomDialog({ type: 'prompt', title: 'New Configuration', message: 'Enter a name for the new default profile:', placeholder: 'New Config' }); if (!name?.trim()) return;
-        const n = name.trim(); const s = getSettings();
-        s.profiles[n] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8200 };
-        saveSettings(); refreshProfilesDropdown(); loadProfile(n);
-        const sel = document.getElementById('scp-profile-select'); if (sel) sel.value = n;
-        updateBindingSection(); toastr.success(t`Created "${n}"`, EXT_DISPLAY);
-    });
-    document.getElementById('scp-profile-duplicate')?.addEventListener('click', async () => {
-        const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return toastr.info(translate('No configuration selected.'), EXT_DISPLAY);
-        const newName = await showCustomDialog({ type: 'prompt', title: 'Duplicate Configuration', message: 'Name for the new profile:', defaultValue: sel.value + ' (Copy)' }); if (!newName?.trim()) return;
-        const n = newName.trim(); const s = getSettings(); const p = s.profiles[sel.value]; if (!p) return;
-        s.profiles[n] = JSON.parse(JSON.stringify(p)); saveSettings(); refreshProfilesDropdown(); refreshSPProfilesDropdown(); loadProfile(n);
-        const newSel = document.getElementById('scp-profile-select'); if (newSel) newSel.value = n;
-        updateBindingSection(); toastr.success(t`Duplicated as "${n}"`, EXT_DISPLAY);
-    });
-    document.getElementById('scp-profile-rename')?.addEventListener('click', async () => {
-        const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return toastr.info(translate('No configuration selected.'), EXT_DISPLAY);
-        const newName = await showCustomDialog({ type: 'prompt', title: 'Rename Configuration', message: 'New name:', defaultValue: sel.value }); if (!newName?.trim() || newName.trim() === sel.value) return;
-        const s = getSettings(); const p = s.profiles[sel.value]; if (!p) return;
-        s.profiles[newName.trim()] = p; delete s.profiles[sel.value];
-        if (s.activeProfile === sel.value) s.activeProfile = newName.trim();
-        for (const k in s.profileBindings) { if (s.profileBindings[k] === sel.value) s.profileBindings[k] = newName.trim(); }
-        saveSettings(); refreshProfilesDropdown();
-        const newSel = document.getElementById('scp-profile-select'); if (newSel) newSel.value = newName.trim();
-        updateBindingSection(); toastr.success(translate('Renamed.'), EXT_DISPLAY);
-    });
-    document.getElementById('scp-profile-delete')?.addEventListener('click', async () => {
-        const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return;
-        const s = getSettings(); if (Object.keys(s.profiles).length <= 1) { toastr.warning(translate('Cannot delete the last remaining configuration profile.'), EXT_DISPLAY); return; }
-        const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Configuration', message: `Delete "${sel.value}"?` }); if (!ok) return;
-        deleteProfile(sel.value); refreshProfilesDropdown(); updateBindingSection(); toastr.success(translate('Deleted.'), EXT_DISPLAY);
-    });
-    document.getElementById('scp-bind-char')?.addEventListener('click', () => {
-        const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return;
-        const s = getSettings(); const { charId } = getBindingKey(); const key = `char_${charId}`;
-        if (s.profileBindings[key] === sel.value) delete s.profileBindings[key]; else s.profileBindings[key] = sel.value;
-        _dbgAdd(s.profileBindings[key] ? 'PROFILE_BIND' : 'PROFILE_UNBIND', { target: 'char', profile: sel.value }); saveSettings(); updateBindingSection();
-    });
-    document.getElementById('scp-bind-chat')?.addEventListener('click', () => {
-        const sel = document.getElementById('scp-profile-select'); if (!sel?.value) return;
-        const s = getSettings(); const { charId, chatId } = getBindingKey(); const key = `chat_${charId}_${chatId}`;
-        if (s.profileBindings[key] === sel.value) delete s.profileBindings[key]; else s.profileBindings[key] = sel.value;
-        _dbgAdd(s.profileBindings[key] ? 'PROFILE_BIND' : 'PROFILE_UNBIND', { target: 'chat', profile: sel.value }); saveSettings(); updateBindingSection();
-    });
-
-    // ── Misc buttons ──
+    // The SillyTavern Extensions drawer (settings.html) is a launcher: Enable, the floating icon,
+    // and buttons to the window and to Copilot's Settings, where every other setting lives.
     document.getElementById('scp-open-window')?.addEventListener('click', () => import('./ui-window.js').then(m => m.showWindow()));
-    document.getElementById('scp-download-debug')?.addEventListener('click', () => import('../utils/util-debug.js').then(m => m.dbgDownload()));
-    document.getElementById('scp-open-memory-settings')?.addEventListener('click', () => { openSettingsPanel(); setTimeout(() => document.querySelector('[data-sptab="memory"]')?.click(), 80); });
-    document.getElementById('scp-open-tools-settings')?.addEventListener('click', () => { openSettingsPanel(); setTimeout(() => document.querySelector('[data-sptab="tools"]')?.click(), 80); });
-    document.getElementById('scp-cleanup-files')?.addEventListener('click', () => import('../features/feature-storage-cleanup.js').then(m => m.runOrphanCleanup()));
-    document.getElementById('scp-clear-sessions')?.addEventListener('click', async () => {
-        const ok = await showCustomDialog({ type: 'confirm', title: translate('Clear All Sessions'), message: translate('Delete all Copilot sessions in this chat? This cannot be undone.'), delayConfirm: 3 }); if (!ok) return;
-        const { charId, chatId } = getBindingKey();
-        _dbgAdd('SESSION_CLEAR_REQUESTED', { source: 'st-drawer', charId, chatId });
-        getSettings().sessions = {}; saveSettings();
-        try {
-            await initChatBucket({ forceReset: true });
-            _dbgAdd('SESSION_CLEAR_DONE', { source: 'st-drawer', charId, chatId });
-        } catch (e) {
-            _dbgAdd('SESSION_CLEAR_FAILED', { source: 'st-drawer', charId, chatId, error: e?.message || String(e), stack: e?.stack });
-            toastr.error(t`Failed to clear sessions: ${e.message}`, EXT_DISPLAY);
-            return;
-        }
-        import('./ui-chat.js').then(m => m.onChatChanged());
-        toastr.success(translate('Sessions cleared.'), EXT_DISPLAY);
-    });
-
-    // ── Background (ST) ──
-    buildBackgroundSettingsUI(document.getElementById('scp-bg-settings'));
-    import('./ui-window.js').then(m => m._setupBgUpload('scp-bg-upload-btn', 'scp-bg-url', () => _syncBgToOverlay()));
-
-    refreshProfilesDropdown();
+    document.getElementById('scp-open-settings')?.addEventListener('click', () => import('./ui-window.js').then(m => { m.showWindow(); openSettingsPanel(); }));
 }
 
 export function setupSettingsPanelListeners() {
@@ -1174,7 +1097,7 @@ export function setupSettingsPanelListeners() {
     document.getElementById('scp-sp-profile-create')?.addEventListener('click', async () => {
         const name = await showCustomDialog({ type: 'prompt', title: 'New Configuration', message: 'Name:', placeholder: 'New Config' }); if (!name?.trim()) return;
         const n = name.trim(); const s = getSettings();
-        s.profiles[n] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8200, applyRegexToContext: true };
+        s.profiles[n] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8048, applyRegexToContext: true };
         saveSettings(); refreshSPProfilesDropdown(); refreshProfilesDropdown(); loadProfile(n); syncSPFromSettings(); updateSettingsUI();
         const sel = document.getElementById('scp-sp-profile-select'); if (sel) sel.value = n;
         updateSPBindingSection(); toastr.success(t`Created "${n}"`, EXT_DISPLAY);
@@ -1320,6 +1243,13 @@ export function setupSettingsPanelListeners() {
     bindOv('scp-sp-ov-lb-ai-enabled',      'lorebookAIManageEnabled',  true);
     bindOv('scp-sp-ov-chat-edit-enabled',  'chatEditAIEnabled',        true);
     bindOv('scp-sp-ov-lb-auto-kw',         'lorebookAutoKeyword',      true);
+    bindOv('scp-sp-ov-auto-expand-macros', 'autoExpandMacros',         true);
+    bindOv('scp-sp-ov-include-hidden-msgs', 'includeHiddenMessages',   true);
+    bindOv('scp-sp-ov-include-summaryception', 'includeSummaryception', true);
+    bindOv('scp-sp-ov-use-aspect-evolutia', 'useAspectEvolutia',       true);
+    bindOv('scp-sp-ov-prompt-edit-enabled', 'promptEditAIEnabled',     true);
+    bindOv('scp-sp-ov-memory-enabled',     'memoryEnabled',            true);
+    bindOv('scp-sp-ov-tools-enabled',      'toolsEnabled',             true);
 
     // Override streaming buttons
     document.querySelectorAll('.scp-ov-stream-btn').forEach(btn => {

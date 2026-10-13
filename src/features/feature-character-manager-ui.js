@@ -1,5 +1,5 @@
 import { EXT_DISPLAY, I, THEME_PRESETS } from '../constants.js';
-import { getSettings, saveSettings } from '../session.js';
+import { getSettings, saveSettings, getEffectiveSettings, getSessionOverrides } from '../session.js';
 import { applyCustomTheme, bringWindowToFront } from '../ui/ui-window.js';
 import { getUserPersona, getCurrentPersonaId } from '../utils/util-st.js';
 import { t, translate } from '../utils/util-i18n.js';
@@ -437,31 +437,39 @@ function _buildOverrideRow(entity, fieldDef) {
     resetBtn.title = translate('Clear override');
     resetBtn.textContent = '↺';
 
+    // Which layer decides the field: an override here beats this session's override, which
+    // beats the global setting. Without one here, the field follows the session (or global).
+    const source = document.createElement('span');
+    source.className = 'scp-layer-tag';
+    label.appendChild(source);
+    const fallback = () => getEffectiveCharField(getEffectiveSettings(), fieldDef.key);
+
     const refresh = () => {
         const s = getSettings();
         let ov = getCharFieldOverride(s, entity.id, fieldDef.key);
-        const globalDefault = getEffectiveCharField(s, fieldDef.key);
-        
-        if (ov !== undefined && ov === globalDefault) {
+        const inherited = fallback();
+
+        if (ov !== undefined && ov === inherited) {
             setCharFieldOverride(s, entity.id, fieldDef.key, undefined);
             saveSettings();
             ov = undefined;
         }
-        
+
         const hasOv = ov !== undefined;
-        cb.checked = hasOv ? ov : globalDefault;
+        cb.checked = hasOv ? ov : inherited;
         row.classList.toggle('scp-char-ov-row-active', hasOv);
         resetBtn.disabled = !hasOv;
         resetBtn.classList.toggle('active', hasOv);
+        source.textContent = hasOv ? translate('set here')
+            : ('charField_' + fieldDef.key) in getSessionOverrides() ? translate('from this session') : translate('from global settings');
     };
     refresh();
-    
+
     row._refreshOverride = refresh;
 
     cb.addEventListener('change', () => {
         const s = getSettings();
-        const globalDefault = getEffectiveCharField(s, fieldDef.key);
-        if (cb.checked === globalDefault) {
+        if (cb.checked === fallback()) {
             setCharFieldOverride(s, entity.id, fieldDef.key, undefined);
         } else {
             setCharFieldOverride(s, entity.id, fieldDef.key, cb.checked);
@@ -487,7 +495,7 @@ function _buildOverridesTab(entity) {
 
     const hint = document.createElement('div');
     hint.className = 'scp-char-ov-hint';
-    hint.textContent = `Override which fields of ${entity.name} are sent to AI context. Unchecked falls back to global settings.`;
+    hint.textContent = t`Which of ${entity.name}'s fields Copilot sees. A change here overrides this session's setting and the global one; ↺ goes back to them.`;
     pane.appendChild(hint);
 
     OV_FIELDS.forEach(f => pane.appendChild(_buildOverrideRow(entity, f)));

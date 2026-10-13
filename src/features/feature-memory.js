@@ -1,5 +1,5 @@
 import { EXT_DISPLAY, DEFAULT_MEMORY_PROMPT, MEMORY_FORMAT_BLOCK } from '../constants.js';
-import { getSettings, saveSettings, getCurrentSession, getBindingKey } from '../session.js';
+import { getSettings, getEffectiveSettings, saveSettings, getCurrentSession, getBindingKey } from '../session.js';
 import { _dbgAdd } from '../utils/util-debug.js';
 import { escHtml, showCustomDialog } from '../utils/util-dom.js';
 import { _ensureWrapped } from '../utils/util-text.js';
@@ -141,7 +141,7 @@ export function stripMemoryBlock(text) {
 
 export function processMemoryUpdates(text, msgId) {
     const s = getSettings();
-    if (!s.memoryEnabled) return;
+    if (!getEffectiveSettings().memoryEnabled) return;
     const changes = parseMemoryBlockFromText(text);
     if (!changes?.length) return;
     const applied = [];
