@@ -113,6 +113,10 @@ Active characters appear as \`<character name="ExactName">\` blocks inside \`<ch
 - append: alternate_greetings only; adds a new greeting. To change an existing greeting, use overwrite, replace, prepend, or append_text with index="N".
 </edit_actions>
 
+<alternate_greetings>
+index="N" is the greeting's id, as in \`<greeting id="N">\`, which is the same number SillyTavern shows as "Alternate Greeting #N". It is not a swipe number: in the chat, swipe 1 is first_mes and swipe N+1 is greeting N, so when the Human counts swipes, subtract one. Greetings not sent in full are listed by id with their opening words; read one with get_char_info (fields ["alternate_greetings"], greeting_ids [N]) before editing it. Several new greetings take one append tag each.
+</alternate_greetings>
+
 <output_format>
 Editable fields: {{char_edit_fields}}.
 
@@ -241,6 +245,8 @@ Format:
 
   const DEFAULT_TOOLS_PROMPT = `You can call tools to look things up before answering. If you need information that isn't in your context (older chat messages, lorebook entries, character fields), use a tool instead of guessing or assuming it doesn't exist.
 
+Search results and message lists show previews. Edits need text copied exactly, so before quoting, patching, or replacing anything you have only seen as a preview, read it in full (read_messages, get_lorebook_entry, get_char_info). Never overwrite a message, entry, or field based on a preview: whatever you did not see would be lost.
+
 To call a tool, output a \`tool_call\` block. The result is returned to you, and then you continue your answer to the Human. You can call several tools in a row.
 
 <available_tools>
@@ -288,6 +294,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       'm8a14r9497',
       '16zfn93ijyf',
       'q508r5jjrd',
+      '157yh96v6jn',
+      '1so8oq3hkq9',
   ];
 
       // ─── Changelog Data ──────────────────────────────────────────────────────────
@@ -826,14 +834,47 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               name: 'get_char_info',
               label: 'Get Character Info',
               icon: 'fa-user-pen',
-              description: 'Retrieve the current character card fields exactly as stored (macros like {{char}} unexpanded), so text from it can be used verbatim as an edit anchor. alternate_greetings returns [{ id, text }]; id is the 1-based number to pass as index="N" in edits.',
+              description: 'Retrieve the current character card fields exactly as stored (macros like {{char}} unexpanded), so text from it can be used verbatim as an edit anchor. alternate_greetings returns [{ id, text }] plus alternate_greetings_total; id is the 1-based number to pass as index="N" in edits.',
               settingKey: 'toolsEnabled_get_char_info',
               schema: {
                   type: 'object',
                   properties: {
                       fields: { type: 'array', items: { type: 'string' }, description: 'Which fields to retrieve: description, personality, scenario, first_mes, mes_example, tags, authors_note, alternate_greetings' },
+                      greeting_ids: { type: 'array', items: { type: 'number' }, description: 'With alternate_greetings: only these greeting ids (optional; a card can have dozens).' },
                   },
                   required: ['fields'],
+              },
+          },
+          {
+              id: 'read_messages',
+              name: 'read_messages',
+              label: 'Read Messages',
+              icon: 'fa-envelope-open-text',
+              description: 'Read main-chat messages in full, uncut. Use before quoting or editing a message you have only seen as a preview. Up to 20 messages per call.',
+              settingKey: 'toolsEnabled_read_messages',
+              schema: {
+                  type: 'object',
+                  properties: {
+                      indices: { type: 'array', items: { type: 'number' }, description: 'Message indices to read' },
+                      from_index: { type: 'number', description: 'Or a range: first index' },
+                      to_index: { type: 'number', description: 'Or a range: last index (inclusive)' },
+                  },
+              },
+          },
+          {
+              id: 'get_lorebook_entry',
+              name: 'get_lorebook_entry',
+              label: 'Get Lorebook Entry',
+              icon: 'fa-book-bookmark',
+              description: 'Read lorebook entries in full: content, keys, and settings (constant, position, depth, order, probability, outlet). Use before quoting or editing an entry you have only seen as a preview.',
+              settingKey: 'toolsEnabled_get_lorebook_entry',
+              schema: {
+                  type: 'object',
+                  properties: {
+                      book_name: { type: 'string', description: 'Lorebook name, as listed by get_lorebooks or the lorebook context' },
+                      uids: { type: 'array', items: { type: 'number' }, description: 'Entry uids to read' },
+                  },
+                  required: ['book_name', 'uids'],
               },
           },
           {
@@ -1722,6 +1763,8 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           toolsEnabled_get_char_info: true,
           toolsEnabled_get_chat_stats: true,
           toolsEnabled_get_recent_messages: true,
+          toolsEnabled_read_messages: true,
+          toolsEnabled_get_lorebook_entry: true,
           includeSummaryception: true,
           useAspectEvolutia: true,
           autoExpandMacros: false,
@@ -2769,6 +2812,15 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
       return entryName ? `${bookName}_${entryName}` : `${bookName}_${entry.uid}`;
   }
 
+  // Outlet name of a lorebook entry, or '' when it is not an outlet entry. ST marks outlets with
+  // position 7 (world_info_position.outlet); an explicit outlet field also counts. The tools used
+  // to test position 5, which is "top of example messages", so they mislabelled those entries.
+  function getEntryOutletName(entry) {
+      const outletField = (entry.outlet || entry.outlet_name || entry.outletName || entry.automation_id || entry.automationId || '').trim();
+      const isOutletPos = String(entry.position).toLowerCase() === 'outlet' || String(entry.position) === '7';
+      return outletField || (isOutletPos ? ((entry.group || '').trim() || '(unnamed)') : '');
+  }
+
   async function buildLorebookContextBlock(settings) {
       lastActiveEntries = [];
       const selectedBooks = settings.lorebookSelectedBooks || [];
@@ -2852,12 +2904,9 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
               const keywordInclude = keywordEntries[bookName]?.some(e => e.uid === entry.uid);
 
               if (override === true || isConstant || manualInclude || keywordInclude) {
-                  const outletField = (entry.outlet || entry.outlet_name || entry.outletName || entry.automation_id || entry.automationId || '').trim();
-                  const isOutletPos = String(entry.position).toLowerCase() === 'outlet' || String(entry.position) === '7';
-                  const finalOutletName = outletField || (isOutletPos ? (entry.group || '').trim() : '');
-                  const isOutlet = isOutletPos || finalOutletName !== '';
+                  const finalOutletName = getEntryOutletName(entry);
 
-                  if (isOutlet) {
+                  if (finalOutletName) {
                       if (!entry.disable) {
                           outletLines.push(`### ${entry.comment || `Entry #${entry.uid}`} (uid: ${entry.uid}, book: "${getDisplayName(bookName)}") [outlet name: ${finalOutletName}]\n${entry.content}`);
                           lastActiveEntries.push({
@@ -3185,6 +3234,7 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
     getBookSourceType: getBookSourceType,
     getDisplayName: getDisplayName,
     getEmbeddedCharBook: getEmbeddedCharBook,
+    getEntryOutletName: getEntryOutletName,
     getEntryOverrideKey: getEntryOverrideKey,
     getKeywordTriggeredEntries: getKeywordTriggeredEntries,
     keywordMatchEntry: keywordMatchEntry,
@@ -5728,10 +5778,15 @@ To call a tool, output a \`tool_call\` block. The result is returned to you, and
           const agMap = settings.altGreetingIndices || {};
           const indices = Array.isArray(agMap[charId]) ? agMap[charId] : d.alternate_greetings.map((_, i) => i);
           const filtered = indices.filter(i => i >= 0 && i < d.alternate_greetings.length);
-          if (filtered.length) {
-              const gs = filtered.map(i => `  <greeting id="${i+1}">\n${d.alternate_greetings[i]}\n  </greeting>`).join('\n');
-              parts.push(`<alternate_greetings>\n${gs}\n</alternate_greetings>`);
+          // Greetings left out of the context are still listed by id with their opening words, so
+          // ids are never guessed and any one can be read in full with get_char_info.
+          const omitted = d.alternate_greetings.map((_, i) => i).filter(i => !filtered.includes(i));
+          const gs = filtered.map(i => `  <greeting id="${i+1}">\n${d.alternate_greetings[i]}\n  </greeting>`);
+          if (omitted.length) {
+              const opening = text => { const s = String(text || '').replace(/\s+/g, ' ').trim(); return s.length > 80 ? s.slice(0, 80) + '...' : s; };
+              gs.push(`  <not_included note="not sent in full; read with get_char_info before editing">\n${omitted.map(i => `    id ${i+1}: ${opening(d.alternate_greetings[i])}`).join('\n')}\n  </not_included>`);
           }
+          if (gs.length) parts.push(`<alternate_greetings count="${d.alternate_greetings.length}">\n${gs.join('\n')}\n</alternate_greetings>`);
       }
 
       if (eff('authors_note')) {
@@ -9550,6 +9605,21 @@ ${scopeHtml}
     updateMemoryDot: updateMemoryDot
   });
 
+  // Read tools that return previews say so, and name the tool that returns the full text: edits
+  // need anchors copied exactly, and an anchor guessed from a preview fails or hits the wrong place.
+  const PREVIEW_NOTE_MESSAGES = 'Long messages are cut to a preview (truncated: true). Before quoting or editing one, read it in full with read_messages.';
+  const PREVIEW_NOTE_LOREBOOK = 'content_preview is the first 200 characters. Before quoting or editing an entry, read it in full with get_lorebook_entry.';
+  const READ_MESSAGES_MAX = 20;
+  const WI_POSITION_NAMES = ['before_char', 'after_char', 'authors_note_top', 'authors_note_bottom', 'at_depth', 'examples_top', 'examples_bottom', 'outlet'];
+
+  const _messageView = (ctx, m, i) => ({
+      index: i,
+      role: m.is_user ? 'user' : 'assistant',
+      name: m.name || (m.is_user ? (ctx.name1 || 'User') : (ctx.name2 || 'Character')),
+      hidden: !!(m.is_system || m.extra?.is_hidden),
+  });
+  const _preview = (text, max) => text.length > max ? { content: text.slice(0, max) + '...[truncated]', truncated: true } : { content: text };
+
   function getEnabledTools() {
       const s = getSettings();
       if (!s.toolsEnabled) return [];
@@ -9596,13 +9666,13 @@ ${scopeHtml}
                   }
                   
                   if (matched) {
-                      const entry = { index: i, role: m.is_user ? 'user' : 'assistant', name: m.name || (m.is_user ? (ctx.name1 || 'User') : (ctx.name2 || 'Character')) };
-                      if (includeContent) entry.content = text.length > 500 ? text.slice(0, 500) + '...[truncated]' : text;
+                      const entry = _messageView(ctx, m, i);
+                      if (includeContent) Object.assign(entry, _preview(text, 500));
                       results.push(entry);
                       if (results.length >= maxResults) break;
                   }
               }
-              return { found: results.length, results, note: `Use 'index' values in chat-changes proposals. Total messages searched: ${Math.min(msgs.length - 1, toIdx) - Math.max(0, fromIdx) + 1}` };
+              return { found: results.length, results, note: `Use 'index' values in chat-changes proposals. ${PREVIEW_NOTE_MESSAGES} Total messages searched: ${Math.min(msgs.length - 1, toIdx) - Math.max(0, fromIdx) + 1}` };
           }
           case 'search_lorebook_entry': {
               const activeBooks = getActiveLorebookNames();
@@ -9626,9 +9696,8 @@ ${scopeHtml}
                   const data = await fetchWorldInfoBook(bookName).catch(() => null);
                   if (!data) continue;
                   for (const entry of wiEntriesToArray(data)) {
-                      const outletField = (entry.outlet || entry.outlet_name || entry.outletName || entry.automation_id || entry.automationId || '').trim();
-                      const isOutletPos = String(entry.position) === '5' || String(entry.position).toLowerCase() === 'outlet';
-                      const isEntryOutlet = isOutletPos || outletField !== '';
+                      const outletField = getEntryOutletName(entry);
+                      const isEntryOutlet = outletField !== '';
                       if (onlyConstant && !entry.constant) continue;
                       if (onlyOutlet && !isEntryOutlet) continue;
                       
@@ -9682,7 +9751,39 @@ ${scopeHtml}
                   }
                   if (results.length >= 20) break;
               }
-              return { found: results.length, results };
+              return { found: results.length, results, note: PREVIEW_NOTE_LOREBOOK };
+          }
+          case 'get_lorebook_entry': {
+              // Full entries by book + uid, with the settings that decide when and where they fire.
+              const activeBooks = getActiveLorebookNames();
+              const wanted = toolInput.book_name || '';
+              const book = activeBooks.find(n => n === wanted || getDisplayName(n) === wanted)
+                  || activeBooks.find(n => getDisplayName(n).toLowerCase() === wanted.toLowerCase());
+              if (!book) return { error: `No active lorebook named "${wanted}".`, active_lorebooks: activeBooks.map(getDisplayName) };
+              const data = await fetchWorldInfoBook(book).catch(() => null);
+              if (!data) return { error: `Could not load lorebook "${getDisplayName(book)}".` };
+              const uids = (Array.isArray(toolInput.uids) ? toolInput.uids : [toolInput.uid]).map(Number).filter(Number.isFinite);
+              const entries = wiEntriesToArray(data);
+              const found = uids.map(uid => entries.find(e => Number(e.uid) === uid)).filter(Boolean);
+              const missing = uids.filter(uid => !found.some(e => Number(e.uid) === uid));
+              return {
+                  book: getDisplayName(book),
+                  entries: found.map(e => ({
+                      uid: e.uid,
+                      name: e.comment || `Entry #${e.uid}`,
+                      content: e.content || '',
+                      keys: e.key || [],
+                      secondary_keys: e.keysecondary || [],
+                      constant: !!e.constant,
+                      disabled: !!e.disable,
+                      position: WI_POSITION_NAMES[Number(e.position)] ?? String(e.position),
+                      depth: e.depth ?? null,
+                      order: e.order ?? null,
+                      probability: e.useProbability === false ? 100 : (e.probability ?? 100),
+                      outlet_name: getEntryOutletName(e) || null,
+                  })),
+                  ...(missing.length ? { not_found_uids: missing } : {}),
+              };
           }
           case 'get_lorebooks': {
               const activeBooks = getActiveLorebookNames();
@@ -9702,13 +9803,12 @@ ${scopeHtml}
                   const data = await fetchWorldInfoBook(name).catch(() => null);
                   if (!data) { result[getDisplayName(name)] = []; continue; }
                   result[getDisplayName(name)] = wiEntriesToArray(data).map(e => {
-                      const outletField = (e.outlet || e.outlet_name || e.outletName || e.automation_id || e.automationId || '').trim();
-                      const isOutletPos = String(e.position) === '5' || String(e.position).toLowerCase() === 'outlet';
+                      const outletField = getEntryOutletName(e);
                       return {
                           name: e.comment || `#${e.uid}`,
                           uid: e.uid,
                           is_constant: !!e.constant,
-                          is_outlet: isOutletPos || outletField !== '',
+                          is_outlet: outletField !== '',
                           outlet_name: outletField || null,
                           disabled: !!e.disable,
                       };
@@ -9728,8 +9828,14 @@ ${scopeHtml}
               for (const f of requestedFields) {
                   if (f === 'tags') result.tags = getTagsForCharacter(charCtx);
                   // Label each greeting with the 1-based id that edits use as index="N", so the
-                  // model never has to count a bare array (which it does 0-based).
-                  else if (f === 'alternate_greetings') result.alternate_greetings = (charCtx?.data?.alternate_greetings || []).map((text, i) => ({ id: i + 1, text }));
+                  // model never has to count a bare array (which it does 0-based). greeting_ids
+                  // limits the result, since a card can have dozens.
+                  else if (f === 'alternate_greetings') {
+                      const all = (charCtx?.data?.alternate_greetings || []).map((text, i) => ({ id: i + 1, text }));
+                      const ids = Array.isArray(toolInput.greeting_ids) ? toolInput.greeting_ids.map(Number) : null;
+                      result.alternate_greetings = ids ? all.filter(g => ids.includes(g.id)) : all;
+                      result.alternate_greetings_total = all.length;
+                  }
                   // Return the stored text, macros unexpanded: edits are matched against the stored
                   // field, so anchors copied from an expanded copy ("Lexi" for {{char}}) never match.
                   else {
@@ -9769,13 +9875,26 @@ ${scopeHtml}
               if (fromEnd) filtered = filtered.slice(-count);
               else filtered = filtered.slice(0, count);
               return {
-                  messages: filtered.map(m => ({
-                      index: m._idx,
-                      role: m.is_user ? 'user' : 'assistant',
-                      name: m.name || (m.is_user ? (ctx.name1 || 'User') : (ctx.name2 || 'Character')),
-                      content: (m.mes || '').length > 600 ? m.mes.slice(0, 600) + '...[truncated]' : (m.mes || ''),
-                  })),
-                  note: 'Use "index" values in chat-changes proposals for precise targeting.',
+                  messages: filtered.map(m => ({ ..._messageView(ctx, m, m._idx), ..._preview(m.mes || '', 600) })),
+                  note: `Use "index" values in chat-changes proposals for precise targeting. ${PREVIEW_NOTE_MESSAGES}`,
+              };
+          }
+          case 'read_messages': {
+              // Full text, uncut, for quoting and exact edit anchors. Capped by count, not length.
+              const msgs = ctx.chat || [];
+              let indices = Array.isArray(toolInput.indices) ? toolInput.indices.map(Number) : [];
+              if (!indices.length && Number.isFinite(Number(toolInput.from_index))) {
+                  const from = Math.max(0, Number(toolInput.from_index));
+                  const to = Math.min(msgs.length - 1, Number.isFinite(Number(toolInput.to_index)) ? Number(toolInput.to_index) : from);
+                  for (let i = from; i <= to; i++) indices.push(i);
+              }
+              indices = [...new Set(indices)].filter(i => Number.isInteger(i) && i >= 0 && i < msgs.length);
+              const capped = indices.length > READ_MESSAGES_MAX;
+              indices = indices.slice(0, READ_MESSAGES_MAX);
+              return {
+                  messages: indices.map(i => ({ ..._messageView(ctx, msgs[i], i), content: msgs[i].mes || '' })),
+                  last_index: msgs.length - 1,
+                  ...(capped ? { note: `Only the first ${READ_MESSAGES_MAX} requested messages were returned; ask again for the rest.` } : {}),
               };
           }
           default: return { error: `Unknown tool: ${toolName}` };

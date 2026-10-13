@@ -2,7 +2,22 @@ import { DEFAULT_TOOLS_PROMPT, TOOL_CALL_FORMAT_BLOCK, TOOL_DEFINITIONS } from '
 import { getSettings } from '../session.js';
 import { _ensureWrapped } from '../utils/util-text.js';
 import { getCharInfo, getTagsForCharacter } from '../utils/util-st.js';
-import { fetchWorldInfoBook, getDisplayName, getActiveLorebookNames, wiEntriesToArray } from './feature-lorebook-engine.js';
+import { fetchWorldInfoBook, getDisplayName, getActiveLorebookNames, wiEntriesToArray, getEntryOutletName } from './feature-lorebook-engine.js';
+
+// Read tools that return previews say so, and name the tool that returns the full text: edits
+// need anchors copied exactly, and an anchor guessed from a preview fails or hits the wrong place.
+const PREVIEW_NOTE_MESSAGES = 'Long messages are cut to a preview (truncated: true). Before quoting or editing one, read it in full with read_messages.';
+const PREVIEW_NOTE_LOREBOOK = 'content_preview is the first 200 characters. Before quoting or editing an entry, read it in full with get_lorebook_entry.';
+const READ_MESSAGES_MAX = 20;
+const WI_POSITION_NAMES = ['before_char', 'after_char', 'authors_note_top', 'authors_note_bottom', 'at_depth', 'examples_top', 'examples_bottom', 'outlet'];
+
+const _messageView = (ctx, m, i) => ({
+    index: i,
+    role: m.is_user ? 'user' : 'assistant',
+    name: m.name || (m.is_user ? (ctx.name1 || 'User') : (ctx.name2 || 'Character')),
+    hidden: !!(m.is_system || m.extra?.is_hidden),
+});
+const _preview = (text, max) => text.length > max ? { content: text.slice(0, max) + '...[truncated]', truncated: true } : { content: text };
 import { getPromptsForTool } from './feature-prompt-engine.js';
 
 export function getEnabledTools() {
@@ -59,13 +74,13 @@ export async function executeTool(toolName, toolInput) {
                 }
                 
                 if (matched) {
-                    const entry = { index: i, role: m.is_user ? 'user' : 'assistant', name: m.name || (m.is_user ? (ctx.name1 || 'User') : (ctx.name2 || 'Character')) };
-                    if (includeContent) entry.content = text.length > 500 ? text.slice(0, 500) + '...[truncated]' : text;
+                    const entry = _messageView(ctx, m, i);
+                    if (includeContent) Object.assign(entry, _preview(text, 500));
                     results.push(entry);
                     if (results.length >= maxResults) break;
                 }
             }
-            return { found: results.length, results, note: `Use 'index' values in chat-changes proposals. Total messages searched: ${Math.min(msgs.length - 1, toIdx) - Math.max(0, fromIdx) + 1}` };
+            return { found: results.length, results, note: `Use 'index' values in chat-changes proposals. ${PREVIEW_NOTE_MESSAGES} Total messages searched: ${Math.min(msgs.length - 1, toIdx) - Math.max(0, fromIdx) + 1}` };
         }
         case 'search_lorebook_entry': {
             const activeBooks = getActiveLorebookNames();
@@ -89,9 +104,8 @@ export async function executeTool(toolName, toolInput) {
                 const data = await fetchWorldInfoBook(bookName).catch(() => null);
                 if (!data) continue;
                 for (const entry of wiEntriesToArray(data)) {
-                    const outletField = (entry.outlet || entry.outlet_name || entry.outletName || entry.automation_id || entry.automationId || '').trim();
-                    const isOutletPos = String(entry.position) === '5' || String(entry.position).toLowerCase() === 'outlet';
-                    const isEntryOutlet = isOutletPos || outletField !== '';
+                    const outletField = getEntryOutletName(entry);
+                    const isEntryOutlet = outletField !== '';
                     if (onlyConstant && !entry.constant) continue;
                     if (onlyOutlet && !isEntryOutlet) continue;
                     
@@ -145,7 +159,39 @@ export async function executeTool(toolName, toolInput) {
                 }
                 if (results.length >= 20) break;
             }
-            return { found: results.length, results };
+            return { found: results.length, results, note: PREVIEW_NOTE_LOREBOOK };
+        }
+        case 'get_lorebook_entry': {
+            // Full entries by book + uid, with the settings that decide when and where they fire.
+            const activeBooks = getActiveLorebookNames();
+            const wanted = toolInput.book_name || '';
+            const book = activeBooks.find(n => n === wanted || getDisplayName(n) === wanted)
+                || activeBooks.find(n => getDisplayName(n).toLowerCase() === wanted.toLowerCase());
+            if (!book) return { error: `No active lorebook named "${wanted}".`, active_lorebooks: activeBooks.map(getDisplayName) };
+            const data = await fetchWorldInfoBook(book).catch(() => null);
+            if (!data) return { error: `Could not load lorebook "${getDisplayName(book)}".` };
+            const uids = (Array.isArray(toolInput.uids) ? toolInput.uids : [toolInput.uid]).map(Number).filter(Number.isFinite);
+            const entries = wiEntriesToArray(data);
+            const found = uids.map(uid => entries.find(e => Number(e.uid) === uid)).filter(Boolean);
+            const missing = uids.filter(uid => !found.some(e => Number(e.uid) === uid));
+            return {
+                book: getDisplayName(book),
+                entries: found.map(e => ({
+                    uid: e.uid,
+                    name: e.comment || `Entry #${e.uid}`,
+                    content: e.content || '',
+                    keys: e.key || [],
+                    secondary_keys: e.keysecondary || [],
+                    constant: !!e.constant,
+                    disabled: !!e.disable,
+                    position: WI_POSITION_NAMES[Number(e.position)] ?? String(e.position),
+                    depth: e.depth ?? null,
+                    order: e.order ?? null,
+                    probability: e.useProbability === false ? 100 : (e.probability ?? 100),
+                    outlet_name: getEntryOutletName(e) || null,
+                })),
+                ...(missing.length ? { not_found_uids: missing } : {}),
+            };
         }
         case 'get_lorebooks': {
             const activeBooks = getActiveLorebookNames();
@@ -165,13 +211,12 @@ export async function executeTool(toolName, toolInput) {
                 const data = await fetchWorldInfoBook(name).catch(() => null);
                 if (!data) { result[getDisplayName(name)] = []; continue; }
                 result[getDisplayName(name)] = wiEntriesToArray(data).map(e => {
-                    const outletField = (e.outlet || e.outlet_name || e.outletName || e.automation_id || e.automationId || '').trim();
-                    const isOutletPos = String(e.position) === '5' || String(e.position).toLowerCase() === 'outlet';
+                    const outletField = getEntryOutletName(e);
                     return {
                         name: e.comment || `#${e.uid}`,
                         uid: e.uid,
                         is_constant: !!e.constant,
-                        is_outlet: isOutletPos || outletField !== '',
+                        is_outlet: outletField !== '',
                         outlet_name: outletField || null,
                         disabled: !!e.disable,
                     };
@@ -191,8 +236,14 @@ export async function executeTool(toolName, toolInput) {
             for (const f of requestedFields) {
                 if (f === 'tags') result.tags = getTagsForCharacter(charCtx);
                 // Label each greeting with the 1-based id that edits use as index="N", so the
-                // model never has to count a bare array (which it does 0-based).
-                else if (f === 'alternate_greetings') result.alternate_greetings = (charCtx?.data?.alternate_greetings || []).map((text, i) => ({ id: i + 1, text }));
+                // model never has to count a bare array (which it does 0-based). greeting_ids
+                // limits the result, since a card can have dozens.
+                else if (f === 'alternate_greetings') {
+                    const all = (charCtx?.data?.alternate_greetings || []).map((text, i) => ({ id: i + 1, text }));
+                    const ids = Array.isArray(toolInput.greeting_ids) ? toolInput.greeting_ids.map(Number) : null;
+                    result.alternate_greetings = ids ? all.filter(g => ids.includes(g.id)) : all;
+                    result.alternate_greetings_total = all.length;
+                }
                 // Return the stored text, macros unexpanded: edits are matched against the stored
                 // field, so anchors copied from an expanded copy ("Lexi" for {{char}}) never match.
                 else {
@@ -232,13 +283,26 @@ export async function executeTool(toolName, toolInput) {
             if (fromEnd) filtered = filtered.slice(-count);
             else filtered = filtered.slice(0, count);
             return {
-                messages: filtered.map(m => ({
-                    index: m._idx,
-                    role: m.is_user ? 'user' : 'assistant',
-                    name: m.name || (m.is_user ? (ctx.name1 || 'User') : (ctx.name2 || 'Character')),
-                    content: (m.mes || '').length > 600 ? m.mes.slice(0, 600) + '...[truncated]' : (m.mes || ''),
-                })),
-                note: 'Use "index" values in chat-changes proposals for precise targeting.',
+                messages: filtered.map(m => ({ ..._messageView(ctx, m, m._idx), ..._preview(m.mes || '', 600) })),
+                note: `Use "index" values in chat-changes proposals for precise targeting. ${PREVIEW_NOTE_MESSAGES}`,
+            };
+        }
+        case 'read_messages': {
+            // Full text, uncut, for quoting and exact edit anchors. Capped by count, not length.
+            const msgs = ctx.chat || [];
+            let indices = Array.isArray(toolInput.indices) ? toolInput.indices.map(Number) : [];
+            if (!indices.length && Number.isFinite(Number(toolInput.from_index))) {
+                const from = Math.max(0, Number(toolInput.from_index));
+                const to = Math.min(msgs.length - 1, Number.isFinite(Number(toolInput.to_index)) ? Number(toolInput.to_index) : from);
+                for (let i = from; i <= to; i++) indices.push(i);
+            }
+            indices = [...new Set(indices)].filter(i => Number.isInteger(i) && i >= 0 && i < msgs.length);
+            const capped = indices.length > READ_MESSAGES_MAX;
+            indices = indices.slice(0, READ_MESSAGES_MAX);
+            return {
+                messages: indices.map(i => ({ ..._messageView(ctx, msgs[i], i), content: msgs[i].mes || '' })),
+                last_index: msgs.length - 1,
+                ...(capped ? { note: `Only the first ${READ_MESSAGES_MAX} requested messages were returned; ask again for the rest.` } : {}),
             };
         }
         default: return { error: `Unknown tool: ${toolName}` };

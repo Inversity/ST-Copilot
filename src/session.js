@@ -119,6 +119,8 @@ export function getSettings() {
         toolsEnabled_get_char_info: true,
         toolsEnabled_get_chat_stats: true,
         toolsEnabled_get_recent_messages: true,
+        toolsEnabled_read_messages: true,
+        toolsEnabled_get_lorebook_entry: true,
         includeSummaryception: true,
         useAspectEvolutia: true,
         autoExpandMacros: false,

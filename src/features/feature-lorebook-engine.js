@@ -278,6 +278,15 @@ export function getEntryOverrideKey(bookName, entry) {
     return entryName ? `${bookName}_${entryName}` : `${bookName}_${entry.uid}`;
 }
 
+// Outlet name of a lorebook entry, or '' when it is not an outlet entry. ST marks outlets with
+// position 7 (world_info_position.outlet); an explicit outlet field also counts. The tools used
+// to test position 5, which is "top of example messages", so they mislabelled those entries.
+export function getEntryOutletName(entry) {
+    const outletField = (entry.outlet || entry.outlet_name || entry.outletName || entry.automation_id || entry.automationId || '').trim();
+    const isOutletPos = String(entry.position).toLowerCase() === 'outlet' || String(entry.position) === '7';
+    return outletField || (isOutletPos ? ((entry.group || '').trim() || '(unnamed)') : '');
+}
+
 export async function buildLorebookContextBlock(settings) {
     lastActiveEntries = [];
     const selectedBooks = settings.lorebookSelectedBooks || [];
@@ -361,12 +370,9 @@ export async function buildLorebookContextBlock(settings) {
             const keywordInclude = keywordEntries[bookName]?.some(e => e.uid === entry.uid);
 
             if (override === true || isConstant || manualInclude || keywordInclude) {
-                const outletField = (entry.outlet || entry.outlet_name || entry.outletName || entry.automation_id || entry.automationId || '').trim();
-                const isOutletPos = String(entry.position).toLowerCase() === 'outlet' || String(entry.position) === '7';
-                const finalOutletName = outletField || (isOutletPos ? (entry.group || '').trim() : '');
-                const isOutlet = isOutletPos || finalOutletName !== '';
+                const finalOutletName = getEntryOutletName(entry);
 
-                if (isOutlet) {
+                if (finalOutletName) {
                     if (!entry.disable) {
                         outletLines.push(`### ${entry.comment || `Entry #${entry.uid}`} (uid: ${entry.uid}, book: "${getDisplayName(bookName)}") [outlet name: ${finalOutletName}]\n${entry.content}`);
                         lastActiveEntries.push({

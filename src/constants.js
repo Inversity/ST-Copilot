@@ -110,6 +110,10 @@ Active characters appear as \`<character name="ExactName">\` blocks inside \`<ch
 - append: alternate_greetings only; adds a new greeting. To change an existing greeting, use overwrite, replace, prepend, or append_text with index="N".
 </edit_actions>
 
+<alternate_greetings>
+index="N" is the greeting's id, as in \`<greeting id="N">\`, which is the same number SillyTavern shows as "Alternate Greeting #N". It is not a swipe number: in the chat, swipe 1 is first_mes and swipe N+1 is greeting N, so when the Human counts swipes, subtract one. Greetings not sent in full are listed by id with their opening words; read one with get_char_info (fields ["alternate_greetings"], greeting_ids [N]) before editing it. Several new greetings take one append tag each.
+</alternate_greetings>
+
 <output_format>
 Editable fields: {{char_edit_fields}}.
 
@@ -238,6 +242,8 @@ export const MEMORY_FORMAT_BLOCK = `\`\`\`memory-update\n[\n  {"action":"add","s
 
 export const DEFAULT_TOOLS_PROMPT = `You can call tools to look things up before answering. If you need information that isn't in your context (older chat messages, lorebook entries, character fields), use a tool instead of guessing or assuming it doesn't exist.
 
+Search results and message lists show previews. Edits need text copied exactly, so before quoting, patching, or replacing anything you have only seen as a preview, read it in full (read_messages, get_lorebook_entry, get_char_info). Never overwrite a message, entry, or field based on a preview: whatever you did not see would be lost.
+
 To call a tool, output a \`tool_call\` block. The result is returned to you, and then you continue your answer to the Human. You can call several tools in a row.
 
 <available_tools>
@@ -285,6 +291,8 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     'm8a14r9497',
     '16zfn93ijyf',
     'q508r5jjrd',
+    '157yh96v6jn',
+    '1so8oq3hkq9',
 ];
 
     // ─── Changelog Data ──────────────────────────────────────────────────────────
@@ -823,14 +831,47 @@ export const TOOL_DEFINITIONS = [
             name: 'get_char_info',
             label: 'Get Character Info',
             icon: 'fa-user-pen',
-            description: 'Retrieve the current character card fields exactly as stored (macros like {{char}} unexpanded), so text from it can be used verbatim as an edit anchor. alternate_greetings returns [{ id, text }]; id is the 1-based number to pass as index="N" in edits.',
+            description: 'Retrieve the current character card fields exactly as stored (macros like {{char}} unexpanded), so text from it can be used verbatim as an edit anchor. alternate_greetings returns [{ id, text }] plus alternate_greetings_total; id is the 1-based number to pass as index="N" in edits.',
             settingKey: 'toolsEnabled_get_char_info',
             schema: {
                 type: 'object',
                 properties: {
                     fields: { type: 'array', items: { type: 'string' }, description: 'Which fields to retrieve: description, personality, scenario, first_mes, mes_example, tags, authors_note, alternate_greetings' },
+                    greeting_ids: { type: 'array', items: { type: 'number' }, description: 'With alternate_greetings: only these greeting ids (optional; a card can have dozens).' },
                 },
                 required: ['fields'],
+            },
+        },
+        {
+            id: 'read_messages',
+            name: 'read_messages',
+            label: 'Read Messages',
+            icon: 'fa-envelope-open-text',
+            description: 'Read main-chat messages in full, uncut. Use before quoting or editing a message you have only seen as a preview. Up to 20 messages per call.',
+            settingKey: 'toolsEnabled_read_messages',
+            schema: {
+                type: 'object',
+                properties: {
+                    indices: { type: 'array', items: { type: 'number' }, description: 'Message indices to read' },
+                    from_index: { type: 'number', description: 'Or a range: first index' },
+                    to_index: { type: 'number', description: 'Or a range: last index (inclusive)' },
+                },
+            },
+        },
+        {
+            id: 'get_lorebook_entry',
+            name: 'get_lorebook_entry',
+            label: 'Get Lorebook Entry',
+            icon: 'fa-book-bookmark',
+            description: 'Read lorebook entries in full: content, keys, and settings (constant, position, depth, order, probability, outlet). Use before quoting or editing an entry you have only seen as a preview.',
+            settingKey: 'toolsEnabled_get_lorebook_entry',
+            schema: {
+                type: 'object',
+                properties: {
+                    book_name: { type: 'string', description: 'Lorebook name, as listed by get_lorebooks or the lorebook context' },
+                    uids: { type: 'array', items: { type: 'number' }, description: 'Entry uids to read' },
+                },
+                required: ['book_name', 'uids'],
             },
         },
         {

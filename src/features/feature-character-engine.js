@@ -102,10 +102,15 @@ function buildSingleCharacterBlock(settings, entity) {
         const agMap = settings.altGreetingIndices || {};
         const indices = Array.isArray(agMap[charId]) ? agMap[charId] : d.alternate_greetings.map((_, i) => i);
         const filtered = indices.filter(i => i >= 0 && i < d.alternate_greetings.length);
-        if (filtered.length) {
-            const gs = filtered.map(i => `  <greeting id="${i+1}">\n${d.alternate_greetings[i]}\n  </greeting>`).join('\n');
-            parts.push(`<alternate_greetings>\n${gs}\n</alternate_greetings>`);
+        // Greetings left out of the context are still listed by id with their opening words, so
+        // ids are never guessed and any one can be read in full with get_char_info.
+        const omitted = d.alternate_greetings.map((_, i) => i).filter(i => !filtered.includes(i));
+        const gs = filtered.map(i => `  <greeting id="${i+1}">\n${d.alternate_greetings[i]}\n  </greeting>`);
+        if (omitted.length) {
+            const opening = text => { const s = String(text || '').replace(/\s+/g, ' ').trim(); return s.length > 80 ? s.slice(0, 80) + '...' : s; };
+            gs.push(`  <not_included note="not sent in full; read with get_char_info before editing">\n${omitted.map(i => `    id ${i+1}: ${opening(d.alternate_greetings[i])}`).join('\n')}\n  </not_included>`);
         }
+        if (gs.length) parts.push(`<alternate_greetings count="${d.alternate_greetings.length}">\n${gs.join('\n')}\n</alternate_greetings>`);
     }
 
     if (eff('authors_note')) {
