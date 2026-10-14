@@ -302,6 +302,15 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     // ─── Changelog Data ──────────────────────────────────────────────────────────
 export const CHANGELOG = [
     {
+        version: '3.1.3',
+        date: '10/13/2026',
+        announce: false,
+        notes: [
+            '<strong>New README</strong> with current screenshots of every part of Copilot.',
+            'Two unused settings removed from configuration profiles.',
+        ],
+    },
+    {
         version: '3.1.2',
         date: '10/13/2026',
         announce: true,

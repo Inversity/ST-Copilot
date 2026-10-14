@@ -1,283 +1,131 @@
-# 🤖 ST-Copilot
-![Banner](Assets/Github/Banner.png)
+# ST-Copilot
 
-> **This is a maintained fork.** It continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker from 2.9.0, and merges the fixes from the [Cheesedozer](https://github.com/Cheesedozer/ST-Copilot) and [keepsanity](https://github.com/keepsanity/ST-Copilot) forks and upstream PR #19. Highlights of 3.0.0: reliable card edits (fail-safe anchors, numbered alternate greetings), a Prompt Manager with optional AI edits, per-swipe model labels, a model override, and a Context view that shows exactly what is sent. See [CHANGELOG.md](CHANGELOG.md).
->
-> **Install:** SillyTavern > Extensions > Install extension > `https://github.com/Inversity/ST-Copilot`. If you already have upstream ST-Copilot installed, uninstall it first; your settings are kept.
->
-> **Compatibility:** 3.1.2 is tested against SillyTavern 1.19.0, `staging` branch at `ad29cbda6` (2026-10-03). It uses only extension APIs that are also in the `release` branch.
->
-> **Develop:** edit `src/`, then `npm run build` (Rollup bundles `index.js`, which is what SillyTavern loads and must be committed) and `npm test`. Before a release, check SillyTavern's extension-facing files (`public/scripts/st-context.js`, `extensions/shared.js`, `custom-request.js`, `openai.js`) for changes since the commit above. `tools/` has a performance bench, synthetic test data and a mock streaming API; see [tools/README.md](tools/README.md).
+![Banner](Assets/Github/Banner.png)
 
 [![SillyTavern Extension](https://img.shields.io/badge/SillyTavern-Extension-blue.svg)](https://docs.sillytavern.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Let's be honest: keeping track of complex roleplay lore, remembering NPC motivations, and fighting writer's block can be exhausting. 
+An out-of-character assistant for SillyTavern. It lives in a floating window beside your roleplay, reads what you let it read (the chat, the character cards, the lorebooks, your persona, your roleplay prompts), and helps you think: plot ideas, scene analysis, continuity checks, lore you forgot. When you ask it to change something, it proposes the edit as a card you review, adjust and accept one change at a time. Nothing in your cards, lorebooks, chat or prompts changes until you accept it.
 
-Enter **ST-Copilot** — an advanced Out-Of-Character (OOC) meta-assistant, creative co-writer, and Dungeon Master's aide integrated directly into your SillyTavern frontend. It lives entirely outside your narrative, serving as the ultimate brainstorming engine and world-management tool.
+It never writes the roleplay for you. Its system prompt keeps it out of character, talking to you about the story rather than playing in it.
 
----
+> **A maintained fork.** This continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker from 2.9.0, with the fixes from the [Cheesedozer](https://github.com/Cheesedozer/ST-Copilot) and [keepsanity](https://github.com/keepsanity/ST-Copilot) forks. What changed in each version: [CHANGELOG.md](CHANGELOG.md) (versions before 3.0.0 are in the extension's What's New panel).
 
-## What can it do?
+<p align="center"><img src="docs/screens/window.jpg" width="440" alt="The Copilot window: a reply with its thinking time, a tool call and the answer"></p>
 
-| Feature | Description |
+## Install
+
+1. In SillyTavern, open **Extensions** (the puzzle icon) > **Install extension**, paste `https://github.com/Inversity/ST-Copilot` and install.
+2. Reload SillyTavern.
+3. Open Copilot from the **wand menu** (bottom left of the chat bar) > **ST-Copilot**, or press `Alt+Shift+C`.
+
+If upstream ST-Copilot is installed, uninstall it first; your settings are kept.
+
+**Compatibility:** 3.1.3 is tested against SillyTavern 1.19.0, `staging` branch at `ad29cbda6` (2026-10-03). It uses only extension APIs that are also in the `release` branch.
+
+## First steps
+
+- **Connection.** By default Copilot uses whatever API and model SillyTavern is using right now. To use a different one (a cheaper model for brainstorming, say), open Copilot's Settings (the gear in its window) > **AI** > **Connection** and pick a Connection Manager profile, optionally with another model from that provider, or a custom OpenAI-compatible endpoint.
+- **What it sees.** The **Depth** slider in the toolbar sets how many of your latest chat messages go with each request. The pick button next to it lets you hand-pick messages instead. Settings > AI > **Context Payload** chooses the rest: your roleplay prompt, persona, which character card fields, hidden messages, alternate swipes.
+- **Ask.** Type in the box at the bottom. The lightning button shows quick prompts (Analyze, Ideas, Summary, Feelings, Next?), which you can edit in Settings > Quick Prompts.
+
+## The window
+
+| Part | What it does |
 | :--- | :--- |
-| **🧠 Smart Brainstorming** | Ask for plot twists, scene analysis, or character psychological breakdowns without breaking your RP flow. |
-| **🎭 Character Editor** | Create characters from scratch or edit existing cards (description, personality, first messages, etc.) directly in the UI. |
-| **📚 AI Lorebook Manager** | Command the AI to draft, edit, or delete Lorebook entries based on the chat. Review changes via a Diff-viewer before applying. |
-| **💭 Chat Manager** | Treat your message history like google docs. Ask copilot to edit/hide/add the message. |
-| **🎯 Surgical Context** | Hand-pick specific messages from your chat history to feed into the Copilot's context payload. |
-| **👻 Ghost Mode** | Make the Copilot window semi-transparent and completely click-through so it never gets in your way. |
-| **🎨 Deep Customization** | Built-in theme engine with color pickers, blur effects, and import/export capabilities. |
-| **📂 Advanced Sessions** | Keep multiple separate Copilot conversations per chat, including auto-deleting temporary sessions. |
+| **Header** | The active character, search (`Ctrl+F`), Ghost Mode (transparent and click-through so you can read the chat underneath), Settings, minimize to a floating icon, hide. |
+| **Toolbar** | Sessions for this chat (several separate conversations per chat, optionally temporary ones that delete themselves when you switch away; export and import), the Depth slider, the message picker, and the menu to the three managers. |
+| **Messages** | Replies show their thinking (with how long it took, summed across tool rounds), any tools Copilot used, and the model that wrote them. Hover a message to copy, edit, regenerate, delete, star or continue it. Replies have swipes like SillyTavern's. |
+| **Status bar** | While Copilot works: Thinking…, the tool round (`Tool round 2 (max 6)`), and after ten silent seconds "Model still working · no output for Ns", so a long think does not look like a freeze. Stop aborts. |
+| **Actions bar** | **Context** shows exactly what is sent (the assembled messages, the JSON, and the request bodies SillyTavern actually sent). **Regen**, quick prompts, starred messages, and the estimated token count. |
+| **Input** | `Enter` sends, `Shift+Enter` adds a line. The paperclip attaches text files or images (sent to the model directly, or described by SillyTavern's Image Captioning extension). |
 
----
+## Edits you approve
 
-## 📸 Visual Tour & Features
+Ask Copilot to change something and its reply ends with a proposal card. Each change shows what it would do; you can open a side-by-side diff, edit it before applying, then apply or reject it, or use Apply All / Reject All.
 
-Let's take a look under the hood. Here is what ST-Copilot brings to your SillyTavern experience:
+<p align="center">
+<img src="docs/screens/card-character.jpg" width="400" alt="Character edit card">
+<img src="docs/screens/card-lorebook.jpg" width="400" alt="Lorebook changes card">
+</p>
 
-### 1. The Command Center
-![Copilot Chat Interface](Assets/Github/CopilotPaint.png)
+| Card | What Copilot can propose |
+| :--- | :--- |
+| **Character edits** | Rewrite, patch, prepend or append to any card field (description, personality, scenario, first message, example dialogue, tags, name, main prompt override, post-history instructions, author's note), and add or rewrite alternate greetings. Works per character in group chats. |
+| **New character** | A complete new card, which you review and edit before it is created. |
+| **Lorebook changes** | Add, edit, patch, append to or delete entries, including constant and outlet entries. |
+| **Chat edits** | Edit, add, delete, hide or unhide SillyTavern chat messages, find-and-replace across a range, or rename the chat. |
+| **Prompt edits** | Edit or toggle the prompts in SillyTavern's Prompt Manager (off by default: Settings > AI > Prompt Manager AI Edits). |
 
-This is your main hub. It functions completely independently of your main chat, packed with tools to control exactly how the AI sees your story.
+Edits are made with anchors: Copilot quotes the exact text it wants to change, and the change applies only where that text is found once. If the text is not there, or appears several times, the card says so and nothing changes; for a repeated phrase it offers **Change all N** after you check the diff. Accepted character edits go to SillyTavern's own copy of the character, so its editor and the Alternate Greetings popup show them at once.
 
-**Top Bar Controls:**
-*   **Search:** Instantly find past brainstorming ideas or lore discussions with `Ctrl+F`.
-*   **Ghost Mode:** Toggle window transparency and click-through functionality on the fly so it never blocks your view.
-*   **Settings:** Quick access to deep configuration, themes, and API routing.
+## Tools
 
-**Chat & Context Tools:**
-*   **Sessions Control:** Seamlessly switch between different brainstorming sessions, rename them, or create auto-deleting temporary ones to keep things organized.
-*   **ST Messages Slider (CTX):** Dynamically adjust exactly how many recent messages from your main RP are sent to Copilot's memory.
-*   **Lorebooks:** One-click access to the dedicated Lorebook Manager to tweak world info or review AI-proposed changes.
-*   **Payload (Message Picker):** Don't want to use the slider? Hand-pick specific messages from your chat history to feed into the Copilot's context payload, ignoring everything else.
+With tools on (Settings > Tools), Copilot looks things up before it answers instead of guessing, and each lookup shows as a card in the reply. A reply that uses a tool stops at the call, gets the result, and continues; the number of rounds per reply is capped (5 by default).
 
-**Bottom Action Bar:**
-*   **Raw Context:** A transparent inspector that shows you the exact raw text and JSON payload being sent to the API. Perfect for prompt engineers.
-*   **Msg Regen:** Quickly force the AI to regenerate its last response if you didn't like the ideas it gave you.
-*   **Quick Prompts:** Click the lightning bolt to reveal your custom shortcut buttons (like "Analyze", "Ideas", or "Summary") and speed up your workflow.
+| Tool | Reads |
+| :--- | :--- |
+| Search Chat History, Read Messages, Get Recent Messages, Get Chat Statistics | The main chat: search, full messages, message numbers, counts |
+| Get Lorebooks, Search Lorebook Entries, Get Lorebook Entry | Active lorebooks and their entries, in full |
+| Get Character Info | Card fields as stored, with numbered alternate greetings |
+| Get Roleplay Prompts | Your Prompt Manager prompts |
+| Get Generation Settings, Get Regex Scripts, Get Quick Replies | Your SillyTavern setup, read-only |
+| Ask User | Pauses to ask you a question (needs streaming) |
 
-> **Wait, does it just write the story for me?**
-> Not at all! ST-Copilot is strictly Out-Of-Character (OOC). Its system prompt explicitly forbids it from generating dialogue or actions for you or the main character. It's your sounding board, not your replacement.
+Every tool can be turned off on its own.
 
-### 2. Deep Configuration & Profiles
-![Global Settings](Assets/Github/SettingsGlobal.png)
+## Managers
 
-You have total control over how Copilot behaves. 
-*   **Connection Routing:** Don't want to waste expensive API tokens on brainstorming? Route ST-Copilot to a completely different API profile (e.g., a cheaper local model) while your main RP uses your premium API.
-*   **Context Inclusions:** Choose exactly what Copilot sees: System Prompts, Author's Notes, Character Cards, or User Personas.
-*   **Profiles:** Bind specific Copilot configurations to specific Characters or Chats.
+Open them from the menu at the right of the toolbar.
 
-> **What if I only want specific settings for one specific chat?**
-> We've got you covered. The **Session Overrides** tab allows you to temporarily alter settings (like context depth or max tokens) just for the active Copilot session without touching your global defaults.
+- **Lorebook Manager.** Every active lorebook (global, character, chat, persona), which of them Copilot reads, and each entry's state: "active in ST" (in SillyTavern's roleplay prompt and Copilot's context) or "in context" (Copilot's only). Force an entry on or off for Copilot, or edit it directly. With Auto-Keywords on, Copilot sees the entries SillyTavern activated for the roleplay plus the ones your Copilot messages activate, under SillyTavern's own World Info rules.
+- **Character Manager.** The fields of every character in the chat and your persona, with token counts, editable in place. Its **Overrides** tab chooses, per character, which fields Copilot sees.
+- **Prompt Manager.** SillyTavern's roleplay prompts in send order: turn them on or off, edit them, and write the result into the preset file.
 
-### 3. Worldbuilding on Autopilot (Lorebook Manager)
-![Lorebook Manager - Editor](Assets/Github/LB.png)
+<p align="center"><img src="docs/screens/lorebook-entries.jpg" width="640" alt="Lorebook Manager"></p>
 
-The crown jewel of ST-Copilot. A dedicated UI for managing your World Info.
-*   View all active lorebooks (Global, Character, or Chat-specific).
-*   Edit entries, triggers, and content on the fly.
-*   **AI-Edits:** Ask Copilot to "Create a lorebook entry about the city we just entered." It will generate a Proposal Card in the chat. You can review the diff, edit the text inline, and apply it directly to your ST Lorebook with one click!
+## Settings
 
-Stop guessing if the AI knows about a lorebook entry.
-*   **Visual Indicators:** See exactly which entries were injected into Copilot's last API request. "active in ST" marks entries that are also in SillyTavern's roleplay prompt; "in context" marks entries only Copilot sees.
-*   **Manual Overrides:** Force an entry to ALWAYS be included in Copilot's context, or NEVER be included, overriding SillyTavern's default keyword triggers.
+Everything lives in Copilot's Settings window (the gear in its header). The entry in SillyTavern's Extensions panel is a short launcher: enable, the floating icon, and buttons to the window and to Settings.
 
-> **Does Copilot automatically know my lore?**
-> Yes! By default, "Auto-keywords" is ON. Copilot sees the entries SillyTavern itself activated for the roleplay (from its last reply, or from a dry run of its World Info scan before the first one), plus entries your own Copilot messages activate under the same World Info rules and settings. Each entry is labelled with why it is there, so Copilot can tell you which ones the roleplay actually uses.
+| Tab | Holds |
+| :--- | :--- |
+| **AI** | Configuration profiles (save, switch, auto-load for a character or chat), connection, context payload, the system prompt and the edit prompts (each with presets). |
+| **Interface** | Window behaviour, shortcuts, completion sound, Ghost Mode, background image or video, theme editor (12 presets plus your own, every color editable, import and export). |
+| **Quick Prompts** | The quick prompt buttons and saved sets of them. |
+| **Session** | Overrides for the current Copilot session only (connection, context, prompts, edits, memory, tools), each with a reset; and at the bottom, clearing this chat's sessions, cleaning up orphaned session files, and the debug log. |
+| **Memory** | Facts about you as a Copilot user (preferences, standing instructions) that Copilot keeps across sessions. It adds them itself; you can add, edit, disable or delete them. |
+| **Tools** | The tools switch, rounds per reply, the tools prompt, and each tool. |
+| **Stats** | Messages, tokens, edits and more over time, globally or per character or chat. |
 
-### 4. Lightning-Fast Quick Prompts
-![Quick Prompts](Assets/Github/Settings_QuickPrompts.png)
+Which character fields Copilot sees is decided in three layers: a character's own override (Character Manager > Overrides) beats this session's override, which beats the global setting. Wherever a stronger layer decides, Settings shows a tag such as "set by this session: off" or "set by Bench Ranger: off".
 
-Tired of typing *"Summarize everything that has happened so far"*? 
-Create your own **Quick Prompts**. Pick an icon, write the prompt (macros like `{{char}}` and `{{user}}` are supported!), and reorder them to your liking. They will appear as clickable chips right above your chat input.
+## Keyboard shortcuts
 
-### 5. Surgical Context Picking
-![Pick Context Messages](Assets/Github/MsgsPayload.png)
+| Keys | Does | Note |
+| :--- | :--- | :--- |
+| `Alt+Shift+C` | Show or hide the window | Anywhere, except while you are typing in another text box |
+| `Ctrl+F` | Search the Copilot session | Only while the Copilot window is active (you last clicked in it); elsewhere the browser's own find works |
+| `Alt+Shift+G` | Ghost Mode | Anywhere |
 
-Sometimes a slider isn't enough. If you want Copilot to focus on a specific past event, use the **Pick Context Messages** feature. 
-Select exact messages from your RP history. ST-Copilot will completely ignore the rest of the chat and build its context *only* from the messages you checked.
+Each can be rebound or turned off in Settings > Interface > Shortcuts.
 
-### 6. Usage Statistics
-![Statistics](Assets/Github/Settings_Stats.png)
+## What is sent where
 
-For the data nerds out there. ST-Copilot tracks your usage across all sessions.
-*   Track Messages, Regenerations, Active Sessions, and Lorebook Edits.
-*   View beautifully rendered, interactive SVG graphs of your Token Input and Output.
-*   Filter stats Globally, by Character, or by specific Chat over 30 days, 12 weeks, or even years.
+Copilot sends requests only to the connection you chose, through SillyTavern the same way its own requests go, and only what the Context view shows. Its sessions are saved as files in your SillyTavern user data (`user/files/copilot_sess_*.json`, one per chat); Settings > Session > Clean Up Orphan Files removes the ones no chat uses any more.
 
-### 7. Transparent Payload Inspector
-![Raw Context Payload](Assets/Github/RawContextPayload.png)
+## Languages
 
-Ever wonder exactly what is being sent to the API? Click the payload button to see the raw text (Formatted) or JSON structure being sent to the AI. Total transparency for prompt engineers.
+The interface follows SillyTavern's language. A Korean translation is included; the parts added in 3.1.2 were translated by Claude, not a native speaker, so corrections are welcome.
 
-### 8. Make It Yours (Theme Engine)
-![Theme Settings](Assets/Github/Settings-InterfaceTheme.png)
+## Development
 
-A fully integrated, highly detailed theme editor.
-*   Choose from gorgeous presets like *Dark Sky*, *Glass*, *Hacker*, or *Native ST*.
-*   Use the integrated interactive color picker (with alpha/transparency support) to tweak every single background, border, and accent color.
-*   Export your themes to JSON and share them, or import themes from the community.
+Edit `src/`, then `npm run build` (Rollup bundles `index.js`, which is what SillyTavern loads and must be committed) and `npm test`. Before a release, check SillyTavern's extension-facing files (`public/scripts/st-context.js`, `extensions/shared.js`, `custom-request.js`, `openai.js`) for changes since the commit above.
 
----
+- `docs/ui-inventory.json` lists every screen, panel and card with its controls, settings and source; `docs/screens/` has a screenshot of each, made by `tools/ui-screens.mjs` from synthetic test data. `npm test` checks it against the code: a new setting, settings tab, tool or proposal card, or a renamed function it points to, fails a test until the inventory says where it lives.
+- `tools/` also has a performance bench, synthetic fixtures, a mock streaming API and a translation-key checker; see [tools/README.md](tools/README.md).
+- New interface text needs a Korean translation in `i18n/ko-kr.json`; `npm test` fails until it has one, and `node tools/i18n-keys.mjs` lists what is missing.
 
-## Installation
+## Credits
 
-1. Open SillyTavern and navigate to the **Extensions** menu (the plug icon).
-2. Click **Install Extension** and paste the link to this repository.
-3. Refresh SillyTavern.
-4. Click the new **ST-Copilot** button (robot icon) in your extensions menu, or use the default hotkey (`Alt+Shift+C`) to open the interface!
-
----
-
-## 📜 Changelog History
-### V2.9.0
-*   **Character Manager:** Introduced a comprehensive manager to edit character fields and define granular context inclusion rules for each character.
-*   **Group Chat Intelligence:** Copilot can now target and modify individual character data within group chats.
-*   **Navigation Overhaul:** Integrated a new burger menu in the tools panel for quick access to Lorebook and Character managers.
-*   **Local UI Persistence:** Window size and position are now saved locally in the browser, ensuring your layout persists across sessions.
-*   **UI & UX Refinement:** Fixed "New Session" modal layering issues, resolved chat auto-scroll glitches, and patched "Proposed Changes" visual bugs.
-*   **Stability:** Implemented various API and UI fixes for a more robust experience.
-
-<details>
-<summary><b>Previous Updates (v1.7.0 - v2.8.3)</b></summary>
-
-### V2.8.3
-*   **Multi-Query Search:** Enhanced search tools to support multiple queries at once, improving the efficiency of information gathering.
-*   **Session & Lorebook Stability:** Fixed critical session deletion bugs and resolved an issue where proposed lorebook changes would persist after being applied.
-*   **World Info Drawer:** Patched several bugs in the extension (Special thanks to @Haruny for their time and effort in debugging).
-*   **UI/UX Improvements:** Restored missing lorebook source icons and fixed various display/layout issues for a cleaner experience.
-
-### V2.8.2
-*   **Character Management:** Expanded AI capabilities to read and modify Character Name, Main Prompt Override, and Post-History Instructions.
-*   **Lorebook Tools:** Introduced `get_lorebooks` and enhanced `search_lorebook_entries` with `is_constant` and `is_outlet` parameters.
-*   **Autonomous Outlets:** The LLM can now manage Lorebook Outlets (Reset Lorebook Prompt to default to provide necessary context).
-*   **Chat & Sessions:** Added chat renaming support and resolved critical session deletion/overwrite bugs.
-*   **Maintenance:** Improved token tracking accuracy and optimized internal save logic.
-
-### V2.8.1
-*   **World Info Outlets:** Added full support for the `{{outlet::name}}` macro syntax, enabling dynamic content injection directly from World Info entries.
-*   **UI/UX Refinement:** Optimized the layout of the settings menu by repositioning tab navigation buttons for a more intuitive user experience.
-*   **Bug Fixes:** Resolved several minor stability issues and addressed UI regressions found in the previous version.
-
-### V2.8.0
-*   **Tools & Agency:** Copilot is now agentic! It can independently gather and process information to provide more accurate and context-aware responses.
-*   **Persistent Memory:** Introduced long-term memory that persists across sessions. You can scope memory to **Global**, **Character-specific**, **Chat-specific**, or **Session-only**.
-*   **Smart Anchor Detection:** Implemented a new *Tokenized Sliding Window Levenshtein* algorithm. This ensures "Proposed Changes" are applied accurately even if the LLM makes minor formatting errors.
-*   **UI/UX Overhaul:** 
-    *   Redesigned **Stats Window** with smoother animations and better optimization.
-    *   Refreshed the **Settings UI** within SillyTavern.
-    *   Added **Font Size** adjustment and a toggle for **Hidden Messages**.
-*   **Context Enhancements:** Added support for including all swipes of the last message in the context.
-*   **Extension Support:** Full compatibility for `summaryception` and `aspect:evolutia`.
-*   **Optimization & Fixes:** 
-    *   Refined all internal prompts to be more token-efficient.
-    *   Added **Custom Endpoint** support in connection profiles.
-    *   Fixed UI displacement when opening DevTools.
-    *   Resolved the bug where system messages disappeared after applying proposed changes.
-
-### V2.7.2
-*   **Shortcuts Overlay:** Added a dedicated "Shortcuts" configuration window in the settings panel for better accessibility.
-*   **Context-Aware Search:** Improved the search shortcut logic; it now triggers exclusively when the Copilot window is focused to prevent global key conflicts.
-*   **Character Factory Fixes:** Fixed critical bugs related to character creation and data integrity.
-*   **Asset Optimization:** Optimized background storage and handling for faster load times and reduced memory usage.
-
-### V2.7.1
-*   **Character Tagging:** Added the ability to modify the "tags" field for already existing characters.
-*   **Low Performance Mode:** Introduced a new toggle to optimize resource usage on lower-end hardware.
-*   **Session Stability:** Completely overhauled the session saving system to prevent spontaneous session loss and data corruption.
-*   **General Optimization:** Improved core logic for better performance and overall stability. Fixed AI Generation errors.
-
-### V2.7.0
-*   **Proposed Chat Edits:** A powerful new way to bulk-modify, delete, or hide message ranges. Just ask Copilot to "change the name Elara to Sarah in the last 10 messages" or "hide all mentions of the tavern."
-*   **File Attachments & Vision:** Directly upload text files and images to Copilot. Features an internal viewer and supports both direct vision models and the Image Captioning extension.
-*   **Message Swiping:** Copilot responses now support regeneration and swipes, allowing you to navigate through different iterations of a reply.
-*   **Multimedia Backgrounds:** Customize the Copilot interface with image or video backgrounds (local or URL) including adjustable dimming for better readability.
-*   **Character AI Enhancements:** Added support for the **tags** field during character creation and significantly improved generation prompts (credits to @realevernever).
-*   **Advanced Overrides & Sync:** Lorebook, Character, and Chat AI settings are now fully synced with Configuration Profiles and accessible via Session Overrides.
-*   **UX Improvements:** Added an "Always Off" state for Lorebooks, sender-based group selection in the Context Picker, and focus-aware completion sounds.
-*   **Refinements:** Optimized connection profile switching and fixed theme compatibility for list markers and hidden messages.
-
-### V2.5.1
-*   **Continue Button:** Added a dedicated button to continue the last Copilot message.
-*   **Debug File Support:** You can now save a full debug log from the settings menu to help with troubleshooting. *Note: Export the log before refreshing the page, as it clears on reload.*
-*   **Streaming Scroll Fix:** Users can now scroll up to read previous messages without being snapped back to the bottom while the AI is streaming.
-*   **Fixes:** Implemented a potential fix for the "profile not found" error.
-
-### V2.5.0
-*   **Massive Token Optimization:** Completely overhauled the "Proposed Changes" system. Instead of rewriting entire text blocks, it now uses a smart search-and-replace method, reducing token consumption by over 80%! *(Huge thanks to @Steel-skull on GitHub!)*
-*   **Character Card Creator & Editor:** You can now create characters entirely from scratch or edit existing card fields (Description, Personality, Scenario, First Message, Alternate Greetings, and more) directly inside the extension.
-*   **Robust Parsing:** Significantly improved parsing logic for "proposed changes" blocks to successfully apply edits even if the AI makes formatting mistakes.
-*   **Session Export & Import:** Easily back up, share, or transfer your sessions. Under-the-hood session saving has also been rewritten to be much more efficient.
-*   **UI, Sounds & Polish:** Added a generation-complete sound notification, a soothing "wobble" physics effect when dragging windows, smooth interactive chart animations in Stats, and new Streaming modes (Auto, Force On, Force Off).
-*   **Lorebook Updates:** Added a "constant" parameter for proposed changes, and reorganized settings by moving the AI Edit and Keytrigger toggles to the main Settings window.
-*   **Mobile & Bug Fixes:** The Enter key on mobile keyboards now correctly inserts line breaks instead of sending messages. Fixed mobile UI headers, resolved user message duplication bugs, and redesigned system message outputs.
-*   *Note: The default Lorebook AI Edit prompt has been updated. Please reset your prompt to default in the settings to ensure compatibility!*
-
-### V2.3.0
-*   **Stream Support:** Added streaming support so you can see generations in real-time.
-*   **Reasoning Blocks:** Added native display support for Reasoning blocks.
-*   **Regex Support:** Clean up formatting and fluff from chat messages included in the context using regex.
-*   **Preset Customization:** Added the ability to modify QuickPrompts and SystemPrompts (SystemPrompts are now handled via session overrides).
-*   **Favorite Messages:** You can now mark specific messages as Favorites.
-*   **In-App Changelog:** A new window to easily keep track of updates and features directly within the UI.
-*   Improved and fixed the default prompt used for Lorebook editing.
-*   Fixed a bug where Lorebook entries would incorrectly remain in the context after being disconnected from the chat or character.
-*   Fixed message numbering in the Chat Context Picker (now 0 to N) to properly match ST's native numbering.
-
-###  V2.0.0: Massive Update
-The **V2.0.0** update is now live. While this update heavily improves how Copilot handles your lore and context, it also brings a massive wave of highly requested QoL improvements.
-
-**Major Features**
-- **Messages Payload:** Handpick specific messages from the chat history and feed them directly to the AI.
-- **Quick Prompts:** Fully customizable prompt buttons with emoji icons.
-- **Ghost Mode:** Copilot can now become semi-transparent and completely click-through.
-- **Expanded Context Awareness:** Context now includes the *Character's Note* and *Example of Dialogue*, and respects *Character Settings Overrides*.
-- **Temporary Sessions:** Create sessions that automatically delete themselves when you switch.
-
-**UI & Polish**
-- **Save Without Generating:** Edit a user message and "Save" without forcing a regeneration.
-- **Mobile Improvements:** Responsive window resizing tailored for mobile devices.
-- **Usage Stats:** A new interactive Statistics window.
-- **HTML & Formatting:** Added HTML support, and introduced clean connecting lines for bulleted lists.
-- The Floating Icon dynamically adapts to your UI theme.
-- Dismiss System Notifications after handling proposed Lorebook changes.
-
-**Bug Fixes**
-- Reworked text formatting (especially nested bulleted lists).
-- Fixed a logic bug where dismissed Lorebook proposals would incorrectly append to the end of the chat.
-- Fixed dialog windows disappearing if the mouse was released outside the window.
-- Fixed the floating icon randomly disappearing on mobile.
-
-### V1.9.0
-*   **Integrated Settings Window:** Dedicated settings UI for seamless adjustments.
-*   **Session-Specific Configuration:** Override global settings for individual sessions.
-*   **Dynamic Context Scaling:** The CTX slider dynamically adjusts its range based on chat length.
-*   **Advanced In-Chat Search:** Quickly locate specific information (`Ctrl + F`).
-*   **Theme Portability:** Import and Export custom themes as JSON.
-*   **New Theme:** Added the "Dark Sky" preset.
-
-### V1.7.2
-*   **Comfortable Color Picker:** Choose colors natively without leaving the app.
-*   **Default Colors:** Individually reset specific colors to the original theme defaults.
-*   **Resizable edit window:** You can now manually resize the "content" window in the Lorebook Manager.
-*   Fixed mobile lorebook manager scaling.
-
-### V1.7.1
-*   **Expandable Entry Descriptions:** Click to expand chat entry descriptions.
-*   **Data Protection:** Unsaved changes warnings when switching profiles.
-*   **Lorebook Dropdowns:** Individual Lorebook selection dropdowns for each entry proposal.
-*   **New Macro:** Added `{{active_lorebooks}}` support.
-*   Context tracks when you accept/reject entries.
-
-### V1.7.0
-*   **The AI Lorebook Management (AI-Edit):** Copilot AI now actively assists in world-building.
-*   **Interactive Proposals:** AI generates Proposal Cards to review, edit, or reject changes via a Diff View modal.
-*   **Lorebook Manager UI:** Manual overrides, Auto-Keywords, and Active Indicators.
-*   **String Trimming:** Automatically remove specific tags (like `<think>` blocks) from AI responses.
-*   **Persistent Icon:** Keep the floating dock icon visible at all times.
-</details>
-
----
-*Built with ❤️ for the SillyTavern community by Quren.*
+ST-Copilot was created by Quren (QQ-Corporation / Supker). This fork is maintained by Inversity, with fixes merged from the Cheesedozer and keepsanity forks.

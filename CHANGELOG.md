@@ -2,6 +2,12 @@
 
 This fork continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker, whose last release was 2.9.0 (2026-07-02). Versions before 3.0.0 are upstream's and are listed in the extension's "What's New" panel.
 
+## 3.1.3 (2026-10-13)
+
+- **New README**, written from the review of every screen, with current screenshots: what the window, the edit cards, the tools, the managers and each Settings tab do, the keyboard shortcuts (`Ctrl+F` only searches Copilot while its window is active), and what is sent where.
+- Two more unused settings removed: "include author's note" and "include character card" were saved in every configuration profile but nothing read them.
+- `npm test` now checks the UI inventory (`docs/ui-inventory.json`) against the code, so the map and the README stay current.
+
 ## 3.1.2 (2026-10-13)
 
 - **The whole interface is translatable**, and the Korean translation covers all of it. About 90 labels, buttons, tooltips and dialog texts were fixed English: message buttons, swipe controls, card buttons, tool names and descriptions, theme and sound names, Character Manager tabs and field groups, lorebook source labels, entry counts and more. The Korean for the newly translatable text (about 280 entries) was written by Claude, not a native speaker; corrections are welcome.

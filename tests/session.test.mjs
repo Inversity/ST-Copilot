@@ -132,9 +132,11 @@ test('session overrides reach the tools switch and the other settings that read 
 test('settings nothing reads any more are dropped; every tool has a default', () => {
     openChat('retired');
     const ext = globalThis.__stContext.extensionSettings;
-    ext.st_copilot = { ...(ext.st_copilot || {}), lorebookEnabled: true, toolsThinking: true, memoryScope: 'global', memoryTag: 'memory-update', attachedFiles: [] };
+    const retired = { lorebookEnabled: true, toolsThinking: true, memoryScope: 'global', memoryTag: 'memory-update', attachedFiles: [], includeAuthorsNote: true, includeCharacterCard: true };
+    ext.st_copilot = { ...(ext.st_copilot || {}), ...retired, profiles: { P: { maxTokens: 100, includeAuthorsNote: true } } };
     const s = S.getSettings();
-    for (const k of ['lorebookEnabled', 'toolsThinking', 'memoryScope', 'memoryTag', 'attachedFiles']) assert.equal(k in s, false, `${k} kept`);
+    for (const k of Object.keys(retired)) assert.equal(k in s, false, `${k} kept`);
+    assert.deepEqual(s.profiles.P, { maxTokens: 100 }, 'retired keys are dropped from saved profiles too');
     assert.equal(s.toolsEnabled_get_prompts, true);
 });
 

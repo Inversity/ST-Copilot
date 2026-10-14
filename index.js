@@ -305,6 +305,15 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       // ─── Changelog Data ──────────────────────────────────────────────────────────
   const CHANGELOG = [
       {
+          version: '3.1.3',
+          date: '10/13/2026',
+          announce: false,
+          notes: [
+              '<strong>New README</strong> with current screenshots of every part of Copilot.',
+              'Two unused settings removed from configuration profiles.',
+          ],
+      },
+      {
           version: '3.1.2',
           date: '10/13/2026',
           announce: true,
@@ -1861,8 +1870,6 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           customModel: '',
           maxTokens: 8048,
           includeSystemPrompt: false,
-          includeAuthorsNote: true,
-          includeCharacterCard: true,
           includeUserPersonality: true,
           includeAlternateSwipes: false,
           systemPrompt: '',
@@ -1952,13 +1959,13 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       for (const [k, v] of Object.entries(defaults)) {
           if (s[k] === undefined) s[k] = v;
       }
-      for (const k of RETIRED_SETTING_KEYS) delete s[k];
+      for (const t of [s, ...Object.values(s.profiles || {})]) if (t && typeof t === 'object') for (const k of RETIRED_SETTING_KEYS) delete t[k];
       _migrateDefaultPrompts(s);
       return s;
   }
 
   // Settings older versions stored that nothing reads any more; dropped from saved settings.
-  const RETIRED_SETTING_KEYS = ['lorebookEnabled', 'attachedFiles', 'memoryScope', 'memoryTag', 'toolsThinking'];
+  const RETIRED_SETTING_KEYS = ['lorebookEnabled', 'attachedFiles', 'memoryScope', 'memoryTag', 'toolsThinking', 'includeAuthorsNote', 'includeCharacterCard'];
 
   // Prompt settings where '' means "use the built-in default".
   const PROMPT_SETTING_KEYS = ['systemPrompt', 'lorebookManagePrompt', 'memoryManagePrompt', 'toolsSystemPrompt', 'charEditPrompt', 'chatEditPrompt'];
@@ -10695,10 +10702,7 @@ ${scopeHtml}
   };
 
   // Profile keys
-  const _PROFILE_KEYS = [
-      ..._SETTINGS_DEF.filter(d => d.profileKey).map(d => d.key),
-      'includeAuthorsNote', 'includeCharacterCard'
-  ];
+  const _PROFILE_KEYS = _SETTINGS_DEF.filter(d => d.profileKey).map(d => d.key);
 
   // ─── Configuration Profiles ───────────────────────────────────────────────────
 
@@ -10772,7 +10776,7 @@ ${scopeHtml}
       const sel = document.getElementById('scp-profile-select'); if (!sel) return;
       const s = getSettings();
       if (!Object.keys(s.profiles).length) {
-          s.profiles['Default'] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8048, applyRegexToContext: true };
+          s.profiles['Default'] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8048, applyRegexToContext: true };
           s.activeProfile = 'Default'; saveSettings();
       }
       sel.innerHTML = ''; let hasActive = false;
@@ -10840,7 +10844,7 @@ ${scopeHtml}
       const sel = document.getElementById('scp-sp-profile-select'); if (!sel) return;
       const s = getSettings();
       if (!Object.keys(s.profiles).length) {
-          s.profiles['Default'] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8048, applyRegexToContext: true };
+          s.profiles['Default'] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8048, applyRegexToContext: true };
           s.activeProfile = 'Default'; saveSettings();
       }
       sel.innerHTML = '';
@@ -11607,7 +11611,7 @@ ${scopeHtml}
       document.getElementById('scp-sp-profile-create')?.addEventListener('click', async () => {
           const name = await showCustomDialog({ type: 'prompt', title: 'New Configuration', message: 'Name:', placeholder: 'New Config' }); if (!name?.trim()) return;
           const n = name.trim(); const s = getSettings();
-          s.profiles[n] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeAuthorsNote: true, includeCharacterCard: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8048, applyRegexToContext: true };
+          s.profiles[n] = { systemPrompt: DEFAULT_SYSTEM_PROMPT, includeSystemPrompt: true, includeUserPersonality: true, contextDepth: 15, localHistoryLimit: 50, connectionSource: 'default', connectionProfileId: '', maxTokens: 8048, applyRegexToContext: true };
           saveSettings(); refreshSPProfilesDropdown(); refreshProfilesDropdown(); loadProfile(n); syncSPFromSettings(); updateSettingsUI();
           const sel = document.getElementById('scp-sp-profile-select'); if (sel) sel.value = n;
           updateSPBindingSection(); toastr.success(t`Created "${n}"`, EXT_DISPLAY);

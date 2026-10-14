@@ -36,8 +36,6 @@ export function getSettings() {
         customModel: '',
         maxTokens: 8048,
         includeSystemPrompt: false,
-        includeAuthorsNote: true,
-        includeCharacterCard: true,
         includeUserPersonality: true,
         includeAlternateSwipes: false,
         systemPrompt: '',
@@ -127,13 +125,13 @@ export function getSettings() {
     for (const [k, v] of Object.entries(defaults)) {
         if (s[k] === undefined) s[k] = v;
     }
-    for (const k of RETIRED_SETTING_KEYS) delete s[k];
+    for (const t of [s, ...Object.values(s.profiles || {})]) if (t && typeof t === 'object') for (const k of RETIRED_SETTING_KEYS) delete t[k];
     _migrateDefaultPrompts(s);
     return s;
 }
 
 // Settings older versions stored that nothing reads any more; dropped from saved settings.
-const RETIRED_SETTING_KEYS = ['lorebookEnabled', 'attachedFiles', 'memoryScope', 'memoryTag', 'toolsThinking'];
+const RETIRED_SETTING_KEYS = ['lorebookEnabled', 'attachedFiles', 'memoryScope', 'memoryTag', 'toolsThinking', 'includeAuthorsNote', 'includeCharacterCard'];
 
 // Prompt settings where '' means "use the built-in default".
 const PROMPT_SETTING_KEYS = ['systemPrompt', 'lorebookManagePrompt', 'memoryManagePrompt', 'toolsSystemPrompt', 'charEditPrompt', 'chatEditPrompt'];

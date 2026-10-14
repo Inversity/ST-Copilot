@@ -1,6 +1,6 @@
 {
   "about": "Every screen, panel and card of ST-Copilot, with how to reach it, what it does, its controls, the source that builds it, its screenshot (docs/screens/<screen>.jpg, made by tools/ui-screens.mjs) and open findings. Built for the UI review; keep it in step with the code: a new screen or setting gets a node here.",
-  "version": "3.1.2",
+  "version": "3.1.3",
   "builtFrom": "9b1e8ff",
   "findingTypes": {
     "bug": "Broken behaviour or markup",
@@ -55,7 +55,7 @@
         "st-wand-menu"
       ],
       "source": [
-        "src/index.js:144"
+        "src/index.js#addWandButton"
       ],
       "controls": [
         {
@@ -85,7 +85,7 @@
       ],
       "source": [
         "settings.html",
-        "src/ui/ui-settings.js:998"
+        "src/ui/ui-settings.js#setupSettingsHandlers"
       ],
       "controls": [
         {
@@ -159,7 +159,7 @@
       ],
       "source": [
         "window.html:115",
-        "src/ui/ui-window.js:716"
+        "src/ui/ui-window.js#showWindow"
       ],
       "controls": [
         {
@@ -175,19 +175,20 @@
       "title": "Keyboard shortcuts",
       "kind": "entry",
       "opens": "Anywhere in SillyTavern",
-      "purpose": "Toggle the window (Alt+Shift+C), open chat search (Ctrl+F), toggle Ghost Mode (Alt+Shift+G). Each can be turned off or rebound in Settings > Interface.",
+      "purpose": "Toggle the window (Alt+Shift+C, not while typing in another text box), search the Copilot session (Ctrl+F, only while the Copilot window is active), toggle Ghost Mode (Alt+Shift+G). Each can be turned off or rebound in Settings > Interface.",
       "screens": [],
       "source": [
-        "src/ui/ui-window.js:636",
-        "src/ui/ui-window.js:656",
-        "src/ui/ui-chat.js:2146"
+        "src/ui/ui-window.js#setupHotkey",
+        "src/ui/ui-window.js#setupGhostHotkey",
+        "src/ui/ui-chat.js#setupSearchHotkey"
       ],
       "controls": [],
       "findings": [
         {
-          "type": "ux",
-          "text": "Ctrl+F is captured by Copilot while enabled, which replaces the browser's own find in SillyTavern. Worth a note in the README.",
-          "id": "hotkeys-1"
+          "type": "missing",
+          "text": "Checked while writing the README: Ctrl+F only belongs to Copilot while its window is active (you last clicked in it, or just opened it); elsewhere the browser's own find works. The README documents this, and that Alt+Shift+C is ignored while typing in another text box.",
+          "id": "hotkeys-1",
+          "fixedIn": "README"
         }
       ]
     },
@@ -313,12 +314,13 @@
         "session-menu"
       ],
       "source": [
-        "src/index.js:79"
+        "src/index.js#refreshSessionDropdown"
       ],
       "controls": [
         {
           "label": "Session list",
-          "kind": "list"
+          "kind": "list",
+          "setting": "sessions"
         },
         {
           "label": "New Session",
@@ -373,7 +375,7 @@
       ],
       "source": [
         "window.html:68",
-        "src/ui/ui-chat.js:1617"
+        "src/ui/ui-chat.js#openSearch"
       ],
       "controls": [
         {
@@ -403,7 +405,7 @@
         "message-assistant"
       ],
       "source": [
-        "src/ui/ui-chat.js:528"
+        "src/ui/ui-chat.js#createMsgEl"
       ],
       "controls": [
         {
@@ -445,8 +447,8 @@
         "message-user"
       ],
       "source": [
-        "src/ui/ui-chat.js:528",
-        "src/ui/ui-chat.js:1129"
+        "src/ui/ui-chat.js#createMsgEl",
+        "src/ui/ui-chat.js#handleEdit"
       ],
       "controls": [
         {
@@ -476,7 +478,7 @@
         "tool-call"
       ],
       "source": [
-        "src/features/feature-tools-ui.js:7"
+        "src/features/feature-tools-ui.js#createToolCallEl"
       ],
       "controls": [
         {
@@ -501,8 +503,8 @@
       "screens": [],
       "source": [
         "window.html:80",
-        "src/api.js:1133",
-        "src/api.js:562"
+        "src/api.js#runToolRounds",
+        "src/api.js#startStreamIdleWatch"
       ],
       "controls": [
         {
@@ -576,13 +578,13 @@
         "quick-prompts-bar"
       ],
       "source": [
-        "src/ui/ui-widgets.js:13"
+        "src/ui/ui-widgets.js#renderQuickPromptsBar"
       ],
       "controls": [
         {
           "label": "Prompt chips",
           "kind": "buttons",
-          "setting": "quickPrompts"
+          "setting": "quickPrompts, quickPromptsVisible"
         }
       ],
       "findings": []
@@ -600,12 +602,13 @@
       ],
       "source": [
         "window.html:104",
-        "src/ui/ui-widgets.js:617"
+        "src/ui/ui-widgets.js#renderFavoritesPanel"
       ],
       "controls": [
         {
           "label": "Remove from starred",
-          "kind": "button"
+          "kind": "button",
+          "setting": "starredMessages"
         }
       ],
       "findings": []
@@ -653,7 +656,7 @@
         "ghost-mode"
       ],
       "source": [
-        "src/ui/ui-window.js:656"
+        "src/ui/ui-window.js#setupGhostHotkey"
       ],
       "controls": [
         {
@@ -675,7 +678,7 @@
         "card-lorebook"
       ],
       "source": [
-        "src/features/feature-lorebook-ui.js:342"
+        "src/features/feature-lorebook-ui.js#renderProposalCard"
       ],
       "controls": [
         {
@@ -704,8 +707,8 @@
         "card-character"
       ],
       "source": [
-        "src/features/feature-character-ui.js:414",
-        "src/features/feature-character-ui.js:765"
+        "src/features/feature-character-ui.js#_buildCharProposalCardForCharacter",
+        "src/features/feature-character-ui.js#renderCharProposalCard"
       ],
       "controls": [
         {
@@ -742,7 +745,7 @@
         "card-character-create"
       ],
       "source": [
-        "src/features/feature-character-ui.js:259"
+        "src/features/feature-character-ui.js#renderCharCreationCard"
       ],
       "controls": [
         {
@@ -767,7 +770,7 @@
         "card-chat"
       ],
       "source": [
-        "src/features/feature-chatedit-ui.js:37"
+        "src/features/feature-chatedit-ui.js#renderChatProposalCard"
       ],
       "controls": [
         {
@@ -792,7 +795,7 @@
         "card-prompt"
       ],
       "source": [
-        "src/features/feature-prompt-manager-ui.js:194"
+        "src/features/feature-prompt-manager-ui.js#renderPromptProposalCard"
       ],
       "controls": [
         {
@@ -828,7 +831,7 @@
       "screens": [],
       "source": [
         "diff_modal.html",
-        "src/utils/util-diff.js:170"
+        "src/utils/util-diff.js#openTextDiffModal"
       ],
       "controls": [
         {
@@ -864,7 +867,7 @@
       ],
       "source": [
         "settings_overlay.html:34",
-        "src/ui/ui-settings.js:1130"
+        "src/ui/ui-settings.js#setupSettingsPanelListeners"
       ],
       "controls": [
         {
@@ -899,7 +902,8 @@
         },
         {
           "label": "Include my ST roleplay prompt, User Persona, auto-expand macros, hidden messages, alternate swipes",
-          "kind": "checkboxes"
+          "kind": "checkboxes",
+          "setting": "includeSystemPrompt, includeUserPersonality, autoExpandMacros, includeHiddenMessages, includeAlternateSwipes"
         },
         {
           "label": "Character fields sent (10) + which greetings to include",
@@ -908,16 +912,18 @@
         },
         {
           "label": "Chat Depth, Session History Limit, Remove From Replies",
-          "kind": "slider + number + text"
+          "kind": "slider + number + text",
+          "setting": "contextDepth, localHistoryLimit, reasoningTrimStrings"
         },
         {
           "label": "Third-party: Apply Regex, Summaryception, Aspect: Evolutia",
-          "kind": "checkboxes"
+          "kind": "checkboxes",
+          "setting": "applyRegexToContext, includeSummaryception, useAspectEvolutia"
         },
         {
           "label": "System Prompt with presets + Reset to Default",
           "kind": "text area",
-          "setting": "systemPrompt"
+          "setting": "systemPrompt, promptPresets"
         },
         {
           "label": "Character Card AI Edits: enable + prompt (with presets)",
@@ -959,6 +965,13 @@
           "text": "System prompt presets exist only in the Session tab; the AI tab has just Reset.",
           "id": "settings-global-3",
           "fixedIn": "3.1.0"
+        },
+        {
+          "type": "dead",
+          "id": "settings-global-4",
+          "fixedIn": "3.1.3",
+          "text": "Found by the inventory drift test: includeAuthorsNote and includeCharacterCard were saved in every configuration profile but nothing read them. Removed, also from saved profiles.",
+          "ref": "src/session.js"
         }
       ]
     },
@@ -974,42 +987,50 @@
       ],
       "source": [
         "settings_overlay.html:197",
-        "src/ui/ui-settings.js:368",
-        "src/ui/ui-settings.js:1363",
-        "src/ui/ui-widgets.js:1112"
+        "src/ui/ui-settings.js#buildThemeEditor",
+        "src/ui/ui-settings.js#buildBackgroundSettingsUI",
+        "src/ui/ui-widgets.js#buildSoundSettingsUI"
       ],
       "controls": [
         {
           "label": "Enable, floating icon, wobbly drag, Low Performance Mode, show changelog on update, What's New, Window Opacity",
-          "kind": "mixed"
+          "kind": "mixed",
+          "setting": "enabled, floatingIconPersistent, wobbleWindow, performanceMode, changelogAutoShow, opacity"
         },
         {
           "label": "Shortcuts (3)",
-          "kind": "checkbox + hotkey field"
+          "kind": "checkbox + hotkey field",
+          "setting": "hotkeyEnabled, hotkey, searchHotkeyEnabled, searchHotkey, ghostModeHotkeyEnabled, ghostModeHotkey"
         },
         {
           "label": "Completion Sound: presets, custom upload, test, delete, volume, only when unfocused",
-          "kind": "picker"
+          "kind": "picker",
+          "setting": "completionSound, completionSoundVolume, completionSoundOnlyWhenUnfocused"
         },
         {
           "label": "Ghost Opacity",
-          "kind": "slider"
+          "kind": "slider",
+          "setting": "ghostModeOpacity"
         },
         {
           "label": "Window Background: none / custom, upload or URL, rename, delete, dim",
-          "kind": "picker"
+          "kind": "picker",
+          "setting": "windowBgType, windowBgUrl, windowBgDim"
         },
         {
           "label": "Context Message Picker: first N lines, last N lines",
-          "kind": "numbers"
+          "kind": "numbers",
+          "setting": "pickerPreviewLines, pickerPreviewLastLines"
         },
         {
           "label": "Image Analysis Mode: Direct / Caption",
-          "kind": "select"
+          "kind": "select",
+          "setting": "imageAnalysisMode"
         },
         {
           "label": "Interface Theme: 12 presets, custom themes (save, new, duplicate, rename, delete, export, import), 20 color and style fields",
-          "kind": "theme editor"
+          "kind": "theme editor",
+          "setting": "customTheme, savedThemes, activeThemeProfile"
         }
       ],
       "findings": [
@@ -1046,8 +1067,8 @@
       ],
       "source": [
         "settings_overlay.html:298",
-        "src/ui/ui-settings.js:1447",
-        "src/ui/ui-widgets.js:325"
+        "src/ui/ui-settings.js#buildQPSettingsUI",
+        "src/ui/ui-widgets.js#buildQPSetManager"
       ],
       "controls": [
         {
@@ -1149,8 +1170,8 @@
       ],
       "source": [
         "settings_overlay.html:549",
-        "src/features/feature-memory.js:208",
-        "src/features/feature-memory.js:468"
+        "src/features/feature-memory.js#renderMemoryList",
+        "src/features/feature-memory.js#setupMemorySettingsUI"
       ],
       "controls": [
         {
@@ -1201,7 +1222,7 @@
       ],
       "source": [
         "settings_overlay.html:576",
-        "src/features/feature-tools-ui.js:77"
+        "src/features/feature-tools-ui.js#setupToolsSettingsUI"
       ],
       "controls": [
         {
@@ -1267,7 +1288,7 @@
         "settings-stats"
       ],
       "source": [
-        "src/features/feature-stats.js:142"
+        "src/features/feature-stats.js#renderStatsPane"
       ],
       "controls": [
         {
@@ -1276,7 +1297,8 @@
         },
         {
           "label": "Metric cards and chart",
-          "kind": "chart"
+          "kind": "chart",
+          "setting": "stats"
         },
         {
           "label": "Reset Statistics",
@@ -1306,7 +1328,7 @@
       ],
       "source": [
         "lorebook_manager.html",
-        "src/features/feature-lorebook-ui.js:833"
+        "src/features/feature-lorebook-ui.js#openLorebookManager"
       ],
       "controls": [
         {
@@ -1357,7 +1379,7 @@
         "lorebook-entry-detail"
       ],
       "source": [
-        "src/features/feature-lorebook-ui.js:1109"
+        "src/features/feature-lorebook-ui.js#showEntryDetail"
       ],
       "controls": [
         {
@@ -1401,7 +1423,7 @@
       ],
       "source": [
         "character_manager.html",
-        "src/features/feature-character-manager-ui.js:571"
+        "src/features/feature-character-manager-ui.js#openCharacterManager"
       ],
       "controls": [
         {
@@ -1449,7 +1471,7 @@
         "character-manager-overrides"
       ],
       "source": [
-        "src/features/feature-character-manager-ui.js:484"
+        "src/features/feature-character-manager-ui.js#_buildOverridesTab"
       ],
       "controls": [
         {
@@ -1480,7 +1502,7 @@
       ],
       "source": [
         "prompt_manager.html",
-        "src/features/feature-prompt-manager-ui.js:324"
+        "src/features/feature-prompt-manager-ui.js#openPromptManager"
       ],
       "controls": [
         {
@@ -1512,7 +1534,7 @@
       ],
       "source": [
         "window.html:119",
-        "src/ui/ui-widgets.js:1044"
+        "src/ui/ui-widgets.js#openInspector"
       ],
       "controls": [
         {
@@ -1546,7 +1568,7 @@
       ],
       "source": [
         "window.html:141",
-        "src/ui/ui-widgets.js:580"
+        "src/ui/ui-widgets.js#openChangelog"
       ],
       "controls": [],
       "findings": []
@@ -1563,7 +1585,7 @@
       ],
       "source": [
         "chat_picker.html",
-        "src/ui/ui-chat.js:1806"
+        "src/ui/ui-chat.js#openChatPicker"
       ],
       "controls": [
         {
@@ -1596,7 +1618,7 @@
         "session-new-dialog"
       ],
       "source": [
-        "src/session.js:776"
+        "src/session.js#showSessionDialog"
       ],
       "controls": [
         {
@@ -1631,7 +1653,7 @@
       "purpose": "SillyTavern's own Popup for alerts, confirmations (destructive ones count down) and name prompts.",
       "screens": [],
       "source": [
-        "src/utils/util-dom.js:62"
+        "src/utils/util-dom.js#showCustomDialog"
       ],
       "controls": [],
       "findings": []
@@ -1645,7 +1667,7 @@
       "purpose": "Shows the provider's error with its cause.",
       "screens": [],
       "source": [
-        "src/ui/ui-chat.js:2019"
+        "src/ui/ui-chat.js#showGenerationError"
       ],
       "controls": [],
       "findings": []
@@ -1659,7 +1681,7 @@
       "purpose": "Finds Copilot session files no chat points to (deleted chats, old branches) and offers to delete empty ones, then ones that still hold messages.",
       "screens": [],
       "source": [
-        "src/features/feature-storage-cleanup.js:88"
+        "src/features/feature-storage-cleanup.js#runOrphanCleanup"
       ],
       "controls": [],
       "findings": []
@@ -1685,6 +1707,44 @@
     {
       "key": "attachedFiles",
       "ref": "src/session.js:104"
+    }
+  ],
+  "internalSettings": [
+    {
+      "key": "windowVisible",
+      "why": "Whether the window was open; restored on load"
+    },
+    {
+      "key": "minimized",
+      "why": "Whether the window was minimized to the floating icon"
+    },
+    {
+      "key": "windowX",
+      "why": "Window position, set by dragging"
+    },
+    {
+      "key": "windowY",
+      "why": "Window position, set by dragging"
+    },
+    {
+      "key": "windowW",
+      "why": "Window size, set by resizing"
+    },
+    {
+      "key": "windowH",
+      "why": "Window size, set by resizing"
+    },
+    {
+      "key": "iconX",
+      "why": "Floating icon position, set by dragging"
+    },
+    {
+      "key": "iconY",
+      "why": "Floating icon position, set by dragging"
+    },
+    {
+      "key": "lastSeenVersion",
+      "why": "The version whose What's New was last shown; a newer one opens it once"
     }
   ]
 }
