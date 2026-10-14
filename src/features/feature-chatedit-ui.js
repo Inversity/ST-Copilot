@@ -216,7 +216,7 @@ export function renderChatProposalCard(changes, msgEl) {
     headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-accent);display:flex">${I.chatEdit}</span><span class="scp-lb-proposal-title" data-i18n="Proposed Chat Edits">Proposed Chat Edits</span>`;
     headerLeft.appendChild(countBadge);
     const dismissBtn = document.createElement('button');
-    dismissBtn.className = 'scp-lb-proposal-dismiss'; dismissBtn.innerHTML = I.x; dismissBtn.title = 'Dismiss all';
+    dismissBtn.className = 'scp-lb-proposal-dismiss'; dismissBtn.innerHTML = I.x; dismissBtn.title = translate('Dismiss all');
     dismissBtn.addEventListener('click', () => {
         const pending = editableChanges.filter((_, i) => itemStates[i] === 'pending');
         if (pending.length > 0) logChatEditHistory(pending, 'Dismissed', card.dataset.for);
@@ -271,7 +271,7 @@ export function renderChatProposalCard(changes, msgEl) {
         
         const warnEl = document.createElement('div');
         warnEl.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;width:100%;display:none;cursor:pointer;';
-        warnEl.title = 'Click to open the edit panel and fix manually';
+        warnEl.title = translate('Click to open the edit panel and fix manually');
         meta.appendChild(warnEl);
 
         const btns = document.createElement('div');
@@ -279,7 +279,7 @@ export function renderChatProposalCard(changes, msgEl) {
 
         if (['replace', 'overwrite', 'bulk_replace', 'regex'].includes(c.action)) {
             const diffBtn = document.createElement('button');
-            diffBtn.className = 'scp-lb-proposal-diff-btn'; diffBtn.title = 'View diff'; diffBtn.innerHTML = I.diff;
+            diffBtn.className = 'scp-lb-proposal-diff-btn'; diffBtn.title = translate('View diff'); diffBtn.innerHTML = I.diff;
             diffBtn.addEventListener('click', e => {
                 e.stopPropagation();
                 const ctx = SillyTavern.getContext();
@@ -333,12 +333,12 @@ export function renderChatProposalCard(changes, msgEl) {
         let editPanel = null;
         if (c.action !== 'delete') {
             editToggleBtn = document.createElement('button');
-            editToggleBtn.className = 'scp-lb-proposal-edit-toggle'; editToggleBtn.title = 'Edit before applying'; editToggleBtn.textContent = '✎';
+            editToggleBtn.className = 'scp-lb-proposal-edit-toggle'; editToggleBtn.title = translate('Edit before applying'); editToggleBtn.textContent = '✎';
             btns.appendChild(editToggleBtn);
         }
 
         const applyBtn = document.createElement('button');
-        applyBtn.className = 'scp-lb-proposal-item-apply'; applyBtn.title = 'Apply'; applyBtn.textContent = '✓';
+        applyBtn.className = 'scp-lb-proposal-item-apply'; applyBtn.title = translate('Apply'); applyBtn.textContent = '✓';
         
         const refreshValidation = () => {
             const { valid, reason, ambiguous } = validateChatChange(editableChanges[ci]);
@@ -348,7 +348,7 @@ export function renderChatProposalCard(changes, msgEl) {
                 warnEl.textContent = `⚠ ${reason}`; warnEl.style.display = 'block';
                 offerChangeAll(warnEl, ambiguous, refreshValidation);
             } else {
-                applyBtn.disabled = false; applyBtn.title = 'Apply';
+                applyBtn.disabled = false; applyBtn.title = translate('Apply');
                 item.style.borderLeftColor = ''; 
                 warnEl.style.display = 'none';
             }
@@ -389,7 +389,7 @@ export function renderChatProposalCard(changes, msgEl) {
             });
         });
         const rejectBtn = document.createElement('button');
-        rejectBtn.className = 'scp-lb-proposal-item-reject'; rejectBtn.title = 'Reject'; rejectBtn.textContent = '✕';
+        rejectBtn.className = 'scp-lb-proposal-item-reject'; rejectBtn.title = translate('Reject'); rejectBtn.textContent = '✕';
         rejectBtn.addEventListener('click', e => {
             e.stopPropagation();
             if (itemStates[ci] !== 'pending') return;
@@ -500,7 +500,7 @@ export function renderChatProposalCard(changes, msgEl) {
                     const valueTa = document.createElement('textarea');
                     valueTa.className = 'scp-lb-pe-textarea'; 
                     valueTa.rows = 4; 
-                    valueTa.placeholder = 'Type the message content here...';
+                    valueTa.placeholder = translate('Type the message content here...');
                     valueTa.value = change.content || '';
                     valueTa.addEventListener('input', () => { 
                         change.content = valueTa.value; 
@@ -516,7 +516,7 @@ export function renderChatProposalCard(changes, msgEl) {
                         if (change.patches.length > 1) {
                             const delP = document.createElement('button');
                             delP.style.cssText = 'background:none;border:none;color:var(--scp-danger);cursor:pointer;font-size:11px;padding:0;font-family:var(--scp-font)';
-                            delP.textContent = '✕ Remove';
+                            delP.textContent = translate('✕ Remove');
                             delP.addEventListener('click', () => { change.patches.splice(pi, 1); rebuildEditPanel(); refreshPreview(); refreshValidation(); });
                             pHdr.appendChild(delP);
                         }
@@ -617,9 +617,9 @@ export function renderChatProposalCard(changes, msgEl) {
     const footer = document.createElement('div');
     footer.className = 'scp-lb-proposal-footer';
     const applyAllBtn = document.createElement('button');
-    applyAllBtn.className = 'scp-lb-proposal-apply'; applyAllBtn.textContent = 'Apply All';
+    applyAllBtn.className = 'scp-lb-proposal-apply'; applyAllBtn.textContent = translate('Apply All');
     const rejectAllBtn = document.createElement('button');
-    rejectAllBtn.className = 'scp-lb-proposal-reject'; rejectAllBtn.textContent = 'Reject All';
+    rejectAllBtn.className = 'scp-lb-proposal-reject'; rejectAllBtn.textContent = translate('Reject All');
 
     const updateFooterBtns = () => {
         const p = getPending();
@@ -634,7 +634,7 @@ export function renderChatProposalCard(changes, msgEl) {
             editableChanges.forEach((_, i) => { if (itemStates[i] === 'pending') pendingIndices.push(i); });
             const pending = pendingIndices.map(i => editableChanges[i]);
             if (!pending.length) return;
-            applyAllBtn.disabled = true; applyAllBtn.textContent = 'Applying…';
+            applyAllBtn.disabled = true; applyAllBtn.textContent = translate('Applying…');
             
             pendingIndices.forEach(i => {
                 itemStates[i] = 'applied';
@@ -662,7 +662,7 @@ export function renderChatProposalCard(changes, msgEl) {
                 
                 toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
                 applyAllBtn.disabled = false; 
-                applyAllBtn.textContent = 'Apply All';
+                applyAllBtn.textContent = translate('Apply All');
             }
         });
     });

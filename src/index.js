@@ -100,7 +100,7 @@ export function refreshSessionDropdown() {
             item.appendChild(dot); item.appendChild(nameSpan); item.appendChild(count);
             if (sess.isTemporary) {
                 const badge = document.createElement('span'); badge.className = 'scp-sess-tmp-badge';
-                badge.title = 'Temporary session — will be deleted on switch'; badge.textContent = 'tmp';
+                badge.title = translate('Temporary session — will be deleted on switch'); badge.textContent = 'tmp';
                 item.appendChild(badge);
             }
             

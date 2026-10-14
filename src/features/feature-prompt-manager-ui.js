@@ -133,7 +133,7 @@ function _renderDetail() {
     const countTokens = async text => {
         try {
             const n = await (await import('../api.js')).estimateTokens(text);
-            if (tokEl.isConnected) tokEl.textContent = `[~${n} tkns]`;
+            if (tokEl.isConnected) tokEl.textContent = t`[~${n} tkns]`;
         } catch (_) { /* token count is cosmetic */ }
     };
     countTokens(entry.content);

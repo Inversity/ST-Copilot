@@ -4,6 +4,7 @@
 //
 //   node tools/ui-screens.mjs [--st http://localhost:8001] [--user fresh-user-test]
 //                             [--out docs/screens] [--only id,id] [--chrome <path>] [--cards 1]
+//                             [--locale ko-kr]   (UI language; capture into another --out)
 //
 // Each screen is opened through the UI the way a person would (clicks, not internal calls),
 // so a capture that fails usually means the screen or its selector changed: update the
@@ -31,6 +32,8 @@ fs.mkdirSync(OUT, { recursive: true });
 const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scp-screens-'));
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, userDataDir: profileDir, defaultViewport: VIEW, args: ['--no-first-run'] });
 const page = await browser.newPage();
+// --locale ko-kr: SillyTavern reads its UI language from localStorage, per browser profile.
+if (args.locale) await page.evaluateOnNewDocument(l => { try { localStorage.setItem('language', l); } catch (_) {} }, args.locale);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const captured = [];
 const failed = [];
@@ -205,7 +208,9 @@ await step('window-parts', async () => {
     await shot('tool-call', '[data-scp-shot="tool"]', { pad: 4 });
 });
 await step('session-menu', async () => {
-    await click('#scp-sess-trigger');
+    // Open the dropdown only if a previous step did not leave it open (a click would close it).
+    if (!await page.evaluate(() => !!document.getElementById('scp-new-sess-btn')?.offsetParent)) await click('#scp-sess-trigger');
+    await page.waitForSelector('#scp-new-sess-btn', { visible: true, timeout: 5000 });
     await shot('session-menu', '#scp-window', { pad: 0 });
     await click('#scp-new-sess-btn');
     await shot('session-new-dialog', 'dialog.scp-popup[open]');
@@ -293,7 +298,7 @@ await step('character-manager', async () => {
     await sleep(900);
     await shot('character-manager', '#scp-char-overlay .scp-char-panel');
     await shot('character-manager-full', '#scp-char-overlay .scp-char-panel', { tall: '.scp-char-body, .scp-char-main' });
-    await clickText('.scp-char-tab', 'Overrides');
+    await click('.scp-char-tab:nth-child(2)'); // Overrides (by position: the label is translated)
     await shot('character-manager-overrides', '#scp-char-overlay .scp-char-panel');
     await click('#scp-char-close');
 });

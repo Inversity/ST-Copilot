@@ -52,7 +52,7 @@ export function renderLBHistoryContent(msg, contentEl) {
 
     const summaryRow = document.createElement('div');
     summaryRow.style.cssText = 'font-size:12px;font-weight:600;color:var(--scp-text);margin-bottom:4px';
-    summaryRow.textContent = `System Notification: ${summaryStr}`;
+    summaryRow.textContent = t`System Notification: ${summaryStr}`;
     contentEl.appendChild(summaryRow);
 
     if (lines.length) {
@@ -60,7 +60,7 @@ export function renderLBHistoryContent(msg, contentEl) {
         details.className = 'scp-hist-details';
         const summary = document.createElement('summary');
         summary.className = 'scp-hist-summary';
-        summary.textContent = 'Show details';
+        summary.textContent = translate('Show details');
         details.appendChild(summary);
 
         const detailsBody = document.createElement('div');
@@ -120,7 +120,7 @@ export function appendLBHistoryEl(msg, afterMsgId = null) {
     const closeBtn = document.createElement('button');
     closeBtn.className = 'scp-msg-btn scp-lb-history-close';
     closeBtn.innerHTML = I.x;
-    closeBtn.title = 'Dismiss notification';
+    closeBtn.title = translate('Dismiss notification');
     closeBtn.addEventListener('click', () => {
         const session = getCurrentSession();
         deleteMsg(session, msg.id);
@@ -386,7 +386,7 @@ export function renderProposalCard(changes, msgEl) {
 
     const dismissBtn = document.createElement('button');
     dismissBtn.className = 'scp-lb-proposal-dismiss';
-    dismissBtn.innerHTML = I.x; dismissBtn.title = 'Dismiss';
+    dismissBtn.innerHTML = I.x; dismissBtn.title = translate('Dismiss');
     dismissBtn.addEventListener('click', () => {
         const dismissedChanges = editableChanges.filter((_, i) => itemStates[i] === 'pending');
         _dbgAdd('LB_PROPOSAL_ACTION', { action: 'dismissed', msgId: card.dataset.for, dismissedCount: dismissedChanges.length });
@@ -414,7 +414,7 @@ export function renderProposalCard(changes, msgEl) {
 
         const warnEl = document.createElement('div');
         warnEl.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;width:100%;display:none;cursor:pointer;';
-        warnEl.title = 'Click to open the edit panel and fix manually';
+        warnEl.title = translate('Click to open the edit panel and fix manually');
         itemMeta.appendChild(warnEl);
 
         const _activeBooks = getActiveLorebookNames();
@@ -429,7 +429,7 @@ export function renderProposalCard(changes, msgEl) {
 
         const worldTriggerText = document.createElement('span');
         worldTriggerText.className = 'scp-lb-proposal-world-trigger-text';
-        worldTriggerText.textContent = `in ${getDisplayName(_currentBook) || '?'}`;
+        worldTriggerText.textContent = t`in ${getDisplayName(_currentBook) || '?'}`;
 
         const worldChevronEl = document.createElement('span');
         worldChevronEl.className = 'scp-lb-proposal-world-chevron';
@@ -448,7 +448,7 @@ export function renderProposalCard(changes, msgEl) {
             if (!items.length) {
                 const empty = document.createElement('div');
                 empty.className = 'scp-lb-proposal-world-empty';
-                empty.textContent = 'No active lorebooks';
+                empty.textContent = translate('No active lorebooks');
                 worldPanel.appendChild(empty);
             }
             items.forEach(name => {
@@ -510,7 +510,7 @@ export function renderProposalCard(changes, msgEl) {
                     const origKeys = orig.key || [];
                     editableChanges[ci].triggers = [...origKeys];
                     const tEl = item.querySelector('.scp-lb-proposal-triggers');
-                    if (tEl) tEl.textContent = origKeys.length ? `Keys: ${origKeys.join(', ')}` : 'Keys: none';
+                    if (tEl) tEl.textContent = origKeys.length ? t`Keys: ${origKeys.join(', ')}` : translate('Keys: none');
                     const tInput = item.querySelector('.scp-lb-trig-input');
                     if (tInput && !tInput.value) { tInput.value = origKeys.join(', '); tInput.placeholder = ''; }
                 }
@@ -520,7 +520,7 @@ export function renderProposalCard(changes, msgEl) {
                 editableChanges[ci].worldName = resolved.bookName;
                 _selectedBook = resolved.bookName;
                 worldPanel.querySelectorAll('.scp-lb-proposal-world-item').forEach(el => el.classList.toggle('active', el.dataset.value === resolved.bookName));
-                worldTriggerText.textContent = `in ${getDisplayName(resolved.bookName)}`;
+                worldTriggerText.textContent = t`in ${getDisplayName(resolved.bookName)}`;
                 toastr.info(t`Entry found in "<b>${escHtml(getDisplayName(resolved.bookName))}</b>" instead — lorebook switched automatically.`, EXT_DISPLAY, { escapeHtml: false });
             } else {
                 worldTriggerText.textContent = found ? `in ${getDisplayName(bookName)}` : `in ${getDisplayName(bookName)} ⚠`;
@@ -540,7 +540,7 @@ export function renderProposalCard(changes, msgEl) {
                 warnEl.textContent = `⚠ ${reason}`; warnEl.style.display = 'block';
                 offerChangeAll(warnEl, ambiguous, () => _validateBookEntry(bookName));
             } else {
-                applyItemBtn.disabled = false; applyItemBtn.title = 'Apply this change';
+                applyItemBtn.disabled = false; applyItemBtn.title = translate('Apply this change');
                 item.style.borderLeftColor = ''; warnEl.style.display = 'none';
             }
             worldTrigger.classList.toggle('warn', !found);
@@ -550,7 +550,7 @@ export function renderProposalCard(changes, msgEl) {
             if (name !== editableChanges[ci].worldName) delete editableChanges[ci].uid;
             _selectedBook = name;
             editableChanges[ci].worldName = name;
-            worldTriggerText.textContent = `in ${getDisplayName(name)}`;
+            worldTriggerText.textContent = t`in ${getDisplayName(name)}`;
             worldTrigger.classList.remove('warn');
             worldPanel.querySelectorAll('.scp-lb-proposal-world-item').forEach(el => el.classList.toggle('active', el.dataset.value === name));
             worldPanel.classList.remove('open'); worldTrigger.classList.remove('open');
@@ -580,14 +580,14 @@ export function renderProposalCard(changes, msgEl) {
         if (c.action !== 'delete') {
             editToggleBtn = document.createElement('button');
             editToggleBtn.className = 'scp-lb-proposal-edit-toggle';
-            editToggleBtn.title = 'Edit before applying'; editToggleBtn.textContent = '✎';
+            editToggleBtn.title = translate('Edit before applying'); editToggleBtn.textContent = '✎';
             itemBtns.appendChild(editToggleBtn);
         }
 
         if (['edit', 'patch', 'prepend', 'append'].includes(c.action)) {
             const diffBtn = document.createElement('button');
             diffBtn.className = 'scp-lb-proposal-diff-btn';
-            diffBtn.title = 'View diff'; diffBtn.innerHTML = I.diff;
+            diffBtn.title = translate('View diff'); diffBtn.innerHTML = I.diff;
             diffBtn.addEventListener('click', async e => {
                 e.stopPropagation();
                 const change = editableChanges[ci];
@@ -610,7 +610,7 @@ export function renderProposalCard(changes, msgEl) {
 
         const applyItemBtn = document.createElement('button');
         applyItemBtn.className = 'scp-lb-proposal-item-apply';
-        applyItemBtn.title = 'Apply this change'; applyItemBtn.textContent = '✓';
+        applyItemBtn.title = translate('Apply this change'); applyItemBtn.textContent = '✓';
         applyItemBtn.addEventListener('click', async e => {
             e.stopPropagation();
             if (itemStates[ci] !== 'pending') return;
@@ -631,7 +631,7 @@ export function renderProposalCard(changes, msgEl) {
 
         const rejectItemBtn = document.createElement('button');
         rejectItemBtn.className = 'scp-lb-proposal-item-reject';
-        rejectItemBtn.title = 'Reject this change'; rejectItemBtn.textContent = '✕';
+        rejectItemBtn.title = translate('Reject this change'); rejectItemBtn.textContent = '✕';
         rejectItemBtn.addEventListener('click', e => {
             e.stopPropagation();
             if (itemStates[ci] !== 'pending') return;
@@ -654,7 +654,7 @@ export function renderProposalCard(changes, msgEl) {
             previewEl.textContent = isLong ? c.content.slice(0, 120) + '…' : c.content;
             if (isLong) {
                 let _expanded = false;
-                previewEl.title = 'Click to expand'; previewEl.style.cursor = 'pointer';
+                previewEl.title = translate('Click to expand'); previewEl.style.cursor = 'pointer';
                 previewEl.addEventListener('click', e => {
                     e.stopPropagation();
                     if (window.getSelection()?.toString()) return;
@@ -667,10 +667,10 @@ export function renderProposalCard(changes, msgEl) {
         }
         if (c.triggers !== null && c.triggers?.length) {
             triggersEl = document.createElement('div'); triggersEl.className = 'scp-lb-proposal-triggers';
-            triggersEl.textContent = 'Keys: ' + c.triggers.join(', '); item.appendChild(triggersEl);
+            triggersEl.textContent = t`Keys: ${c.triggers.join(', ')}`; item.appendChild(triggersEl);
         } else if (c.triggers === null) {
             triggersEl = document.createElement('div'); triggersEl.className = 'scp-lb-proposal-triggers';
-            triggersEl.style.opacity = '0.5'; triggersEl.textContent = 'Keys: keep original'; item.appendChild(triggersEl);
+            triggersEl.style.opacity = '0.5'; triggersEl.textContent = translate('Keys: keep original'); item.appendChild(triggersEl);
         }
 
         if (c.action !== 'delete') {
@@ -745,7 +745,7 @@ export function renderProposalCard(changes, msgEl) {
             const oNameInp = document.createElement('input');
             oNameInp.type = 'text'; oNameInp.className = 'scp-lb-pe-input';
             oNameInp.value = c.outlet_name || '';
-            oNameInp.placeholder = 'Outlet macro name...';
+            oNameInp.placeholder = translate('Outlet macro name...');
             oNameInp.addEventListener('input', () => { editableChanges[ci].outlet_name = oNameInp.value; });
             outletNameRow.innerHTML = '<label class="scp-lb-pe-label" data-i18n="Outlet Name">Outlet Name</label>';
             outletNameRow.appendChild(oNameInp);
@@ -783,9 +783,9 @@ export function renderProposalCard(changes, msgEl) {
     const footer = document.createElement('div');
     footer.className = 'scp-lb-proposal-footer';
     const applyAllBtn = document.createElement('button');
-    applyAllBtn.className = 'scp-lb-proposal-apply'; applyAllBtn.textContent = 'Apply All';
+    applyAllBtn.className = 'scp-lb-proposal-apply'; applyAllBtn.textContent = translate('Apply All');
     const rejectAllBtn = document.createElement('button');
-    rejectAllBtn.className = 'scp-lb-proposal-reject'; rejectAllBtn.textContent = 'Reject All';
+    rejectAllBtn.className = 'scp-lb-proposal-reject'; rejectAllBtn.textContent = translate('Reject All');
 
     const updateCountBadge = () => { countBadge.textContent = getPendingCount() > 0 ? `${getPendingCount()} pending` : `${getAppliedCount()} applied`; };
     const updateFooterBtns = () => {
@@ -796,16 +796,16 @@ export function renderProposalCard(changes, msgEl) {
     applyAllBtn.addEventListener('click', async () => {
         const pending = editableChanges.filter((_, i) => itemStates[i] === 'pending');
         if (!pending.length) return;
-        applyAllBtn.disabled = true; applyAllBtn.textContent = 'Applying…';
+        applyAllBtn.disabled = true; applyAllBtn.textContent = translate('Applying…');
         try {
             const applied = await applyLBChanges(pending, card.dataset.for);
             itemStates.forEach((s, i) => { if (s === 'pending' && applied.includes(editableChanges[i])) { itemStates[i] = 'applied'; itemEls[i].classList.add('scp-lb-item-applied'); itemEls[i].querySelectorAll('button').forEach(b => { b.disabled = true; }); } });
             updateCountBadge(); updateFooterBtns(); syncBlockToMessage(); checkAllResolved();
             if (applied.length) toastr.success(t`[LB] ${applied.length} changes applied.`, EXT_DISPLAY);
-            applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';
+            applyAllBtn.disabled = false; applyAllBtn.textContent = translate('Apply All');
         } catch (e) {
             toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
-            applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';
+            applyAllBtn.disabled = false; applyAllBtn.textContent = translate('Apply All');
         }
     });
 
@@ -960,9 +960,9 @@ export async function refreshLorebookList() {
             <div class="scp-lb-book-check${checkState ? ' ' + checkState : ''}" data-book="${escHtml(name)}"></div>
             <div class="scp-lb-book-info">
                 <span class="scp-lb-book-name">${escHtml(displayName)}</span>
-                <span class="scp-lb-book-meta">${entryCount} entries</span>
+                <span class="scp-lb-book-meta">${escHtml(t`${entryCount} entries`)}</span>
             </div>
-            <span class="scp-lb-src-badge ${srcInfo.cls}" title="${srcInfo.title}" style="margin-left: auto;">${srcInfo.label}</span>`;
+            <span class="scp-lb-src-badge ${srcInfo.cls}" title="${escHtml(translate(srcInfo.title))}" style="margin-left: auto;">${srcInfo.label}</span>`;
             
         item.querySelector('.scp-lb-book-check').addEventListener('click', e => { e.stopPropagation(); toggleLorebookSelection(name); });
         item.addEventListener('click', () => viewLorebookEntries(name));
@@ -1032,7 +1032,11 @@ export async function renderEntryList(bookName, search = '') {
     }) : entries;
 
     const label = document.getElementById('scp-lb-entries-label');
-    if (label) label.textContent = `${getDisplayName(bookName)} — ${filtered.length}${filtered.length !== entries.length ? ` of ${entries.length}` : ''} entr${filtered.length !== 1 ? 'ies' : 'y'}`;
+    if (label) {
+        const count = filtered.length !== entries.length ? t`${filtered.length} of ${entries.length} entries`
+            : filtered.length === 1 ? translate('1 entry') : t`${filtered.length} entries`;
+        label.textContent = `${getDisplayName(bookName)} — ${count}`;
+    }
 
     const frag = document.createDocumentFragment();
     for (const entry of filtered) {
@@ -1165,7 +1169,7 @@ export async function saveEntryDetail() {
 
 export async function deleteEntryDetail() {
     if (!state.lbEntryDetailEntry || !state.lbEntryDetailBook) return;
-    const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Entry', message: `Delete "${state.lbEntryDetailEntry.comment || 'this entry'}"?` });
+    const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Entry', message: t`Delete "${state.lbEntryDetailEntry.comment || 'this entry'}"?` });
     if (!ok) return;
     const data = await fetchWorldInfoBook(state.lbEntryDetailBook);
     if (!data) return;
@@ -1254,7 +1258,7 @@ export function setupLorebookManagerListeners() {
     
     document.getElementById('scp-lb-reset-overrides')?.addEventListener('click', async () => {
         if (!state.lbActiveBook) return;
-        const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Overrides', message: `Reset all copilot injection overrides for "${state.lbActiveBook}"?` });
+        const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Overrides', message: t`Reset all copilot injection overrides for "${state.lbActiveBook}"?` });
         if (!ok) return;
         const s = getSettings();
         if (wiCache[state.lbActiveBook]) Object.values(wiCache[state.lbActiveBook].entries).forEach(e => { delete s.lorebookEntryOverrides[getEntryOverrideKey(state.lbActiveBook, e)]; });

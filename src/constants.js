@@ -302,6 +302,15 @@ export const KNOWN_DEFAULT_PROMPT_HASHES = [
     // ─── Changelog Data ──────────────────────────────────────────────────────────
 export const CHANGELOG = [
     {
+        version: '3.1.2',
+        date: '10/13/2026',
+        announce: true,
+        notes: [
+            '<strong>The whole interface is translatable</strong>, and the Korean translation covers all of it (the new Korean was written by Claude; corrections welcome).',
+            'Fixed: long tool descriptions in Settings > Tools no longer squeeze the tool names.',
+        ],
+    },
+    {
         version: '3.1.1',
         date: '10/13/2026',
         announce: true,

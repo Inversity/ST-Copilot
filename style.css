@@ -4500,6 +4500,7 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
 /* Tool toggle row in settings */
 .scp-tool-toggle-row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 10px;
     padding: 8px 10px;
@@ -4512,7 +4513,7 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
 
 .scp-tool-toggle-info { flex: 1; min-width: 0; }
 .scp-tool-toggle-name { font-size: 12px; font-weight: 600; color: var(--scp-text); }
-.scp-tool-toggle-desc { font-size: 10px; color: var(--scp-text-muted); margin-top: 2px; line-height: 1.4; }
+.scp-tool-toggle-desc { font-size: 10px; color: var(--scp-text-muted); margin-top: 2px; line-height: 1.4; flex-basis: 100%; }
 
 /* Tool call bubble in message */
 .scp-tool-call-wrap {

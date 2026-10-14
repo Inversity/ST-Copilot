@@ -124,12 +124,12 @@ function _buildCharListRow(entity, s) {
         const lock = document.createElement('span');
         lock.className = 'scp-char-row-lock';
         lock.innerHTML = I.lock;
-        lock.title = 'Adding Persona to context is managed in global settings.';
+        lock.title = translate('Adding Persona to context is managed in global settings.');
         row.appendChild(lock);
     } else {
         const cb = document.createElement('div');
         cb.className = `scp-char-row-cb${isCharacterExcluded(s, entity.id) ? '' : ' checked'}`;
-        cb.title = 'Include this character in AI context';
+        cb.title = translate('Include this character in AI context');
         cb.addEventListener('click', e => {
             e.stopPropagation();
             const wasIncluded = cb.classList.contains('checked');
@@ -183,7 +183,7 @@ function _renderCharList() {
     if (!charEntities.length) {
         const empty = document.createElement('div');
         empty.className = 'scp-char-list-empty';
-        empty.textContent = 'No characters found in this chat.';
+        empty.textContent = translate('No characters found in this chat.');
         listEl.appendChild(empty);
     }
 
@@ -212,14 +212,14 @@ function _buildBanner(entity) {
     nameEl.textContent = entity.name;
     const tokenEl = document.createElement('div');
     tokenEl.className = 'scp-char-banner-tokens';
-    tokenEl.textContent = '~… tkns total';
+    tokenEl.textContent = translate('~… tkns total');
     info.appendChild(nameEl);
     info.appendChild(tokenEl);
 
     banner.appendChild(avatar);
     banner.appendChild(info);
 
-    _calcTotalTokens(entity).then(n => { if (tokenEl.isConnected) tokenEl.textContent = `~${n} tkns total`; });
+    _calcTotalTokens(entity).then(n => { if (tokenEl.isConnected) tokenEl.textContent = t`~${n} tkns total`; });
 
     return banner;
 }
@@ -252,7 +252,7 @@ function _buildFieldRow(fieldDef, getValueFn, onDirtyFn) {
         try {
             const apiMod = await import('../api.js');
             const n = await apiMod.estimateTokens(text);
-            if (tokenSpan.isConnected) tokenSpan.textContent = `[~${n} tkns]`;
+            if (tokenSpan.isConnected) tokenSpan.textContent = t`[~${n} tkns]`;
         } catch (e) {
             if (tokenSpan.isConnected) tokenSpan.textContent = `[Error]`;
         }
@@ -357,7 +357,7 @@ function _buildCurrentInfoTab(entity, saveBtn, revertBtn) {
         section.className = 'scp-char-section';
         const h = document.createElement('div');
         h.className = 'scp-char-section-title';
-        h.textContent = group.title;
+        h.textContent = translate(group.title);
         section.appendChild(h);
         group.fields.forEach(f => {
             section.appendChild(_buildFieldRow(f, () => getCharFieldValue(charRef, f.key), (val, initialVal) => {
@@ -540,10 +540,10 @@ function _renderCharDetail(entity) {
     tabs.className = 'scp-char-tabs';
     const tabInfo = document.createElement('button');
     tabInfo.className = 'scp-char-tab active';
-    tabInfo.textContent = 'Current Info';
+    tabInfo.textContent = translate('Current Info');
     const tabOv = document.createElement('button');
     tabOv.className = 'scp-char-tab';
-    tabOv.textContent = 'Overrides';
+    tabOv.textContent = translate('Overrides');
     tabOv.disabled = entity.isPersona;
     tabs.appendChild(tabInfo);
     tabs.appendChild(tabOv);

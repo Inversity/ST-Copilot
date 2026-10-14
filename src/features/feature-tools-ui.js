@@ -3,6 +3,7 @@ import { escHtml } from '../utils/util-dom.js';
 import { _dbgAdd } from '../utils/util-debug.js';
 import { getSettings, saveSettings } from '../session.js';
 import { openSettingsPanel } from '../ui/ui-settings.js';
+import { translate } from '../utils/util-i18n.js';
 
 export function createToolCallEl(tc) {
     const item = document.createElement('div');
@@ -23,14 +24,14 @@ export function createToolCallEl(tc) {
 
     item.innerHTML = `<div class="scp-tool-call-header">
 <div class="scp-tool-call-icon ${statusClass}" ${isWarning ? `style="${colorStyle}"` : ''}>${iconHtml}</div>
-<div class="scp-tool-call-name">${escHtml(def?.label || tc.name)}</div>
-<div class="scp-tool-call-status ${statusClass}" ${isWarning ? `style="${colorStyle}"` : ''}>${spinnerHtml}${escHtml(statusLabel)}</div>
+<div class="scp-tool-call-name">${escHtml(def?.label ? translate(def.label) : tc.name)}</div>
+<div class="scp-tool-call-status ${statusClass}" ${isWarning ? `style="${colorStyle}"` : ''}>${spinnerHtml}${escHtml(translate(statusLabel))}</div>
 <div class="scp-tool-call-chevron">▶</div>
 </div>
 <div class="scp-tool-call-body">
-<div class="scp-tool-call-section-label">Input</div>
+<div class="scp-tool-call-section-label">${escHtml(translate('Input'))}</div>
 <pre class="scp-tool-call-args">${escHtml(JSON.stringify(tc.input, null, 2))}</pre>
-${tc.result !== undefined ? `<div class="scp-tool-call-section-label" style="margin-top:8px">Result</div><pre class="scp-tool-call-result${tc.status === 'error' ? ' error-result' : ''}" ${isWarning ? `style="${colorStyle}"` : ''}>${escHtml(typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result, null, 2))}</pre>` : ''}
+${tc.result !== undefined ? `<div class="scp-tool-call-section-label" style="margin-top:8px">${escHtml(translate('Result'))}</div><pre class="scp-tool-call-result${tc.status === 'error' ? ' error-result' : ''}" ${isWarning ? `style="${colorStyle}"` : ''}>${escHtml(typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result, null, 2))}</pre>` : ''}
 </div>`;
     item.querySelector('.scp-tool-call-header').addEventListener('click', () => {
         const isOpen = !item.classList.contains('open');
@@ -118,11 +119,11 @@ export function setupToolsSettingsUI() {
         const isAskUser = tool.id === 'ask_user';
         const isDisabledByStream = isAskUser && streamingOff;
         const iconHtml = `<i class="fa-solid ${tool.icon}" style="width:13px;text-align:center;margin-right:4px;opacity:.7"></i>`;
-        row.innerHTML = `<label class="scp-sp-check" style="flex:1${isDisabledByStream ? ';opacity:.45;pointer-events:none' : ''}"><input type="checkbox" id="scp-sp-tool-${tool.id}" ${isEnabled && !isDisabledByStream ? 'checked' : ''} ${isDisabledByStream ? 'disabled' : ''}><span class="scp-tool-toggle-name">${iconHtml}${escHtml(tool.label)}</span></label>`;
+        row.innerHTML = `<label class="scp-sp-check" style="flex:1${isDisabledByStream ? ';opacity:.45;pointer-events:none' : ''}"><input type="checkbox" id="scp-sp-tool-${tool.id}" ${isEnabled && !isDisabledByStream ? 'checked' : ''} ${isDisabledByStream ? 'disabled' : ''}><span class="scp-tool-toggle-name">${iconHtml}${escHtml(translate(tool.label))}</span></label>`;
         const descEl = document.createElement('div');
         descEl.className = 'scp-tool-toggle-desc';
         descEl.style.cssText = 'font-size:10px;color:var(--scp-text-muted);margin-top:2px;padding-left:20px';
-        descEl.textContent = isDisabledByStream ? '⚠ Unavailable — requires streaming to be enabled (not "Force Off")' : tool.description;
+        descEl.textContent = isDisabledByStream ? translate('⚠ Unavailable: needs streaming (Streaming is set to Force Off)') : translate(tool.description);
         if (isDisabledByStream) descEl.style.color = 'var(--scp-danger)';
         row.appendChild(descEl);
         if (!isDisabledByStream) {
@@ -163,12 +164,12 @@ export async function executeAskUser(input, msgEl) {
         wrap.appendChild(q);
         const inp = document.createElement('textarea');
         inp.className = 'scp-tool-ask-input';
-        inp.placeholder = 'Your answer…';
+        inp.placeholder = translate('Your answer…');
         inp.rows = 2;
         wrap.appendChild(inp);
         const btn = document.createElement('button');
         btn.className = 'scp-tool-ask-submit';
-        btn.textContent = 'Submit Answer';
+        btn.textContent = translate('Submit Answer');
         btn.addEventListener('click', () => {
             const answer = inp.value.trim();
             if (!answer) return;

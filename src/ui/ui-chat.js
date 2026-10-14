@@ -174,13 +174,13 @@ export function createHTMLBlockEl(code) {
     label.textContent = 'HTML';
     const previewBtn = document.createElement('button');
     previewBtn.className = 'scp-html-block-btn active';
-    previewBtn.textContent = 'Preview';
+    previewBtn.textContent = translate('Preview');
     const codeBtn = document.createElement('button');
     codeBtn.className = 'scp-html-block-btn';
-    codeBtn.textContent = 'Code';
+    codeBtn.textContent = translate('Code');
     const copyBtn = document.createElement('button');
     copyBtn.className = 'scp-html-block-btn';
-    copyBtn.textContent = 'Copy';
+    copyBtn.textContent = translate('Copy');
     copyBtn.addEventListener('click', e => { e.stopPropagation(); copyText(code); });
     toolbar.append(label, previewBtn, codeBtn, copyBtn);
 
@@ -563,7 +563,7 @@ export function createMsgEl(msg, onCopy, onEdit, onDelete, onRegen) {
     const makeBtn = (icon, label, cls, cb) => {
         const b = document.createElement('button');
         b.className = `scp-msg-btn${cls ? ' ' + cls : ''}`;
-        b.innerHTML = icon; b.title = label;
+        b.innerHTML = icon; b.title = translate(label);
         b.addEventListener('click', cb);
         return b;
     };
@@ -577,7 +577,7 @@ export function createMsgEl(msg, onCopy, onEdit, onDelete, onRegen) {
     const starBtn = makeBtn(isStarred ? I.starFill : I.star, isStarred ? 'Unstar' : 'Star message', `scp-msg-btn-star${isStarred ? ' starred' : ''}`, () => {
         const nowStarred = toggleStarMessage(msg.id);
         starBtn.innerHTML = nowStarred ? I.starFill : I.star;
-        starBtn.title = nowStarred ? 'Unstar' : 'Star message';
+        starBtn.title = translate(nowStarred ? 'Unstar' : 'Star message');
         starBtn.classList.toggle('starred', nowStarred);
         wrap.classList.toggle('scp-msg-starred', nowStarred);
         if (document.getElementById('scp-fav-panel')?.style.display !== 'none' && uiWdgMod) {
@@ -604,7 +604,7 @@ export function createMsgEl(msg, onCopy, onEdit, onDelete, onRegen) {
         const prevBtn = document.createElement('button');
         prevBtn.className = 'scp-swipe-btn scp-swipe-prev';
         prevBtn.innerHTML = I.chevronLeft;
-        prevBtn.title = 'Previous swipe';
+        prevBtn.title = translate('Previous swipe');
         prevBtn.disabled = true;
 
         const counter = document.createElement('span');
@@ -613,7 +613,7 @@ export function createMsgEl(msg, onCopy, onEdit, onDelete, onRegen) {
         const nextBtn = document.createElement('button');
         nextBtn.className = 'scp-swipe-btn scp-swipe-next';
         nextBtn.innerHTML = I.chevronRight;
-        nextBtn.title = 'New swipe (regenerate)';
+        nextBtn.title = translate('New swipe (regenerate)');
 
         prevBtn.addEventListener('click', async () => {
             if (prevBtn.disabled || state.generating) return;
@@ -1126,18 +1126,18 @@ export function handleEdit(wrapEl, msg) {
     const saveBtn = document.createElement('button');
     saveBtn.className = 'scp-edit-btn scp-edit-save';
     saveBtn.innerHTML = msg.role === 'user'
-        ? `${I.check}<span>Save & Resend</span>`
-        : `${I.check}<span>Save</span>`;
+        ? `${I.check}<span>${escHtml(translate('Save & Resend'))}</span>`
+        : `${I.check}<span>${escHtml(translate('Save'))}</span>`;
 
     const saveOnlyBtn = msg.role === 'user' ? document.createElement('button') : null;
     if (saveOnlyBtn) {
         saveOnlyBtn.className = 'scp-edit-btn scp-edit-cancel';
-        saveOnlyBtn.innerHTML = `${I.check}<span>Save</span>`;
+        saveOnlyBtn.innerHTML = `${I.check}<span>${escHtml(translate('Save'))}</span>`;
     }
 
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'scp-edit-btn scp-edit-cancel';
-    cancelBtn.innerHTML = `${I.x}<span>Cancel</span>`;
+    cancelBtn.innerHTML = `${I.x}<span>${escHtml(translate('Cancel'))}</span>`;
 
     row.appendChild(saveBtn);
     if (saveOnlyBtn) row.appendChild(saveOnlyBtn);

@@ -1,6 +1,6 @@
 {
   "about": "Every screen, panel and card of ST-Copilot, with how to reach it, what it does, its controls, the source that builds it, its screenshot (docs/screens/<screen>.jpg, made by tools/ui-screens.mjs) and open findings. Built for the UI review; keep it in step with the code: a new screen or setting gets a node here.",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "builtFrom": "9b1e8ff",
   "findingTypes": {
     "bug": "Broken behaviour or markup",
@@ -428,7 +428,8 @@
           "type": "i18n",
           "text": "Hover button titles (Copy, Edit, Regen, Delete, Star message, Unstar, Continue response) and the swipe titles (Previous swipe, New swipe) are plain strings, not translated.",
           "ref": "src/ui/ui-chat.js:571",
-          "id": "message-assistant-1"
+          "id": "message-assistant-1",
+          "fixedIn": "3.1.2"
         }
       ]
     },
@@ -458,7 +459,8 @@
           "type": "i18n",
           "text": "The edit buttons Save & Resend / Save / Cancel are not translated.",
           "ref": "src/ui/ui-chat.js:1129",
-          "id": "message-user-1"
+          "id": "message-user-1",
+          "fixedIn": "3.1.2"
         }
       ]
     },
@@ -1027,7 +1029,8 @@
           "type": "i18n",
           "text": "Theme field labels (Background, Accent, Header BG, …) and the theme preset names are not translated.",
           "ref": "src/constants.js:767",
-          "id": "settings-interface-3"
+          "id": "settings-interface-3",
+          "fixedIn": "3.1.2"
         }
       ]
     },
@@ -1241,7 +1244,15 @@
           "type": "i18n",
           "text": "Tool names and descriptions, and the \"requires streaming\" warning for Ask User, are not translated.",
           "ref": "src/features/feature-tools-ui.js:125",
-          "id": "settings-tools-3"
+          "id": "settings-tools-3",
+          "fixedIn": "3.1.2"
+        },
+        {
+          "type": "bug",
+          "id": "settings-tools-4",
+          "fixedIn": "3.1.2",
+          "text": "Found while checking the Korean UI: a tool's name and description sat side by side, so a long description squeezed the name to one character per line. The description now gets its own line.",
+          "ref": "style.css (.scp-tool-toggle-row)"
         }
       ]
     },
@@ -1322,7 +1333,8 @@
           "type": "i18n",
           "text": "\"New Entry\", \"Select a lorebook\" and the entry count line are not translated.",
           "ref": "lorebook_manager.html:43",
-          "id": "lorebook-manager-1"
+          "id": "lorebook-manager-1",
+          "fixedIn": "3.1.2"
         },
         {
           "type": "dead",
@@ -1370,7 +1382,8 @@
           "type": "i18n",
           "text": "The initial \"Entry\" title and \"Enabled\" status are not translated in the template.",
           "ref": "lorebook_manager.html:60",
-          "id": "lorebook-entry-detail-1"
+          "id": "lorebook-entry-detail-1",
+          "fixedIn": "3.1.2"
         }
       ]
     },
@@ -1413,7 +1426,8 @@
           "type": "i18n",
           "text": "Tab names \"Current Info\" / \"Overrides\" and the field group labels are not translated.",
           "ref": "src/features/feature-character-manager-ui.js:529",
-          "id": "character-manager-1"
+          "id": "character-manager-1",
+          "fixedIn": "3.1.2"
         },
         {
           "type": "ux",
@@ -1515,7 +1529,8 @@
           "type": "i18n",
           "text": "The title \"Raw Context Payload\" is not translated.",
           "ref": "window.html:122",
-          "id": "inspector-1"
+          "id": "inspector-1",
+          "fixedIn": "3.1.2"
         }
       ]
     },
@@ -1565,7 +1580,8 @@
           "type": "i18n",
           "text": "\"Apply\" and the initial \"0 selected\" are not translated.",
           "ref": "chat_picker.html:16",
-          "id": "chat-picker-1"
+          "id": "chat-picker-1",
+          "fixedIn": "3.1.2"
         }
       ]
     },

@@ -4,7 +4,7 @@ import { _dbgAdd } from '../utils/util-debug.js';
 import { _getCaptionViaExtension } from '../integrations/integ-captioning.js';
 import { getSettings, getCurrentSession } from '../session.js';
 import { EXT_DISPLAY } from '../constants.js';
-import { t } from '../utils/util-i18n.js';
+import { t, translate } from '../utils/util-i18n.js';
 
 import { updateMsgCount } from '../ui/ui-chat.js';
 
@@ -115,7 +115,7 @@ export function _renderAttachmentPreviews() {
         const removeBtn = document.createElement('button');
         removeBtn.className = 'scp-att-remove';
         removeBtn.innerHTML = '×';
-        removeBtn.title = 'Remove';
+        removeBtn.title = translate('Remove');
         removeBtn.addEventListener('click', e => {
             e.stopPropagation();
             _dbgAdd('ATTACHMENT_REMOVE', { id: att.id });

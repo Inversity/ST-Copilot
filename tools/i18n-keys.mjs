@@ -2,7 +2,7 @@
 // and translations whose key nothing uses any more (usually text that was reworded, so the
 // translation should move to the new key).
 //
-//   node tools/i18n-keys.mjs [--locale i18n/ko-kr.json] [--json]
+//   node tools/i18n-keys.mjs [--locale i18n/ko-kr.json] [--json] [--keys]
 //
 // Keys are the English source text, as SillyTavern's i18n uses them: data-i18n values in
 // the HTML templates and in strings built by the code, translate('...'), and t`...` with
@@ -58,11 +58,43 @@ for (const file of files) {
     }
 }
 
+// Keys the code translates through a variable, which the patterns above cannot see.
+// showCustomDialog() translates its title and message itself.
+for (const file of files.filter(f => f.endsWith('.js'))) {
+    const text = fs.readFileSync(file, 'utf8');
+    for (const line of text.split('\n')) {
+        if (!line.includes('showCustomDialog(')) continue;
+        for (const m of line.matchAll(/\b(?:title|message):\s*(['"])((?:\\.|(?!\1)[^\\])*)\1/g)) add(unescapeJs(m[2]), `${file} (dialog)`);
+    }
+}
+// Label tables rendered with translate(x.label) and similar: file -> pattern for the literals.
+const LABEL_TABLES = {
+    'src/features/feature-stats.js': /\blabel:\s*'([^']+)'/g,
+    'src/features/feature-character-manager-ui.js': /\b(?:label|title):\s*'([^']+)'/g,
+    'src/features/feature-lorebook-ui.js': /\btitle:\s*'([^']+)'/g,
+    'src/features/feature-tools-ui.js': /'(Running|Error|Unavailable|Done)'/g,
+    'src/features/feature-character-ui.js': /\b(?:name|tags|description|personality|scenario|first_mes|mes_example|authors_note|user_persona|alternate_greetings|system_prompt|post_history_instructions):\s*'([^']+)'/g,
+};
+for (const [file, re] of Object.entries(LABEL_TABLES)) {
+    if (!fs.existsSync(file)) continue;
+    for (const m of fs.readFileSync(file, 'utf8').matchAll(re)) add(m[1], `${file} (label table)`);
+}
+try {
+    const C = await import(new URL('../src/constants.js', import.meta.url));
+    for (const d of C.TOOL_DEFINITIONS || []) { add(d.label, 'TOOL_DEFINITIONS'); add(d.description, 'TOOL_DEFINITIONS'); }
+    for (const p of Object.values(C.THEME_PRESETS || {})) add(p.label, 'THEME_PRESETS');
+    for (const v of C.THEME_VAR_DEFS || []) add(v.label, 'THEME_VAR_DEFS');
+} catch (e) {
+    console.error(`(constants not loaded: ${e.message})`);
+}
+
 const locale = JSON.parse(fs.readFileSync(LOCALE, 'utf8'));
 const missing = [...keys].filter(([k]) => !Object.hasOwn(locale, k));
 const unused = Object.keys(locale).filter(k => !keys.has(k));
 
-if (args.json) {
+if (args.keys) {
+    console.log(JSON.stringify([...keys.keys()]));
+} else if (args.json) {
     console.log(JSON.stringify({ missing: Object.fromEntries(missing), unused }, null, 2));
 } else {
     console.log(`${keys.size} keys in the UI, ${Object.keys(locale).length} in ${LOCALE}`);

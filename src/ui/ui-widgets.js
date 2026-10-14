@@ -88,7 +88,7 @@ export function showQPIconPicker(anchorEl, currentIcon, onSelect) {
 let _activePresetPanel = null;
 
 export function openPresetDropdown(triggerEl, groups, onSelect, opts = {}) {
-    const { placeholder = 'Search…', width = 320, emptyText = 'Nothing here' } = opts;
+    const { placeholder = translate('Search…'), width = 320, emptyText = translate('Nothing here') } = opts;
 
     if (_activePresetPanel) {
         _activePresetPanel.remove();
@@ -134,7 +134,7 @@ export function openPresetDropdown(triggerEl, groups, onSelect, opts = {}) {
             if (group.label) {
                 const hdr = document.createElement('div');
                 hdr.className = 'scp-pdd-group-label';
-                hdr.textContent = group.label;
+                hdr.textContent = translate(group.label);
                 listEl.appendChild(hdr);
             }
             filtered.forEach(item => {
@@ -259,7 +259,7 @@ export function buildPromptPresetManager(containerEl, getTextFn, setTextFn, dict
         openPresetDropdown(trigger, groups, (value, name, item) => {
             setTextFn(value);
             setActive(name, item._source || 'custom');
-        }, { placeholder: 'Search presets…', width: 360, emptyText: 'No presets saved yet' });
+        }, { placeholder: translate('Search presets…'), width: 360, emptyText: translate('No presets saved yet') });
     });
 
     const mkBtn = (icon, title, cls, cb) => {
@@ -299,7 +299,7 @@ export function buildPromptPresetManager(containerEl, getTextFn, setTextFn, dict
 
     const deleteBtn = mkBtn('trash', 'Delete selected custom preset', 'danger', async () => {
         if (!_activeName || _activeSource !== 'custom') { toastr.info(translate('Only custom presets can be deleted.'), EXT_DISPLAY); return; }
-        const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Preset', message: `Delete "${_activeName}"?` });
+        const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Preset', message: t`Delete "${_activeName}"?` });
         if (!ok) return;
         delete s[dictKey][_activeName];
         saveSettings();
@@ -373,7 +373,7 @@ export function buildQPSetManager(containerEl, onSetLoaded) {
             renderQuickPromptsBar();
             if (onSetLoaded) onSetLoaded();
             toastr.success(t`Loaded set "${escHtml(value)}"`, EXT_DISPLAY);
-        }, { placeholder: 'Search sets…', width: 340, emptyText: 'No sets saved yet. Save one below.' });
+        }, { placeholder: translate('Search sets…'), width: 340, emptyText: translate('No sets saved yet. Save one below.') });
     });
 
     const mkBtn = (icon, title, cls, cb) => {
@@ -425,7 +425,7 @@ export function buildQPSetManager(containerEl, onSetLoaded) {
 
     const deleteBtn = mkBtn('trash', 'Delete selected set', 'danger', async () => {
         if (!_activeName) { toastr.info(translate('Select a set first.'), EXT_DISPLAY); return; }
-        const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Set', message: `Delete set "${_activeName}"?` });
+        const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Set', message: t`Delete set "${_activeName}"?` });
         if (!ok) return;
         delete s.quickPromptSets[_activeName];
         if (s.activeQuickPromptSet === _activeName) s.activeQuickPromptSet = '';
@@ -676,7 +676,7 @@ export function renderFavoritesPanel() {
             if (msgEl) {
                 msgEl.classList.remove('scp-msg-starred');
                 const btn = msgEl.querySelector('.scp-msg-btn-star');
-                if (btn) { btn.classList.remove('starred'); btn.title = 'Star message'; }
+                if (btn) { btn.classList.remove('starred'); btn.title = translate('Star message'); }
             }
             renderFavoritesPanel();
         });
@@ -1151,7 +1151,7 @@ export function buildSoundSettingsUI(container) {
         typeSel.innerHTML = '';
         
         const groupPreset = document.createElement('optgroup');
-        groupPreset.label = 'Presets';
+        groupPreset.label = translate('Presets');
         for (const [key, preset] of Object.entries(_SOUND_PRESETS)) {
             const opt = document.createElement('option');
             opt.value = key; opt.textContent = translate(preset.label);
@@ -1161,7 +1161,7 @@ export function buildSoundSettingsUI(container) {
         
         if (Object.keys(s.customSounds).length > 0) {
             const groupCustom = document.createElement('optgroup');
-            groupCustom.label = 'Custom Sounds';
+            groupCustom.label = translate('Custom Sounds');
             for (const [key, snd] of Object.entries(s.customSounds)) {
                 const opt = document.createElement('option');
                 opt.value = key; opt.textContent = snd.name;
@@ -1268,7 +1268,7 @@ export function buildSoundSettingsUI(container) {
     const volLbl = document.createElement(isSP ? 'label' : 'b');
     volLbl.className = isSP ? 'scp-sp-label' : '';
     if (!isSP) volLbl.style.fontSize = '12px';
-    volLbl.textContent = 'Volume';
+    volLbl.textContent = translate('Volume');
 
     const volWrap = document.createElement('div');
     volWrap.className = isSP ? 'scp-sp-row' : '';

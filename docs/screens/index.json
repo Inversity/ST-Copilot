@@ -1,19 +1,13 @@
 {
-  "captured": "2026-10-13T21:25:55.124Z",
+  "captured": "2026-10-14T00:18:50.086Z",
   "st": "http://localhost:8001",
   "user": "fresh-user-test",
   "screens": [
     {
-      "id": "session-menu",
-      "file": "docs/screens/session-menu.jpg",
-      "width": 560,
-      "height": 840
-    },
-    {
-      "id": "session-new-dialog",
-      "file": "docs/screens/session-new-dialog.jpg",
-      "width": 500,
-      "height": 193
+      "id": "settings-tools",
+      "file": "docs/screens/settings-tools.jpg",
+      "width": 760,
+      "height": 1534
     }
   ]
 }

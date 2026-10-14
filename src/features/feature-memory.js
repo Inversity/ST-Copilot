@@ -3,7 +3,7 @@ import { getSettings, getEffectiveSettings, saveSettings, getCurrentSession, get
 import { _dbgAdd } from '../utils/util-debug.js';
 import { escHtml, showCustomDialog } from '../utils/util-dom.js';
 import { _ensureWrapped } from '../utils/util-text.js';
-import { translate } from '../utils/util-i18n.js';
+import { translate, t } from '../utils/util-i18n.js';
 
 export function genMemoryId() { 
     return 'mem_' + Date.now() + '_' + Math.random().toString(36).slice(2,6); 
@@ -290,7 +290,7 @@ export function renderMemoryList() {
         valEl.textContent = isLong ? mem.value.slice(0, 120) + '…' : mem.value;
         if (isLong) {
             valEl.style.cursor = 'pointer';
-            valEl.title = 'Click to expand';
+            valEl.title = translate('Click to expand');
             let expanded = false;
             valEl.addEventListener('click', e => {
                 e.stopPropagation();
@@ -316,7 +316,7 @@ export function renderMemoryList() {
         
         item.querySelector('.scp-memory-item-del').addEventListener('click', async e => {
             e.stopPropagation();
-            const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Memory', message: `Delete memory "${mem.key}"?` });
+            const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Memory', message: t`Delete memory "${mem.key}"?` });
             if (!ok) return;
             deleteMemory(mem.id);
             renderMemoryList();
@@ -536,7 +536,7 @@ export function setupMemorySettingsUI() {
         newClearBtn.addEventListener('click', async () => {
             const count = Object.keys(getMemories()).length;
             if (!count) { toastr.info(translate('No memories to clear.'), EXT_DISPLAY); return; }
-            const ok = await showCustomDialog({ type: 'confirm', title: translate('Clear All Memories'), message: `Delete all ${count} stored memories? This cannot be undone.`, delayConfirm: 2 });
+            const ok = await showCustomDialog({ type: 'confirm', title: translate('Clear All Memories'), message: t`Delete all ${count} stored memories? This cannot be undone.`, delayConfirm: 2 });
             if (!ok) return;
             clearAllMemories();
             renderMemoryList();

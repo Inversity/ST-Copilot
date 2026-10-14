@@ -35,12 +35,12 @@
 
             <div class="scp-lb-main">
                 <div class="scp-lb-main-toolbar">
-                    <span class="scp-lb-entries-label" id="scp-lb-entries-label">Select a lorebook</span>
+                    <span class="scp-lb-entries-label" id="scp-lb-entries-label" data-i18n="Select a lorebook">Select a lorebook</span>
                     <div class="scp-lb-main-actions" id="scp-lb-main-actions" style="display:none">
                         <button class="scp-lb-bulk-btn" id="scp-lb-enable-all" data-i18n="Force All On">Force All On</button>
                         <button class="scp-lb-bulk-btn" id="scp-lb-disable-all" data-i18n="Force All Off">Force All Off</button>
                         <button class="scp-lb-bulk-btn" id="scp-lb-reset-overrides" data-i18n="Reset All">Reset All</button>
-                        <button class="scp-lb-bulk-btn scp-lb-add-btn" id="scp-lb-add-entry">${I.plus} New Entry</button>
+                        <button class="scp-lb-bulk-btn scp-lb-add-btn" id="scp-lb-add-entry">${I.plus} <span data-i18n="New Entry">New Entry</span></button>
                     </div>
                 </div>
                 <div class="scp-lb-ctx-legend" id="scp-lb-ctx-legend" style="display:none">
@@ -57,7 +57,7 @@
                     <div class="scp-lb-entry-detail" id="scp-lb-entry-detail" style="display:none">
                         <div class="scp-lb-detail-header">
                             <button class="scp-lb-back-btn" id="scp-lb-back" data-i18n="← Back">← Back</button>
-                            <span class="scp-lb-detail-title" id="scp-lb-detail-title">Entry</span>
+                            <span class="scp-lb-detail-title" id="scp-lb-detail-title" data-i18n="Entry">Entry</span>
                             <div class="scp-lb-detail-actions">
                                 <button class="scp-lb-detail-btn" id="scp-lb-detail-copy" title="Copy content" data-i18n="[title]Copy content">${I.copy}</button>
                                 <button class="scp-lb-detail-btn scp-lb-detail-save-btn" id="scp-lb-detail-save" title="Save" data-i18n="[title]Save">${I.check} <span data-i18n="Save">Save</span></button>
@@ -80,7 +80,7 @@
                             <div class="scp-lb-detail-meta-row">
                                 <div class="scp-lb-detail-meta-item">
                                     <span class="scp-lb-detail-label" data-i18n="Lorebook Status">Lorebook Status</span>
-                                    <div class="scp-lb-detail-status" id="scp-lb-detail-lb-status" title="Click to toggle in lorebook" data-i18n="[title]Click to toggle in lorebook">Enabled</div>
+                                    <div class="scp-lb-detail-status" id="scp-lb-detail-lb-status" title="Click to toggle in lorebook" data-i18n="[title]Click to toggle in lorebook;Enabled">Enabled</div>
                                 </div>
                                 <div class="scp-lb-detail-meta-item">
                                     <span class="scp-lb-detail-label" data-i18n="Copilot Context Injection">Copilot Context Injection</span>

@@ -388,14 +388,14 @@ export function buildThemeEditor(containerOverride) {
         <button class="scp-profile-icon-btn" id="scp-theme-import" title="Import theme" data-i18n="[title]Import theme"><i class="fa-solid fa-file-import"></i></button>`;
     container.appendChild(profileRow);
     const sel = profileRow.querySelector('#scp-theme-profile-select');
-    const optGrpDefault = document.createElement('optgroup'); optGrpDefault.label = 'Default Presets';
+    const optGrpDefault = document.createElement('optgroup'); optGrpDefault.label = translate('Default Presets');
     for (const [key, preset] of Object.entries(THEME_PRESETS)) {
-        const opt = document.createElement('option'); opt.value = `__preset__${key}`; opt.textContent = preset.label; optGrpDefault.appendChild(opt);
+        const opt = document.createElement('option'); opt.value = `__preset__${key}`; opt.textContent = translate(preset.label); optGrpDefault.appendChild(opt);
     }
     sel.appendChild(optGrpDefault);
     const userKeys = Object.keys(s.savedThemes);
     if (userKeys.length) {
-        const optGrpCustom = document.createElement('optgroup'); optGrpCustom.label = 'Custom Themes';
+        const optGrpCustom = document.createElement('optgroup'); optGrpCustom.label = translate('Custom Themes');
         for (const name of userKeys) {
             const opt = document.createElement('option'); opt.value = name; opt.textContent = name;
             if (name === s.activeThemeProfile) opt.selected = true;
@@ -453,7 +453,7 @@ export function buildThemeEditor(containerOverride) {
     });
     profileRow.querySelector('#scp-theme-delete').addEventListener('click', async () => {
         const val = sel.value; if (!val || val.startsWith('__preset__')) { toastr.info(translate('Select a custom theme to delete.'), EXT_DISPLAY); return; }
-        const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Theme', message: `Delete "${val}"?` }); if (!ok) return;
+        const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Theme', message: t`Delete "${val}"?` }); if (!ok) return;
         const s2 = getSettings(); delete s2.savedThemes[val]; s2.activeThemeProfile = Object.keys(s2.savedThemes)[0] || '';
         s2.customTheme = s2.activeThemeProfile ? { ...s2.savedThemes[s2.activeThemeProfile] } : { ...THEME_PRESETS.default };
         saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(translate('Deleted.'), EXT_DISPLAY);
@@ -482,7 +482,7 @@ export function buildThemeEditor(containerOverride) {
     const windowEl = document.getElementById('scp-window');
     for (const def of THEME_VAR_DEFS) {
         const item = document.createElement('div'); item.className = 'scp-theme-var-item';
-        const label = document.createElement('div'); label.className = 'scp-theme-var-label'; label.textContent = def.label;
+        const label = document.createElement('div'); label.className = 'scp-theme-var-label'; label.textContent = translate(def.label);
         const wrap = document.createElement('div'); wrap.className = 'scp-theme-var-wrap';
         const isColorKey = _COLOR_KEYS.has(def.key); const isFontKey = def.key === 'font' || def.key === 'fontSize';
         const preview = document.createElement('div'); preview.className = 'scp-theme-var-preview';
@@ -499,7 +499,7 @@ export function buildThemeEditor(containerOverride) {
             if (selVal.startsWith('__preset__')) return (THEME_PRESETS[selVal.replace('__preset__', '')] || THEME_PRESETS.default)[def.key] ?? '';
             return THEME_PRESETS.default[def.key] ?? '';
         };
-        const resetBtn = document.createElement('button'); resetBtn.className = 'scp-theme-var-reset'; resetBtn.title = 'Reset to profile default'; resetBtn.textContent = '↺';
+        const resetBtn = document.createElement('button'); resetBtn.className = 'scp-theme-var-reset'; resetBtn.title = translate('Reset to profile default'); resetBtn.textContent = '↺';
         const updateResetState = val => { resetBtn.disabled = !val || val === getDefaultVal(); };
         updateResetState(curVal);
         let _fontDebounce = null;
@@ -1124,7 +1124,7 @@ export function setupSettingsPanelListeners() {
     document.getElementById('scp-sp-profile-delete')?.addEventListener('click', async () => {
         const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return;
         const s = getSettings(); if (Object.keys(s.profiles).length <= 1) { toastr.warning(translate('Cannot delete the last profile.'), EXT_DISPLAY); return; }
-        const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Profile', message: `Delete "${sel.value}"?` }); if (!ok) return;
+        const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Profile', message: t`Delete "${sel.value}"?` }); if (!ok) return;
         deleteProfile(sel.value); refreshSPProfilesDropdown(); refreshProfilesDropdown(); updateSPBindingSection(); toastr.success(translate('Deleted.'), EXT_DISPLAY);
     });
     document.getElementById('scp-sp-bind-char')?.addEventListener('click', () => {
@@ -1307,7 +1307,7 @@ export function buildBackgroundSettingsUI(container) {
     const renderDropdown = () => {
         typeSel.innerHTML = '<option value="none" data-i18n="None">None</option>';
         if (Object.keys(s.customBackgrounds).length) {
-            const grp = document.createElement('optgroup'); grp.label = 'Custom Backgrounds';
+            const grp = document.createElement('optgroup'); grp.label = translate('Custom Backgrounds');
             for (const [key, bg] of Object.entries(s.customBackgrounds)) { const o = document.createElement('option'); o.value = key; o.textContent = bg.name; grp.appendChild(o); }
             typeSel.appendChild(grp);
         }
@@ -1385,19 +1385,19 @@ export function buildQPSettingsUI(container) {
         if (!prompts.length) { list.innerHTML = `<div style="font-size:11px;color:var(--scp-text-muted);text-align:center;padding:10px 0" data-i18n="No quick prompts yet. Add one below.">No quick prompts yet. Add one below.</div>`; }
         prompts.forEach((qp, idx) => {
             const row = document.createElement('div'); row.className = 'scp-qp-settings-row';
-            const iconBtn = document.createElement('button'); iconBtn.className = 'scp-qp-settings-icon-btn'; iconBtn.textContent = qp.icon || '⚡'; iconBtn.title = 'Change icon';
+            const iconBtn = document.createElement('button'); iconBtn.className = 'scp-qp-settings-icon-btn'; iconBtn.textContent = qp.icon || '⚡'; iconBtn.title = translate('Change icon');
             import('./ui-widgets.js').then(mod => {
                 iconBtn.addEventListener('click', e => { e.stopPropagation(); mod.showQPIconPicker(iconBtn, qp.icon || '⚡', emoji => { getSettings().quickPrompts[idx].icon = emoji; saveSettings(); iconBtn.textContent = emoji; mod.renderQuickPromptsBar(); }); });
             });
-            const labelInput = document.createElement('input'); labelInput.type = 'text'; labelInput.className = 'scp-qp-settings-label-input scp-sp-input'; labelInput.placeholder = 'Label'; labelInput.value = qp.label || '';
+            const labelInput = document.createElement('input'); labelInput.type = 'text'; labelInput.className = 'scp-qp-settings-label-input scp-sp-input'; labelInput.placeholder = translate('Label'); labelInput.value = qp.label || '';
             labelInput.addEventListener('input', () => { getSettings().quickPrompts[idx].label = labelInput.value; saveSettings(); import('./ui-widgets.js').then(m => m.renderQuickPromptsBar()); });
-            const moveUpBtn = document.createElement('button'); moveUpBtn.className = 'scp-qp-settings-move'; moveUpBtn.textContent = '↑'; moveUpBtn.title = 'Move up'; moveUpBtn.disabled = idx === 0;
+            const moveUpBtn = document.createElement('button'); moveUpBtn.className = 'scp-qp-settings-move'; moveUpBtn.textContent = '↑'; moveUpBtn.title = translate('Move up'); moveUpBtn.disabled = idx === 0;
             moveUpBtn.addEventListener('click', () => { if (idx === 0) return; const arr = getSettings().quickPrompts; [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]]; saveSettings(); renderList(); import('./ui-widgets.js').then(m => m.renderQuickPromptsBar()); });
-            const moveDnBtn = document.createElement('button'); moveDnBtn.className = 'scp-qp-settings-move'; moveDnBtn.textContent = '↓'; moveDnBtn.title = 'Move down'; moveDnBtn.disabled = idx === prompts.length - 1;
+            const moveDnBtn = document.createElement('button'); moveDnBtn.className = 'scp-qp-settings-move'; moveDnBtn.textContent = '↓'; moveDnBtn.title = translate('Move down'); moveDnBtn.disabled = idx === prompts.length - 1;
             moveDnBtn.addEventListener('click', () => { const arr = getSettings().quickPrompts; if (idx >= arr.length - 1) return; [arr[idx], arr[idx+1]] = [arr[idx+1], arr[idx]]; saveSettings(); renderList(); import('./ui-widgets.js').then(m => m.renderQuickPromptsBar()); });
             const delBtn = document.createElement('button'); delBtn.className = 'scp-qp-settings-del'; delBtn.innerHTML = I.trash; delBtn.title = translate('Delete');
-            delBtn.addEventListener('click', async () => { const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Prompt', message: `Delete "${qp.label || 'this prompt'}"?` }); if (!ok) return; getSettings().quickPrompts.splice(idx, 1); saveSettings(); renderList(); import('./ui-widgets.js').then(m => m.renderQuickPromptsBar()); });
-            const textArea = document.createElement('textarea'); textArea.className = 'scp-qp-settings-text scp-sp-textarea'; textArea.placeholder = 'Prompt text… (supports {{user}}, {{char}} macros)'; textArea.rows = 2; textArea.value = qp.text || '';
+            delBtn.addEventListener('click', async () => { const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Prompt', message: t`Delete "${qp.label || 'this prompt'}"?` }); if (!ok) return; getSettings().quickPrompts.splice(idx, 1); saveSettings(); renderList(); import('./ui-widgets.js').then(m => m.renderQuickPromptsBar()); });
+            const textArea = document.createElement('textarea'); textArea.className = 'scp-qp-settings-text scp-sp-textarea'; textArea.placeholder = translate('Prompt text… (supports {{user}}, {{char}} macros)'); textArea.rows = 2; textArea.value = qp.text || '';
             textArea.addEventListener('input', () => { getSettings().quickPrompts[idx].text = textArea.value; saveSettings(); });
             const controls = document.createElement('div'); controls.className = 'scp-qp-settings-controls'; controls.appendChild(moveUpBtn); controls.appendChild(moveDnBtn); controls.appendChild(delBtn);
             const top = document.createElement('div'); top.className = 'scp-qp-settings-row-top'; top.appendChild(iconBtn); top.appendChild(labelInput); top.appendChild(controls);

@@ -755,7 +755,7 @@ export function importSession(onSuccessCallback) {
             const ok = await showCustomDialog({
                 type: 'confirm',
                 title: 'Import Session',
-                message: `Import session "${data.session.name || 'unnamed'}"${data.charName ? ` (from ${data.charName})` : ''}? It will be added to the current chat metadata.`,
+                message: t`Import session "${data.session.name || 'unnamed'}"${data.charName ? ` (from ${data.charName})` : ''}? It will be added to the current chat metadata.`,
             });
             if (!ok) return;
             const bucket = getChatBucket();

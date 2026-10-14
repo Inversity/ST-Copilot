@@ -305,6 +305,15 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       // ─── Changelog Data ──────────────────────────────────────────────────────────
   const CHANGELOG = [
       {
+          version: '3.1.2',
+          date: '10/13/2026',
+          announce: true,
+          notes: [
+              '<strong>The whole interface is translatable</strong>, and the Korean translation covers all of it (the new Korean was written by Claude; corrections welcome).',
+              'Fixed: long tool descriptions in Settings > Tools no longer squeeze the tool names.',
+          ],
+      },
+      {
           version: '3.1.1',
           date: '10/13/2026',
           announce: true,
@@ -2569,7 +2578,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
               const ok = await showCustomDialog({
                   type: 'confirm',
                   title: 'Import Session',
-                  message: `Import session "${data.session.name || 'unnamed'}"${data.charName ? ` (from ${data.charName})` : ''}? It will be added to the current chat metadata.`,
+                  message: t`Import session "${data.session.name || 'unnamed'}"${data.charName ? ` (from ${data.charName})` : ''}? It will be added to the current chat metadata.`,
               });
               if (!ok) return;
               const bucket = getChatBucket();
@@ -4610,7 +4619,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
 
       const summaryRow = document.createElement('div');
       summaryRow.style.cssText = 'font-size:12px;font-weight:600;color:var(--scp-text);margin-bottom:4px';
-      summaryRow.textContent = `System Notification: ${summaryStr}`;
+      summaryRow.textContent = t`System Notification: ${summaryStr}`;
       contentEl.appendChild(summaryRow);
 
       if (lines.length) {
@@ -4618,7 +4627,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           details.className = 'scp-hist-details';
           const summary = document.createElement('summary');
           summary.className = 'scp-hist-summary';
-          summary.textContent = 'Show details';
+          summary.textContent = translate('Show details');
           details.appendChild(summary);
 
           const detailsBody = document.createElement('div');
@@ -4678,7 +4687,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       const closeBtn = document.createElement('button');
       closeBtn.className = 'scp-msg-btn scp-lb-history-close';
       closeBtn.innerHTML = I.x;
-      closeBtn.title = 'Dismiss notification';
+      closeBtn.title = translate('Dismiss notification');
       closeBtn.addEventListener('click', () => {
           const session = getCurrentSession();
           deleteMsg(session, msg.id);
@@ -4944,7 +4953,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
 
       const dismissBtn = document.createElement('button');
       dismissBtn.className = 'scp-lb-proposal-dismiss';
-      dismissBtn.innerHTML = I.x; dismissBtn.title = 'Dismiss';
+      dismissBtn.innerHTML = I.x; dismissBtn.title = translate('Dismiss');
       dismissBtn.addEventListener('click', () => {
           const dismissedChanges = editableChanges.filter((_, i) => itemStates[i] === 'pending');
           _dbgAdd('LB_PROPOSAL_ACTION', { action: 'dismissed', msgId: card.dataset.for, dismissedCount: dismissedChanges.length });
@@ -4972,7 +4981,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
 
           const warnEl = document.createElement('div');
           warnEl.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;width:100%;display:none;cursor:pointer;';
-          warnEl.title = 'Click to open the edit panel and fix manually';
+          warnEl.title = translate('Click to open the edit panel and fix manually');
           itemMeta.appendChild(warnEl);
 
           const _activeBooks = getActiveLorebookNames();
@@ -4987,7 +4996,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
 
           const worldTriggerText = document.createElement('span');
           worldTriggerText.className = 'scp-lb-proposal-world-trigger-text';
-          worldTriggerText.textContent = `in ${getDisplayName(_currentBook) || '?'}`;
+          worldTriggerText.textContent = t`in ${getDisplayName(_currentBook) || '?'}`;
 
           const worldChevronEl = document.createElement('span');
           worldChevronEl.className = 'scp-lb-proposal-world-chevron';
@@ -5006,7 +5015,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
               if (!items.length) {
                   const empty = document.createElement('div');
                   empty.className = 'scp-lb-proposal-world-empty';
-                  empty.textContent = 'No active lorebooks';
+                  empty.textContent = translate('No active lorebooks');
                   worldPanel.appendChild(empty);
               }
               items.forEach(name => {
@@ -5068,7 +5077,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
                       const origKeys = orig.key || [];
                       editableChanges[ci].triggers = [...origKeys];
                       const tEl = item.querySelector('.scp-lb-proposal-triggers');
-                      if (tEl) tEl.textContent = origKeys.length ? `Keys: ${origKeys.join(', ')}` : 'Keys: none';
+                      if (tEl) tEl.textContent = origKeys.length ? t`Keys: ${origKeys.join(', ')}` : translate('Keys: none');
                       const tInput = item.querySelector('.scp-lb-trig-input');
                       if (tInput && !tInput.value) { tInput.value = origKeys.join(', '); tInput.placeholder = ''; }
                   }
@@ -5078,7 +5087,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
                   editableChanges[ci].worldName = resolved.bookName;
                   _selectedBook = resolved.bookName;
                   worldPanel.querySelectorAll('.scp-lb-proposal-world-item').forEach(el => el.classList.toggle('active', el.dataset.value === resolved.bookName));
-                  worldTriggerText.textContent = `in ${getDisplayName(resolved.bookName)}`;
+                  worldTriggerText.textContent = t`in ${getDisplayName(resolved.bookName)}`;
                   toastr.info(t`Entry found in "<b>${escHtml(getDisplayName(resolved.bookName))}</b>" instead — lorebook switched automatically.`, EXT_DISPLAY, { escapeHtml: false });
               } else {
                   worldTriggerText.textContent = found ? `in ${getDisplayName(bookName)}` : `in ${getDisplayName(bookName)} ⚠`;
@@ -5098,7 +5107,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
                   warnEl.textContent = `⚠ ${reason}`; warnEl.style.display = 'block';
                   offerChangeAll(warnEl, ambiguous, () => _validateBookEntry(bookName));
               } else {
-                  applyItemBtn.disabled = false; applyItemBtn.title = 'Apply this change';
+                  applyItemBtn.disabled = false; applyItemBtn.title = translate('Apply this change');
                   item.style.borderLeftColor = ''; warnEl.style.display = 'none';
               }
               worldTrigger.classList.toggle('warn', !found);
@@ -5108,7 +5117,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
               if (name !== editableChanges[ci].worldName) delete editableChanges[ci].uid;
               _selectedBook = name;
               editableChanges[ci].worldName = name;
-              worldTriggerText.textContent = `in ${getDisplayName(name)}`;
+              worldTriggerText.textContent = t`in ${getDisplayName(name)}`;
               worldTrigger.classList.remove('warn');
               worldPanel.querySelectorAll('.scp-lb-proposal-world-item').forEach(el => el.classList.toggle('active', el.dataset.value === name));
               worldPanel.classList.remove('open'); worldTrigger.classList.remove('open');
@@ -5138,14 +5147,14 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           if (c.action !== 'delete') {
               editToggleBtn = document.createElement('button');
               editToggleBtn.className = 'scp-lb-proposal-edit-toggle';
-              editToggleBtn.title = 'Edit before applying'; editToggleBtn.textContent = '✎';
+              editToggleBtn.title = translate('Edit before applying'); editToggleBtn.textContent = '✎';
               itemBtns.appendChild(editToggleBtn);
           }
 
           if (['edit', 'patch', 'prepend', 'append'].includes(c.action)) {
               const diffBtn = document.createElement('button');
               diffBtn.className = 'scp-lb-proposal-diff-btn';
-              diffBtn.title = 'View diff'; diffBtn.innerHTML = I.diff;
+              diffBtn.title = translate('View diff'); diffBtn.innerHTML = I.diff;
               diffBtn.addEventListener('click', async e => {
                   e.stopPropagation();
                   const change = editableChanges[ci];
@@ -5168,7 +5177,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
 
           const applyItemBtn = document.createElement('button');
           applyItemBtn.className = 'scp-lb-proposal-item-apply';
-          applyItemBtn.title = 'Apply this change'; applyItemBtn.textContent = '✓';
+          applyItemBtn.title = translate('Apply this change'); applyItemBtn.textContent = '✓';
           applyItemBtn.addEventListener('click', async e => {
               e.stopPropagation();
               if (itemStates[ci] !== 'pending') return;
@@ -5189,7 +5198,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
 
           const rejectItemBtn = document.createElement('button');
           rejectItemBtn.className = 'scp-lb-proposal-item-reject';
-          rejectItemBtn.title = 'Reject this change'; rejectItemBtn.textContent = '✕';
+          rejectItemBtn.title = translate('Reject this change'); rejectItemBtn.textContent = '✕';
           rejectItemBtn.addEventListener('click', e => {
               e.stopPropagation();
               if (itemStates[ci] !== 'pending') return;
@@ -5212,7 +5221,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
               previewEl.textContent = isLong ? c.content.slice(0, 120) + '…' : c.content;
               if (isLong) {
                   let _expanded = false;
-                  previewEl.title = 'Click to expand'; previewEl.style.cursor = 'pointer';
+                  previewEl.title = translate('Click to expand'); previewEl.style.cursor = 'pointer';
                   previewEl.addEventListener('click', e => {
                       e.stopPropagation();
                       if (window.getSelection()?.toString()) return;
@@ -5225,10 +5234,10 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           }
           if (c.triggers !== null && c.triggers?.length) {
               triggersEl = document.createElement('div'); triggersEl.className = 'scp-lb-proposal-triggers';
-              triggersEl.textContent = 'Keys: ' + c.triggers.join(', '); item.appendChild(triggersEl);
+              triggersEl.textContent = t`Keys: ${c.triggers.join(', ')}`; item.appendChild(triggersEl);
           } else if (c.triggers === null) {
               triggersEl = document.createElement('div'); triggersEl.className = 'scp-lb-proposal-triggers';
-              triggersEl.style.opacity = '0.5'; triggersEl.textContent = 'Keys: keep original'; item.appendChild(triggersEl);
+              triggersEl.style.opacity = '0.5'; triggersEl.textContent = translate('Keys: keep original'); item.appendChild(triggersEl);
           }
 
           if (c.action !== 'delete') {
@@ -5303,7 +5312,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
               const oNameInp = document.createElement('input');
               oNameInp.type = 'text'; oNameInp.className = 'scp-lb-pe-input';
               oNameInp.value = c.outlet_name || '';
-              oNameInp.placeholder = 'Outlet macro name...';
+              oNameInp.placeholder = translate('Outlet macro name...');
               oNameInp.addEventListener('input', () => { editableChanges[ci].outlet_name = oNameInp.value; });
               outletNameRow.innerHTML = '<label class="scp-lb-pe-label" data-i18n="Outlet Name">Outlet Name</label>';
               outletNameRow.appendChild(oNameInp);
@@ -5341,9 +5350,9 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       const footer = document.createElement('div');
       footer.className = 'scp-lb-proposal-footer';
       const applyAllBtn = document.createElement('button');
-      applyAllBtn.className = 'scp-lb-proposal-apply'; applyAllBtn.textContent = 'Apply All';
+      applyAllBtn.className = 'scp-lb-proposal-apply'; applyAllBtn.textContent = translate('Apply All');
       const rejectAllBtn = document.createElement('button');
-      rejectAllBtn.className = 'scp-lb-proposal-reject'; rejectAllBtn.textContent = 'Reject All';
+      rejectAllBtn.className = 'scp-lb-proposal-reject'; rejectAllBtn.textContent = translate('Reject All');
 
       const updateCountBadge = () => { countBadge.textContent = getPendingCount() > 0 ? `${getPendingCount()} pending` : `${getAppliedCount()} applied`; };
       const updateFooterBtns = () => {
@@ -5354,16 +5363,16 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       applyAllBtn.addEventListener('click', async () => {
           const pending = editableChanges.filter((_, i) => itemStates[i] === 'pending');
           if (!pending.length) return;
-          applyAllBtn.disabled = true; applyAllBtn.textContent = 'Applying…';
+          applyAllBtn.disabled = true; applyAllBtn.textContent = translate('Applying…');
           try {
               const applied = await applyLBChanges(pending, card.dataset.for);
               itemStates.forEach((s, i) => { if (s === 'pending' && applied.includes(editableChanges[i])) { itemStates[i] = 'applied'; itemEls[i].classList.add('scp-lb-item-applied'); itemEls[i].querySelectorAll('button').forEach(b => { b.disabled = true; }); } });
               updateCountBadge(); updateFooterBtns(); syncBlockToMessage(); checkAllResolved();
               if (applied.length) toastr.success(t`[LB] ${applied.length} changes applied.`, EXT_DISPLAY);
-              applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';
+              applyAllBtn.disabled = false; applyAllBtn.textContent = translate('Apply All');
           } catch (e) {
               toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
-              applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';
+              applyAllBtn.disabled = false; applyAllBtn.textContent = translate('Apply All');
           }
       });
 
@@ -5518,9 +5527,9 @@ Look things up before you write your answer, not after it. To call a tool, outpu
             <div class="scp-lb-book-check${checkState ? ' ' + checkState : ''}" data-book="${escHtml(name)}"></div>
             <div class="scp-lb-book-info">
                 <span class="scp-lb-book-name">${escHtml(displayName)}</span>
-                <span class="scp-lb-book-meta">${entryCount} entries</span>
+                <span class="scp-lb-book-meta">${escHtml(t`${entryCount} entries`)}</span>
             </div>
-            <span class="scp-lb-src-badge ${srcInfo.cls}" title="${srcInfo.title}" style="margin-left: auto;">${srcInfo.label}</span>`;
+            <span class="scp-lb-src-badge ${srcInfo.cls}" title="${escHtml(translate(srcInfo.title))}" style="margin-left: auto;">${srcInfo.label}</span>`;
               
           item.querySelector('.scp-lb-book-check').addEventListener('click', e => { e.stopPropagation(); toggleLorebookSelection(name); });
           item.addEventListener('click', () => viewLorebookEntries(name));
@@ -5590,7 +5599,11 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       }) : entries;
 
       const label = document.getElementById('scp-lb-entries-label');
-      if (label) label.textContent = `${getDisplayName(bookName)} — ${filtered.length}${filtered.length !== entries.length ? ` of ${entries.length}` : ''} entr${filtered.length !== 1 ? 'ies' : 'y'}`;
+      if (label) {
+          const count = filtered.length !== entries.length ? t`${filtered.length} of ${entries.length} entries`
+              : filtered.length === 1 ? translate('1 entry') : t`${filtered.length} entries`;
+          label.textContent = `${getDisplayName(bookName)} — ${count}`;
+      }
 
       const frag = document.createDocumentFragment();
       for (const entry of filtered) {
@@ -5723,7 +5736,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
 
   async function deleteEntryDetail() {
       if (!state.lbEntryDetailEntry || !state.lbEntryDetailBook) return;
-      const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Entry', message: `Delete "${state.lbEntryDetailEntry.comment || 'this entry'}"?` });
+      const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Entry', message: t`Delete "${state.lbEntryDetailEntry.comment || 'this entry'}"?` });
       if (!ok) return;
       const data = await fetchWorldInfoBook(state.lbEntryDetailBook);
       if (!data) return;
@@ -5812,7 +5825,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       
       document.getElementById('scp-lb-reset-overrides')?.addEventListener('click', async () => {
           if (!state.lbActiveBook) return;
-          const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Overrides', message: `Reset all copilot injection overrides for "${state.lbActiveBook}"?` });
+          const ok = await showCustomDialog({ type: 'confirm', title: 'Reset Overrides', message: t`Reset all copilot injection overrides for "${state.lbActiveBook}"?` });
           if (!ok) return;
           const s = getSettings();
           if (wiCache[state.lbActiveBook]) Object.values(wiCache[state.lbActiveBook].entries).forEach(e => { delete s.lorebookEntryOverrides[getEntryOverrideKey(state.lbActiveBook, e)]; });
@@ -6871,7 +6884,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
 
       const label = document.createElement('div');
       label.style.cssText = 'font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--scp-text-muted,#72728a);margin-bottom:5px';
-      label.textContent = 'Which greetings to include:';
+      label.textContent = translate('Which greetings to include:');
       container.appendChild(label);
 
       const wrap = document.createElement('div');
@@ -7113,7 +7126,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       headerLeft.style.cssText = 'display:flex;align-items:center;gap:8px;flex:1;min-width:0';
       headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-success);display:flex"><i class="fa-solid fa-user-plus"></i></span><span class="scp-lb-proposal-title" data-i18n="New Character Proposal">New Character Proposal</span>`;
       const dismissBtn = document.createElement('button');
-      dismissBtn.className = 'scp-lb-proposal-dismiss'; dismissBtn.innerHTML = I.x; dismissBtn.title = 'Dismiss';
+      dismissBtn.className = 'scp-lb-proposal-dismiss'; dismissBtn.innerHTML = I.x; dismissBtn.title = translate('Dismiss');
       dismissBtn.addEventListener('click', () => {
           logCharCreationHistory(editableData, 'Dismissed', card.dataset.for);
           stripAndRemove();
@@ -7123,7 +7136,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
 
       const hint = document.createElement('div');
       hint.style.cssText = 'font-size:11px;color:var(--scp-text-muted);padding:6px 2px 4px;font-style:italic';
-      hint.textContent = 'Review and edit the proposed character. Name is required.';
+      hint.textContent = translate('Review and edit the proposed character. Name is required.');
       card.appendChild(hint);
 
       const fieldsWrap = document.createElement('div');
@@ -7295,7 +7308,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-accent);display:flex"><i class="fa-solid fa-user-pen"></i></span><span class="scp-lb-proposal-title">Proposed Edits: ${escHtml(char.name)}</span>`;
       headerLeft.appendChild(countBadge);
       const dismissBtn = document.createElement('button');
-      dismissBtn.className = 'scp-lb-proposal-dismiss'; dismissBtn.innerHTML = I.x; dismissBtn.title = 'Dismiss';
+      dismissBtn.className = 'scp-lb-proposal-dismiss'; dismissBtn.innerHTML = I.x; dismissBtn.title = translate('Dismiss');
       dismissBtn.addEventListener('click', () => {
           const pending = editableChanges.filter((_, i) => itemStates[i] === 'pending');
           if (pending.length > 0) logCharEditHistory(pending, 'Dismissed', msgId, char.name);
@@ -7331,7 +7344,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
 
           if (c.action === 'replace' || c.action === 'overwrite') {
               const diffBtn = document.createElement('button');
-              diffBtn.className = 'scp-lb-proposal-diff-btn'; diffBtn.title = 'View diff'; diffBtn.innerHTML = I.diff;
+              diffBtn.className = 'scp-lb-proposal-diff-btn'; diffBtn.title = translate('View diff'); diffBtn.innerHTML = I.diff;
               diffBtn.addEventListener('click', e => {
                   e.stopPropagation();
                   const change = editableChanges[ci];
@@ -7350,11 +7363,11 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           }
 
           const editToggleBtn = document.createElement('button');
-          editToggleBtn.className = 'scp-lb-proposal-edit-toggle'; editToggleBtn.title = 'Edit before applying'; editToggleBtn.textContent = '✎';
+          editToggleBtn.className = 'scp-lb-proposal-edit-toggle'; editToggleBtn.title = translate('Edit before applying'); editToggleBtn.textContent = '✎';
           btns.appendChild(editToggleBtn);
 
           const applyBtn = document.createElement('button');
-          applyBtn.className = 'scp-lb-proposal-item-apply'; applyBtn.title = 'Apply'; applyBtn.textContent = '✓';
+          applyBtn.className = 'scp-lb-proposal-item-apply'; applyBtn.title = translate('Apply'); applyBtn.textContent = '✓';
 
           const warn = document.createElement('div');
           warn.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;display:none';
@@ -7396,7 +7409,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           });
 
           const rejectBtn = document.createElement('button');
-          rejectBtn.className = 'scp-lb-proposal-item-reject'; rejectBtn.title = 'Reject'; rejectBtn.textContent = '\u2715';
+          rejectBtn.className = 'scp-lb-proposal-item-reject'; rejectBtn.title = translate('Reject'); rejectBtn.textContent = '\u2715';
           rejectBtn.addEventListener('click', e => {
               e.stopPropagation();
               if (itemStates[ci] !== 'pending') return;
@@ -7435,7 +7448,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           };
           refreshPreview();
           previewEl.style.cursor = 'pointer';
-          previewEl.title = 'Click to expand/collapse';
+          previewEl.title = translate('Click to expand/collapse');
           previewEl.addEventListener('click', e => {
               if (window.getSelection()?.toString().length > 0) return;
               e.stopPropagation();
@@ -7467,7 +7480,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
                       if (change.patches.length > 1) {
                           const delP = document.createElement('button');
                           delP.style.cssText = 'background:none;border:none;color:var(--scp-danger);cursor:pointer;font-size:11px;padding:0;font-family:var(--scp-font)';
-                          delP.textContent = '\u2715 Remove';
+                          delP.textContent = translate('\u2715 Remove');
                           delP.addEventListener('click', () => {
                               change.patches.splice(pi, 1);
                               rebuildEditPanel();
@@ -7480,7 +7493,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
 
                       const searchTa = document.createElement('textarea');
                       searchTa.className = 'scp-lb-pe-textarea'; searchTa.rows = 2; searchTa.value = patch.search || '';
-                      searchTa.placeholder = 'first unique words || last unique words';
+                      searchTa.placeholder = translate('first unique words || last unique words');
                       searchTa.addEventListener('input', () => { editableChanges[ci].patches[pi].search = searchTa.value; });
                       editPanel.appendChild(mkRow('Anchor', searchTa));
 
@@ -7527,9 +7540,9 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       const footer = document.createElement('div');
       footer.className = 'scp-lb-proposal-footer';
       const applyAllBtn = document.createElement('button');
-      applyAllBtn.className = 'scp-lb-proposal-apply'; applyAllBtn.textContent = 'Apply All';
+      applyAllBtn.className = 'scp-lb-proposal-apply'; applyAllBtn.textContent = translate('Apply All');
       const rejectAllBtn = document.createElement('button');
-      rejectAllBtn.className = 'scp-lb-proposal-reject'; rejectAllBtn.textContent = 'Reject All';
+      rejectAllBtn.className = 'scp-lb-proposal-reject'; rejectAllBtn.textContent = translate('Reject All');
 
       function updateFooter() {
           const p = getPending();
@@ -7543,7 +7556,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           editableChanges.forEach((_, i) => { if (itemStates[i] === 'pending') pendingIndices.push(i); });
           const pending = pendingIndices.map(i => editableChanges[i]);
           if (!pending.length) return;
-          applyAllBtn.disabled = true; applyAllBtn.textContent = 'Applying\u2026';
+          applyAllBtn.disabled = true; applyAllBtn.textContent = translate('Applying\u2026');
 
           const hasNameField = pending.some(c => c.field === 'name');
           if (hasNameField) { pendingIndices.forEach(i => { itemStates[i] = 'applied'; }); _syncAllCardsToMessage(msgId); }
@@ -7558,7 +7571,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
               checkAllResolved();
           } catch (e) {
               toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
-              applyAllBtn.disabled = false; applyAllBtn.textContent = 'Apply All';
+              applyAllBtn.disabled = false; applyAllBtn.textContent = translate('Apply All');
               if (hasNameField) { pendingIndices.forEach(i => { itemStates[i] = 'pending'; }); _syncAllCardsToMessage(msgId); }
           }
       });
@@ -8203,7 +8216,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       headerLeft.innerHTML = `<span class="scp-lb-proposal-icon" style="color:var(--scp-accent);display:flex">${I.chatEdit}</span><span class="scp-lb-proposal-title" data-i18n="Proposed Chat Edits">Proposed Chat Edits</span>`;
       headerLeft.appendChild(countBadge);
       const dismissBtn = document.createElement('button');
-      dismissBtn.className = 'scp-lb-proposal-dismiss'; dismissBtn.innerHTML = I.x; dismissBtn.title = 'Dismiss all';
+      dismissBtn.className = 'scp-lb-proposal-dismiss'; dismissBtn.innerHTML = I.x; dismissBtn.title = translate('Dismiss all');
       dismissBtn.addEventListener('click', () => {
           const pending = editableChanges.filter((_, i) => itemStates[i] === 'pending');
           if (pending.length > 0) logChatEditHistory(pending, 'Dismissed', card.dataset.for);
@@ -8258,7 +8271,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           
           const warnEl = document.createElement('div');
           warnEl.style.cssText = 'font-size:10px;color:var(--scp-danger);margin-top:4px;width:100%;display:none;cursor:pointer;';
-          warnEl.title = 'Click to open the edit panel and fix manually';
+          warnEl.title = translate('Click to open the edit panel and fix manually');
           meta.appendChild(warnEl);
 
           const btns = document.createElement('div');
@@ -8266,7 +8279,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
 
           if (['replace', 'overwrite', 'bulk_replace', 'regex'].includes(c.action)) {
               const diffBtn = document.createElement('button');
-              diffBtn.className = 'scp-lb-proposal-diff-btn'; diffBtn.title = 'View diff'; diffBtn.innerHTML = I.diff;
+              diffBtn.className = 'scp-lb-proposal-diff-btn'; diffBtn.title = translate('View diff'); diffBtn.innerHTML = I.diff;
               diffBtn.addEventListener('click', e => {
                   e.stopPropagation();
                   const ctx = SillyTavern.getContext();
@@ -8320,12 +8333,12 @@ Look things up before you write your answer, not after it. To call a tool, outpu
           let editPanel = null;
           if (c.action !== 'delete') {
               editToggleBtn = document.createElement('button');
-              editToggleBtn.className = 'scp-lb-proposal-edit-toggle'; editToggleBtn.title = 'Edit before applying'; editToggleBtn.textContent = '✎';
+              editToggleBtn.className = 'scp-lb-proposal-edit-toggle'; editToggleBtn.title = translate('Edit before applying'); editToggleBtn.textContent = '✎';
               btns.appendChild(editToggleBtn);
           }
 
           const applyBtn = document.createElement('button');
-          applyBtn.className = 'scp-lb-proposal-item-apply'; applyBtn.title = 'Apply'; applyBtn.textContent = '✓';
+          applyBtn.className = 'scp-lb-proposal-item-apply'; applyBtn.title = translate('Apply'); applyBtn.textContent = '✓';
           
           const refreshValidation = () => {
               const { valid, reason, ambiguous } = validateChatChange(editableChanges[ci]);
@@ -8335,7 +8348,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
                   warnEl.textContent = `⚠ ${reason}`; warnEl.style.display = 'block';
                   offerChangeAll(warnEl, ambiguous, refreshValidation);
               } else {
-                  applyBtn.disabled = false; applyBtn.title = 'Apply';
+                  applyBtn.disabled = false; applyBtn.title = translate('Apply');
                   item.style.borderLeftColor = ''; 
                   warnEl.style.display = 'none';
               }
@@ -8374,7 +8387,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
               });
           });
           const rejectBtn = document.createElement('button');
-          rejectBtn.className = 'scp-lb-proposal-item-reject'; rejectBtn.title = 'Reject'; rejectBtn.textContent = '✕';
+          rejectBtn.className = 'scp-lb-proposal-item-reject'; rejectBtn.title = translate('Reject'); rejectBtn.textContent = '✕';
           rejectBtn.addEventListener('click', e => {
               e.stopPropagation();
               if (itemStates[ci] !== 'pending') return;
@@ -8485,7 +8498,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
                       const valueTa = document.createElement('textarea');
                       valueTa.className = 'scp-lb-pe-textarea'; 
                       valueTa.rows = 4; 
-                      valueTa.placeholder = 'Type the message content here...';
+                      valueTa.placeholder = translate('Type the message content here...');
                       valueTa.value = change.content || '';
                       valueTa.addEventListener('input', () => { 
                           change.content = valueTa.value; 
@@ -8501,7 +8514,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
                           if (change.patches.length > 1) {
                               const delP = document.createElement('button');
                               delP.style.cssText = 'background:none;border:none;color:var(--scp-danger);cursor:pointer;font-size:11px;padding:0;font-family:var(--scp-font)';
-                              delP.textContent = '✕ Remove';
+                              delP.textContent = translate('✕ Remove');
                               delP.addEventListener('click', () => { change.patches.splice(pi, 1); rebuildEditPanel(); refreshPreview(); refreshValidation(); });
                               pHdr.appendChild(delP);
                           }
@@ -8602,9 +8615,9 @@ Look things up before you write your answer, not after it. To call a tool, outpu
       const footer = document.createElement('div');
       footer.className = 'scp-lb-proposal-footer';
       const applyAllBtn = document.createElement('button');
-      applyAllBtn.className = 'scp-lb-proposal-apply'; applyAllBtn.textContent = 'Apply All';
+      applyAllBtn.className = 'scp-lb-proposal-apply'; applyAllBtn.textContent = translate('Apply All');
       const rejectAllBtn = document.createElement('button');
-      rejectAllBtn.className = 'scp-lb-proposal-reject'; rejectAllBtn.textContent = 'Reject All';
+      rejectAllBtn.className = 'scp-lb-proposal-reject'; rejectAllBtn.textContent = translate('Reject All');
 
       const updateFooterBtns = () => {
           const p = getPending();
@@ -8619,7 +8632,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
               editableChanges.forEach((_, i) => { if (itemStates[i] === 'pending') pendingIndices.push(i); });
               const pending = pendingIndices.map(i => editableChanges[i]);
               if (!pending.length) return;
-              applyAllBtn.disabled = true; applyAllBtn.textContent = 'Applying…';
+              applyAllBtn.disabled = true; applyAllBtn.textContent = translate('Applying…');
               
               pendingIndices.forEach(i => {
                   itemStates[i] = 'applied';
@@ -8645,7 +8658,7 @@ Look things up before you write your answer, not after it. To call a tool, outpu
                   
                   toastr.error(t`Failed: ${e.message}`, EXT_DISPLAY);
                   applyAllBtn.disabled = false; 
-                  applyAllBtn.textContent = 'Apply All';
+                  applyAllBtn.textContent = translate('Apply All');
               }
           });
       });
@@ -9009,7 +9022,7 @@ Rules:
       const countTokens = async text => {
           try {
               const n = await (await Promise.resolve().then(function () { return api; })).estimateTokens(text);
-              if (tokEl.isConnected) tokEl.textContent = `[~${n} tkns]`;
+              if (tokEl.isConnected) tokEl.textContent = t`[~${n} tkns]`;
           } catch (_) { /* token count is cosmetic */ }
       };
       countTokens(entry.content);
@@ -9626,7 +9639,7 @@ Rules:
           valEl.textContent = isLong ? mem.value.slice(0, 120) + '…' : mem.value;
           if (isLong) {
               valEl.style.cursor = 'pointer';
-              valEl.title = 'Click to expand';
+              valEl.title = translate('Click to expand');
               let expanded = false;
               valEl.addEventListener('click', e => {
                   e.stopPropagation();
@@ -9652,7 +9665,7 @@ Rules:
           
           item.querySelector('.scp-memory-item-del').addEventListener('click', async e => {
               e.stopPropagation();
-              const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Memory', message: `Delete memory "${mem.key}"?` });
+              const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Memory', message: t`Delete memory "${mem.key}"?` });
               if (!ok) return;
               deleteMemory(mem.id);
               renderMemoryList();
@@ -9872,7 +9885,7 @@ ${scopeHtml}
           newClearBtn.addEventListener('click', async () => {
               const count = Object.keys(getMemories()).length;
               if (!count) { toastr.info(translate('No memories to clear.'), EXT_DISPLAY); return; }
-              const ok = await showCustomDialog({ type: 'confirm', title: translate('Clear All Memories'), message: `Delete all ${count} stored memories? This cannot be undone.`, delayConfirm: 2 });
+              const ok = await showCustomDialog({ type: 'confirm', title: translate('Clear All Memories'), message: t`Delete all ${count} stored memories? This cannot be undone.`, delayConfirm: 2 });
               if (!ok) return;
               clearAllMemories();
               renderMemoryList();
@@ -10885,14 +10898,14 @@ ${scopeHtml}
         <button class="scp-profile-icon-btn" id="scp-theme-import" title="Import theme" data-i18n="[title]Import theme"><i class="fa-solid fa-file-import"></i></button>`;
       container.appendChild(profileRow);
       const sel = profileRow.querySelector('#scp-theme-profile-select');
-      const optGrpDefault = document.createElement('optgroup'); optGrpDefault.label = 'Default Presets';
+      const optGrpDefault = document.createElement('optgroup'); optGrpDefault.label = translate('Default Presets');
       for (const [key, preset] of Object.entries(THEME_PRESETS)) {
-          const opt = document.createElement('option'); opt.value = `__preset__${key}`; opt.textContent = preset.label; optGrpDefault.appendChild(opt);
+          const opt = document.createElement('option'); opt.value = `__preset__${key}`; opt.textContent = translate(preset.label); optGrpDefault.appendChild(opt);
       }
       sel.appendChild(optGrpDefault);
       const userKeys = Object.keys(s.savedThemes);
       if (userKeys.length) {
-          const optGrpCustom = document.createElement('optgroup'); optGrpCustom.label = 'Custom Themes';
+          const optGrpCustom = document.createElement('optgroup'); optGrpCustom.label = translate('Custom Themes');
           for (const name of userKeys) {
               const opt = document.createElement('option'); opt.value = name; opt.textContent = name;
               if (name === s.activeThemeProfile) opt.selected = true;
@@ -10950,7 +10963,7 @@ ${scopeHtml}
       });
       profileRow.querySelector('#scp-theme-delete').addEventListener('click', async () => {
           const val = sel.value; if (!val || val.startsWith('__preset__')) { toastr.info(translate('Select a custom theme to delete.'), EXT_DISPLAY); return; }
-          const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Theme', message: `Delete "${val}"?` }); if (!ok) return;
+          const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Theme', message: t`Delete "${val}"?` }); if (!ok) return;
           const s2 = getSettings(); delete s2.savedThemes[val]; s2.activeThemeProfile = Object.keys(s2.savedThemes)[0] || '';
           s2.customTheme = s2.activeThemeProfile ? { ...s2.savedThemes[s2.activeThemeProfile] } : { ...THEME_PRESETS.default };
           saveSettings(); applyCustomTheme(s2.customTheme); buildThemeEditor(containerOverride); toastr.success(translate('Deleted.'), EXT_DISPLAY);
@@ -10979,7 +10992,7 @@ ${scopeHtml}
       const windowEl = document.getElementById('scp-window');
       for (const def of THEME_VAR_DEFS) {
           const item = document.createElement('div'); item.className = 'scp-theme-var-item';
-          const label = document.createElement('div'); label.className = 'scp-theme-var-label'; label.textContent = def.label;
+          const label = document.createElement('div'); label.className = 'scp-theme-var-label'; label.textContent = translate(def.label);
           const wrap = document.createElement('div'); wrap.className = 'scp-theme-var-wrap';
           const isColorKey = _COLOR_KEYS.has(def.key); const isFontKey = def.key === 'font' || def.key === 'fontSize';
           const preview = document.createElement('div'); preview.className = 'scp-theme-var-preview';
@@ -10996,7 +11009,7 @@ ${scopeHtml}
               if (selVal.startsWith('__preset__')) return (THEME_PRESETS[selVal.replace('__preset__', '')] || THEME_PRESETS.default)[def.key] ?? '';
               return THEME_PRESETS.default[def.key] ?? '';
           };
-          const resetBtn = document.createElement('button'); resetBtn.className = 'scp-theme-var-reset'; resetBtn.title = 'Reset to profile default'; resetBtn.textContent = '↺';
+          const resetBtn = document.createElement('button'); resetBtn.className = 'scp-theme-var-reset'; resetBtn.title = translate('Reset to profile default'); resetBtn.textContent = '↺';
           const updateResetState = val => { resetBtn.disabled = !val || val === getDefaultVal(); };
           updateResetState(curVal);
           let _fontDebounce = null;
@@ -11621,7 +11634,7 @@ ${scopeHtml}
       document.getElementById('scp-sp-profile-delete')?.addEventListener('click', async () => {
           const sel = document.getElementById('scp-sp-profile-select'); if (!sel?.value) return;
           const s = getSettings(); if (Object.keys(s.profiles).length <= 1) { toastr.warning(translate('Cannot delete the last profile.'), EXT_DISPLAY); return; }
-          const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Profile', message: `Delete "${sel.value}"?` }); if (!ok) return;
+          const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Profile', message: t`Delete "${sel.value}"?` }); if (!ok) return;
           deleteProfile(sel.value); refreshSPProfilesDropdown(); refreshProfilesDropdown(); updateSPBindingSection(); toastr.success(translate('Deleted.'), EXT_DISPLAY);
       });
       document.getElementById('scp-sp-bind-char')?.addEventListener('click', () => {
@@ -11804,7 +11817,7 @@ ${scopeHtml}
       const renderDropdown = () => {
           typeSel.innerHTML = '<option value="none" data-i18n="None">None</option>';
           if (Object.keys(s.customBackgrounds).length) {
-              const grp = document.createElement('optgroup'); grp.label = 'Custom Backgrounds';
+              const grp = document.createElement('optgroup'); grp.label = translate('Custom Backgrounds');
               for (const [key, bg] of Object.entries(s.customBackgrounds)) { const o = document.createElement('option'); o.value = key; o.textContent = bg.name; grp.appendChild(o); }
               typeSel.appendChild(grp);
           }
@@ -11882,19 +11895,19 @@ ${scopeHtml}
           if (!prompts.length) { list.innerHTML = `<div style="font-size:11px;color:var(--scp-text-muted);text-align:center;padding:10px 0" data-i18n="No quick prompts yet. Add one below.">No quick prompts yet. Add one below.</div>`; }
           prompts.forEach((qp, idx) => {
               const row = document.createElement('div'); row.className = 'scp-qp-settings-row';
-              const iconBtn = document.createElement('button'); iconBtn.className = 'scp-qp-settings-icon-btn'; iconBtn.textContent = qp.icon || '⚡'; iconBtn.title = 'Change icon';
+              const iconBtn = document.createElement('button'); iconBtn.className = 'scp-qp-settings-icon-btn'; iconBtn.textContent = qp.icon || '⚡'; iconBtn.title = translate('Change icon');
               Promise.resolve().then(function () { return uiWidgets; }).then(mod => {
                   iconBtn.addEventListener('click', e => { e.stopPropagation(); mod.showQPIconPicker(iconBtn, qp.icon || '⚡', emoji => { getSettings().quickPrompts[idx].icon = emoji; saveSettings(); iconBtn.textContent = emoji; mod.renderQuickPromptsBar(); }); });
               });
-              const labelInput = document.createElement('input'); labelInput.type = 'text'; labelInput.className = 'scp-qp-settings-label-input scp-sp-input'; labelInput.placeholder = 'Label'; labelInput.value = qp.label || '';
+              const labelInput = document.createElement('input'); labelInput.type = 'text'; labelInput.className = 'scp-qp-settings-label-input scp-sp-input'; labelInput.placeholder = translate('Label'); labelInput.value = qp.label || '';
               labelInput.addEventListener('input', () => { getSettings().quickPrompts[idx].label = labelInput.value; saveSettings(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
-              const moveUpBtn = document.createElement('button'); moveUpBtn.className = 'scp-qp-settings-move'; moveUpBtn.textContent = '↑'; moveUpBtn.title = 'Move up'; moveUpBtn.disabled = idx === 0;
+              const moveUpBtn = document.createElement('button'); moveUpBtn.className = 'scp-qp-settings-move'; moveUpBtn.textContent = '↑'; moveUpBtn.title = translate('Move up'); moveUpBtn.disabled = idx === 0;
               moveUpBtn.addEventListener('click', () => { if (idx === 0) return; const arr = getSettings().quickPrompts; [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]]; saveSettings(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
-              const moveDnBtn = document.createElement('button'); moveDnBtn.className = 'scp-qp-settings-move'; moveDnBtn.textContent = '↓'; moveDnBtn.title = 'Move down'; moveDnBtn.disabled = idx === prompts.length - 1;
+              const moveDnBtn = document.createElement('button'); moveDnBtn.className = 'scp-qp-settings-move'; moveDnBtn.textContent = '↓'; moveDnBtn.title = translate('Move down'); moveDnBtn.disabled = idx === prompts.length - 1;
               moveDnBtn.addEventListener('click', () => { const arr = getSettings().quickPrompts; if (idx >= arr.length - 1) return; [arr[idx], arr[idx+1]] = [arr[idx+1], arr[idx]]; saveSettings(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
               const delBtn = document.createElement('button'); delBtn.className = 'scp-qp-settings-del'; delBtn.innerHTML = I.trash; delBtn.title = translate('Delete');
-              delBtn.addEventListener('click', async () => { const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Prompt', message: `Delete "${qp.label || 'this prompt'}"?` }); if (!ok) return; getSettings().quickPrompts.splice(idx, 1); saveSettings(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
-              const textArea = document.createElement('textarea'); textArea.className = 'scp-qp-settings-text scp-sp-textarea'; textArea.placeholder = 'Prompt text… (supports {{user}}, {{char}} macros)'; textArea.rows = 2; textArea.value = qp.text || '';
+              delBtn.addEventListener('click', async () => { const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Prompt', message: t`Delete "${qp.label || 'this prompt'}"?` }); if (!ok) return; getSettings().quickPrompts.splice(idx, 1); saveSettings(); renderList(); Promise.resolve().then(function () { return uiWidgets; }).then(m => m.renderQuickPromptsBar()); });
+              const textArea = document.createElement('textarea'); textArea.className = 'scp-qp-settings-text scp-sp-textarea'; textArea.placeholder = translate('Prompt text… (supports {{user}}, {{char}} macros)'); textArea.rows = 2; textArea.value = qp.text || '';
               textArea.addEventListener('input', () => { getSettings().quickPrompts[idx].text = textArea.value; saveSettings(); });
               const controls = document.createElement('div'); controls.className = 'scp-qp-settings-controls'; controls.appendChild(moveUpBtn); controls.appendChild(moveDnBtn); controls.appendChild(delBtn);
               const top = document.createElement('div'); top.className = 'scp-qp-settings-row-top'; top.appendChild(iconBtn); top.appendChild(labelInput); top.appendChild(controls);
@@ -11964,14 +11977,14 @@ ${scopeHtml}
 
       item.innerHTML = `<div class="scp-tool-call-header">
 <div class="scp-tool-call-icon ${statusClass}" ${isWarning ? `style="${colorStyle}"` : ''}>${iconHtml}</div>
-<div class="scp-tool-call-name">${escHtml(def?.label || tc.name)}</div>
-<div class="scp-tool-call-status ${statusClass}" ${isWarning ? `style="${colorStyle}"` : ''}>${spinnerHtml}${escHtml(statusLabel)}</div>
+<div class="scp-tool-call-name">${escHtml(def?.label ? translate(def.label) : tc.name)}</div>
+<div class="scp-tool-call-status ${statusClass}" ${isWarning ? `style="${colorStyle}"` : ''}>${spinnerHtml}${escHtml(translate(statusLabel))}</div>
 <div class="scp-tool-call-chevron">▶</div>
 </div>
 <div class="scp-tool-call-body">
-<div class="scp-tool-call-section-label">Input</div>
+<div class="scp-tool-call-section-label">${escHtml(translate('Input'))}</div>
 <pre class="scp-tool-call-args">${escHtml(JSON.stringify(tc.input, null, 2))}</pre>
-${tc.result !== undefined ? `<div class="scp-tool-call-section-label" style="margin-top:8px">Result</div><pre class="scp-tool-call-result${tc.status === 'error' ? ' error-result' : ''}" ${isWarning ? `style="${colorStyle}"` : ''}>${escHtml(typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result, null, 2))}</pre>` : ''}
+${tc.result !== undefined ? `<div class="scp-tool-call-section-label" style="margin-top:8px">${escHtml(translate('Result'))}</div><pre class="scp-tool-call-result${tc.status === 'error' ? ' error-result' : ''}" ${isWarning ? `style="${colorStyle}"` : ''}>${escHtml(typeof tc.result === 'string' ? tc.result : JSON.stringify(tc.result, null, 2))}</pre>` : ''}
 </div>`;
       item.querySelector('.scp-tool-call-header').addEventListener('click', () => {
           const isOpen = !item.classList.contains('open');
@@ -12059,11 +12072,11 @@ ${tc.result !== undefined ? `<div class="scp-tool-call-section-label" style="mar
           const isAskUser = tool.id === 'ask_user';
           const isDisabledByStream = isAskUser && streamingOff;
           const iconHtml = `<i class="fa-solid ${tool.icon}" style="width:13px;text-align:center;margin-right:4px;opacity:.7"></i>`;
-          row.innerHTML = `<label class="scp-sp-check" style="flex:1${isDisabledByStream ? ';opacity:.45;pointer-events:none' : ''}"><input type="checkbox" id="scp-sp-tool-${tool.id}" ${isEnabled && !isDisabledByStream ? 'checked' : ''} ${isDisabledByStream ? 'disabled' : ''}><span class="scp-tool-toggle-name">${iconHtml}${escHtml(tool.label)}</span></label>`;
+          row.innerHTML = `<label class="scp-sp-check" style="flex:1${isDisabledByStream ? ';opacity:.45;pointer-events:none' : ''}"><input type="checkbox" id="scp-sp-tool-${tool.id}" ${isEnabled && !isDisabledByStream ? 'checked' : ''} ${isDisabledByStream ? 'disabled' : ''}><span class="scp-tool-toggle-name">${iconHtml}${escHtml(translate(tool.label))}</span></label>`;
           const descEl = document.createElement('div');
           descEl.className = 'scp-tool-toggle-desc';
           descEl.style.cssText = 'font-size:10px;color:var(--scp-text-muted);margin-top:2px;padding-left:20px';
-          descEl.textContent = isDisabledByStream ? '⚠ Unavailable — requires streaming to be enabled (not "Force Off")' : tool.description;
+          descEl.textContent = isDisabledByStream ? translate('⚠ Unavailable: needs streaming (Streaming is set to Force Off)') : translate(tool.description);
           if (isDisabledByStream) descEl.style.color = 'var(--scp-danger)';
           row.appendChild(descEl);
           if (!isDisabledByStream) {
@@ -12101,12 +12114,12 @@ ${tc.result !== undefined ? `<div class="scp-tool-call-section-label" style="mar
           wrap.appendChild(q);
           const inp = document.createElement('textarea');
           inp.className = 'scp-tool-ask-input';
-          inp.placeholder = 'Your answer…';
+          inp.placeholder = translate('Your answer…');
           inp.rows = 2;
           wrap.appendChild(inp);
           const btn = document.createElement('button');
           btn.className = 'scp-tool-ask-submit';
-          btn.textContent = 'Submit Answer';
+          btn.textContent = translate('Submit Answer');
           btn.addEventListener('click', () => {
               const answer = inp.value.trim();
               if (!answer) return;
@@ -12266,7 +12279,7 @@ ${tc.result !== undefined ? `<div class="scp-tool-call-section-label" style="mar
           const removeBtn = document.createElement('button');
           removeBtn.className = 'scp-att-remove';
           removeBtn.innerHTML = '×';
-          removeBtn.title = 'Remove';
+          removeBtn.title = translate('Remove');
           removeBtn.addEventListener('click', e => {
               e.stopPropagation();
               _dbgAdd('ATTACHMENT_REMOVE', { id: att.id });
@@ -12545,13 +12558,13 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       label.textContent = 'HTML';
       const previewBtn = document.createElement('button');
       previewBtn.className = 'scp-html-block-btn active';
-      previewBtn.textContent = 'Preview';
+      previewBtn.textContent = translate('Preview');
       const codeBtn = document.createElement('button');
       codeBtn.className = 'scp-html-block-btn';
-      codeBtn.textContent = 'Code';
+      codeBtn.textContent = translate('Code');
       const copyBtn = document.createElement('button');
       copyBtn.className = 'scp-html-block-btn';
-      copyBtn.textContent = 'Copy';
+      copyBtn.textContent = translate('Copy');
       copyBtn.addEventListener('click', e => { e.stopPropagation(); copyText(code); });
       toolbar.append(label, previewBtn, codeBtn, copyBtn);
 
@@ -12934,7 +12947,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const makeBtn = (icon, label, cls, cb) => {
           const b = document.createElement('button');
           b.className = `scp-msg-btn${cls ? ' ' + cls : ''}`;
-          b.innerHTML = icon; b.title = label;
+          b.innerHTML = icon; b.title = translate(label);
           b.addEventListener('click', cb);
           return b;
       };
@@ -12948,7 +12961,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const starBtn = makeBtn(isStarred ? I.starFill : I.star, isStarred ? 'Unstar' : 'Star message', `scp-msg-btn-star${isStarred ? ' starred' : ''}`, () => {
           const nowStarred = toggleStarMessage(msg.id);
           starBtn.innerHTML = nowStarred ? I.starFill : I.star;
-          starBtn.title = nowStarred ? 'Unstar' : 'Star message';
+          starBtn.title = translate(nowStarred ? 'Unstar' : 'Star message');
           starBtn.classList.toggle('starred', nowStarred);
           wrap.classList.toggle('scp-msg-starred', nowStarred);
           if (document.getElementById('scp-fav-panel')?.style.display !== 'none' && uiWdgMod) {
@@ -12975,7 +12988,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const prevBtn = document.createElement('button');
           prevBtn.className = 'scp-swipe-btn scp-swipe-prev';
           prevBtn.innerHTML = I.chevronLeft;
-          prevBtn.title = 'Previous swipe';
+          prevBtn.title = translate('Previous swipe');
           prevBtn.disabled = true;
 
           const counter = document.createElement('span');
@@ -12984,7 +12997,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const nextBtn = document.createElement('button');
           nextBtn.className = 'scp-swipe-btn scp-swipe-next';
           nextBtn.innerHTML = I.chevronRight;
-          nextBtn.title = 'New swipe (regenerate)';
+          nextBtn.title = translate('New swipe (regenerate)');
 
           prevBtn.addEventListener('click', async () => {
               if (prevBtn.disabled || state.generating) return;
@@ -13497,18 +13510,18 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const saveBtn = document.createElement('button');
       saveBtn.className = 'scp-edit-btn scp-edit-save';
       saveBtn.innerHTML = msg.role === 'user'
-          ? `${I.check}<span>Save & Resend</span>`
-          : `${I.check}<span>Save</span>`;
+          ? `${I.check}<span>${escHtml(translate('Save & Resend'))}</span>`
+          : `${I.check}<span>${escHtml(translate('Save'))}</span>`;
 
       const saveOnlyBtn = msg.role === 'user' ? document.createElement('button') : null;
       if (saveOnlyBtn) {
           saveOnlyBtn.className = 'scp-edit-btn scp-edit-cancel';
-          saveOnlyBtn.innerHTML = `${I.check}<span>Save</span>`;
+          saveOnlyBtn.innerHTML = `${I.check}<span>${escHtml(translate('Save'))}</span>`;
       }
 
       const cancelBtn = document.createElement('button');
       cancelBtn.className = 'scp-edit-btn scp-edit-cancel';
-      cancelBtn.innerHTML = `${I.x}<span>Cancel</span>`;
+      cancelBtn.innerHTML = `${I.x}<span>${escHtml(translate('Cancel'))}</span>`;
 
       row.appendChild(saveBtn);
       if (saveOnlyBtn) row.appendChild(saveOnlyBtn);
@@ -15536,12 +15549,12 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           const lock = document.createElement('span');
           lock.className = 'scp-char-row-lock';
           lock.innerHTML = I.lock;
-          lock.title = 'Adding Persona to context is managed in global settings.';
+          lock.title = translate('Adding Persona to context is managed in global settings.');
           row.appendChild(lock);
       } else {
           const cb = document.createElement('div');
           cb.className = `scp-char-row-cb${isCharacterExcluded(s, entity.id) ? '' : ' checked'}`;
-          cb.title = 'Include this character in AI context';
+          cb.title = translate('Include this character in AI context');
           cb.addEventListener('click', e => {
               e.stopPropagation();
               const wasIncluded = cb.classList.contains('checked');
@@ -15595,7 +15608,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       if (!charEntities.length) {
           const empty = document.createElement('div');
           empty.className = 'scp-char-list-empty';
-          empty.textContent = 'No characters found in this chat.';
+          empty.textContent = translate('No characters found in this chat.');
           listEl.appendChild(empty);
       }
 
@@ -15624,14 +15637,14 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       nameEl.textContent = entity.name;
       const tokenEl = document.createElement('div');
       tokenEl.className = 'scp-char-banner-tokens';
-      tokenEl.textContent = '~… tkns total';
+      tokenEl.textContent = translate('~… tkns total');
       info.appendChild(nameEl);
       info.appendChild(tokenEl);
 
       banner.appendChild(avatar);
       banner.appendChild(info);
 
-      _calcTotalTokens(entity).then(n => { if (tokenEl.isConnected) tokenEl.textContent = `~${n} tkns total`; });
+      _calcTotalTokens(entity).then(n => { if (tokenEl.isConnected) tokenEl.textContent = t`~${n} tkns total`; });
 
       return banner;
   }
@@ -15664,7 +15677,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           try {
               const apiMod = await Promise.resolve().then(function () { return api; });
               const n = await apiMod.estimateTokens(text);
-              if (tokenSpan.isConnected) tokenSpan.textContent = `[~${n} tkns]`;
+              if (tokenSpan.isConnected) tokenSpan.textContent = t`[~${n} tkns]`;
           } catch (e) {
               if (tokenSpan.isConnected) tokenSpan.textContent = `[Error]`;
           }
@@ -15769,7 +15782,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           section.className = 'scp-char-section';
           const h = document.createElement('div');
           h.className = 'scp-char-section-title';
-          h.textContent = group.title;
+          h.textContent = translate(group.title);
           section.appendChild(h);
           group.fields.forEach(f => {
               section.appendChild(_buildFieldRow(f, () => getCharFieldValue(charRef, f.key), (val, initialVal) => {
@@ -15952,10 +15965,10 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       tabs.className = 'scp-char-tabs';
       const tabInfo = document.createElement('button');
       tabInfo.className = 'scp-char-tab active';
-      tabInfo.textContent = 'Current Info';
+      tabInfo.textContent = translate('Current Info');
       const tabOv = document.createElement('button');
       tabOv.className = 'scp-char-tab';
-      tabOv.textContent = 'Overrides';
+      tabOv.textContent = translate('Overrides');
       tabOv.disabled = entity.isPersona;
       tabs.appendChild(tabInfo);
       tabs.appendChild(tabOv);
@@ -17677,7 +17690,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
   let _activePresetPanel = null;
 
   function openPresetDropdown(triggerEl, groups, onSelect, opts = {}) {
-      const { placeholder = 'Search…', width = 320, emptyText = 'Nothing here' } = opts;
+      const { placeholder = translate('Search…'), width = 320, emptyText = translate('Nothing here') } = opts;
 
       if (_activePresetPanel) {
           _activePresetPanel.remove();
@@ -17723,7 +17736,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               if (group.label) {
                   const hdr = document.createElement('div');
                   hdr.className = 'scp-pdd-group-label';
-                  hdr.textContent = group.label;
+                  hdr.textContent = translate(group.label);
                   listEl.appendChild(hdr);
               }
               filtered.forEach(item => {
@@ -17848,7 +17861,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           openPresetDropdown(trigger, groups, (value, name, item) => {
               setTextFn(value);
               setActive(name, item._source || 'custom');
-          }, { placeholder: 'Search presets…', width: 360, emptyText: 'No presets saved yet' });
+          }, { placeholder: translate('Search presets…'), width: 360, emptyText: translate('No presets saved yet') });
       });
 
       const mkBtn = (icon, title, cls, cb) => {
@@ -17888,7 +17901,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
       const deleteBtn = mkBtn('trash', 'Delete selected custom preset', 'danger', async () => {
           if (!_activeName || _activeSource !== 'custom') { toastr.info(translate('Only custom presets can be deleted.'), EXT_DISPLAY); return; }
-          const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Preset', message: `Delete "${_activeName}"?` });
+          const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Preset', message: t`Delete "${_activeName}"?` });
           if (!ok) return;
           delete s[dictKey][_activeName];
           saveSettings();
@@ -17962,7 +17975,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               renderQuickPromptsBar();
               if (onSetLoaded) onSetLoaded();
               toastr.success(t`Loaded set "${escHtml(value)}"`, EXT_DISPLAY);
-          }, { placeholder: 'Search sets…', width: 340, emptyText: 'No sets saved yet. Save one below.' });
+          }, { placeholder: translate('Search sets…'), width: 340, emptyText: translate('No sets saved yet. Save one below.') });
       });
 
       const mkBtn = (icon, title, cls, cb) => {
@@ -18014,7 +18027,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
 
       const deleteBtn = mkBtn('trash', 'Delete selected set', 'danger', async () => {
           if (!_activeName) { toastr.info(translate('Select a set first.'), EXT_DISPLAY); return; }
-          const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Set', message: `Delete set "${_activeName}"?` });
+          const ok = await showCustomDialog({ type: 'confirm', title: 'Delete Set', message: t`Delete set "${_activeName}"?` });
           if (!ok) return;
           delete s.quickPromptSets[_activeName];
           if (s.activeQuickPromptSet === _activeName) s.activeQuickPromptSet = '';
@@ -18265,7 +18278,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               if (msgEl) {
                   msgEl.classList.remove('scp-msg-starred');
                   const btn = msgEl.querySelector('.scp-msg-btn-star');
-                  if (btn) { btn.classList.remove('starred'); btn.title = 'Star message'; }
+                  if (btn) { btn.classList.remove('starred'); btn.title = translate('Star message'); }
               }
               renderFavoritesPanel();
           });
@@ -18740,7 +18753,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           typeSel.innerHTML = '';
           
           const groupPreset = document.createElement('optgroup');
-          groupPreset.label = 'Presets';
+          groupPreset.label = translate('Presets');
           for (const [key, preset] of Object.entries(_SOUND_PRESETS)) {
               const opt = document.createElement('option');
               opt.value = key; opt.textContent = translate(preset.label);
@@ -18750,7 +18763,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
           
           if (Object.keys(s.customSounds).length > 0) {
               const groupCustom = document.createElement('optgroup');
-              groupCustom.label = 'Custom Sounds';
+              groupCustom.label = translate('Custom Sounds');
               for (const [key, snd] of Object.entries(s.customSounds)) {
                   const opt = document.createElement('option');
                   opt.value = key; opt.textContent = snd.name;
@@ -18857,7 +18870,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
       const volLbl = document.createElement(isSP ? 'label' : 'b');
       volLbl.className = isSP ? 'scp-sp-label' : '';
       if (!isSP) volLbl.style.fontSize = '12px';
-      volLbl.textContent = 'Volume';
+      volLbl.textContent = translate('Volume');
 
       const volWrap = document.createElement('div');
       volWrap.className = isSP ? 'scp-sp-row' : '';
@@ -19002,7 +19015,7 @@ window.onerror=function(m){window.parent.postMessage({type:'scp-iframe-err',msg:
               item.appendChild(dot); item.appendChild(nameSpan); item.appendChild(count);
               if (sess.isTemporary) {
                   const badge = document.createElement('span'); badge.className = 'scp-sess-tmp-badge';
-                  badge.title = 'Temporary session — will be deleted on switch'; badge.textContent = 'tmp';
+                  badge.title = translate('Temporary session — will be deleted on switch'); badge.textContent = 'tmp';
                   item.appendChild(badge);
               }
               
