@@ -142,6 +142,7 @@ const _SETTINGS_DEF = [
     { key: 'pickerPreviewLines',     stId: 'scp-picker-lines',      spId: 'scp-sp-picker-lines',      type: 'input', toVal: v => parseInt(v) || 1 },
     { key: 'pickerPreviewLastLines', stId: 'scp-picker-last-lines', spId: 'scp-sp-picker-last-lines', type: 'input', toVal: v => parseInt(v) || 0 },
     { key: 'imageAnalysisMode',      stId: 'scp-image-mode',        spId: 'scp-sp-image-mode',        type: 'select' },
+    { key: 'remoteImageMode',        stId: null,                    spId: 'scp-sp-remote-image-mode', type: 'select' },
 ];
 
 // charEditFields

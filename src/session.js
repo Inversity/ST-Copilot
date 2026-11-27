@@ -98,6 +98,7 @@ export function getSettings() {
         pickerPreviewLines: 1,
         pickerPreviewLastLines: 0,
         imageAnalysisMode: 'direct',
+        remoteImageMode: 'url',
         memoryEnabled: true,
         memoryInject: true,
         memoryNotify: true,

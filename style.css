@@ -4157,6 +4157,21 @@ details.scp-cl-entry[open] .scp-cl-entry-summary::before { transform: rotate(90d
     font-size: 20px;
 }
 
+/* A remote image whose URL could not load: the link icon stands in for the thumbnail. */
+.scp-att-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+}
+.scp-att-link .scp-att-broken {
+    width: 56px;
+    height: 56px;
+    font-size: 22px;
+    cursor: help;
+}
+
 .scp-att-label {
     font-size: 9px;
     color: var(--scp-text-muted);

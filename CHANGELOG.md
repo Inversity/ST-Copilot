@@ -2,6 +2,10 @@
 
 This fork continues [ST-Copilot](https://github.com/Supker/ST-Copilot) by QQ-Corporation / Supker, whose last release was 2.9.0 (2026-07-02). Versions before 3.0.0 are upstream's and are listed in the extension's "What's New" panel.
 
+## PR 3.1.4 (2026-11-27)
+
+- **Attach images by URL.** Right-click the paperclip to paste an `https://` image address. In `url` mode (default) the request carries the URL itself — no base64 in the payload — and the provider downloads the image; `Settings > Interface > File Attachments > Remote Image Send` switches to `inline`, which downloads it here first and sends base64 (for local backends that cannot fetch URLs). Caption mode downloads the image for the Image Captioning extension; if that fails (CORS), the URL is sent instead and a notice says so.
+
 ## 3.1.3 (2026-10-13)
 
 - **New README**, written from the review of every screen, with current screenshots: what the window, the edit cards, the tools, the managers and each Settings tab do, the keyboard shortcuts (`Ctrl+F` only searches Copilot while its window is active), and what is sent where.
