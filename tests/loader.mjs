@@ -8,7 +8,7 @@ const STUBBED = [
     /\/src\/ui\/[^/]+\.js$/,
     /\/src\/index\.js$/,
     /\/src\/utils\/util-(debug|diff|colorpicker)\.js$/,
-    /\/src\/features\/feature-(lorebook-ui|chatedit-ui|tools-ui|character-manager-ui|stats|attachments)\.js$/,
+    /\/src\/features\/feature-(lorebook-ui|chatedit-ui|tools-ui|character-manager-ui|stats)\.js$/,
 ];
 
 function stubSource(url) {

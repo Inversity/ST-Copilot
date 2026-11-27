@@ -1028,6 +1028,11 @@
           "setting": "imageAnalysisMode"
         },
         {
+          "label": "Remote Image Send: URL / Inline base64",
+          "kind": "select",
+          "setting": "remoteImageMode"
+        },
+        {
           "label": "Interface Theme: 12 presets, custom themes (save, new, duplicate, rename, delete, export, import), 20 color and style fields",
           "kind": "theme editor",
           "setting": "customTheme, savedThemes, activeThemeProfile"

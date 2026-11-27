@@ -38,7 +38,7 @@ If upstream ST-Copilot is installed, uninstall it first; your settings are kept.
 | **Messages** | Replies show their thinking (with how long it took, summed across tool rounds), any tools Copilot used, and the model that wrote them. Hover a message to copy, edit, regenerate, delete, star or continue it. Replies have swipes like SillyTavern's. |
 | **Status bar** | While Copilot works: Thinking…, the tool round (`Tool round 2 (max 6)`), and after ten silent seconds "Model still working · no output for Ns", so a long think does not look like a freeze. Stop aborts. |
 | **Actions bar** | **Context** shows exactly what is sent (the assembled messages, the JSON, and the request bodies SillyTavern actually sent). **Regen**, quick prompts, starred messages, and the estimated token count. |
-| **Input** | `Enter` sends, `Shift+Enter` adds a line. The paperclip attaches text files or images (sent to the model directly, or described by SillyTavern's Image Captioning extension). |
+| **Input** | `Enter` sends, `Shift+Enter` adds a line. The paperclip attaches text files or images (sent to the model directly, or described by SillyTavern's Image Captioning extension). Right-click the paperclip to attach an image **URL**: it is sent as an `image_url` pointing at the address (Settings > Interface > File Attachments > Remote Image Send can switch it to inline base64 for backends that cannot download URLs). |
 
 ## Edits you approve
 
